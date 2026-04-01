@@ -11,7 +11,7 @@ export default async function WorkflowsPage() {
     <div className="space-y-4">
       <Card>
         <CardTitle>Workflows</CardTitle>
-        <CardSubtitle>Boomerang is a native subtype</CardSubtitle>
+        <CardSubtitle>Live from task-pool repository domains</CardSubtitle>
         <div className="mt-4 divide-y divide-border/80">
           {workflows.map((wf) => (
             <div key={wf.id} className="flex items-center justify-between py-3">

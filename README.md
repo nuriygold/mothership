@@ -25,6 +25,9 @@ Mothership is a next-generation personalized operations hub designed to centrali
 ## Deployment & Operations (Supabase)
 
 - **Env secrets**: set `DATABASE_URL` (service role) in your host secrets (e.g., Vercel) using the format in `env/.env.production.example`. Never commit real credentials.
+- **Task source**: Mothership now reads tasks/workflows from `nuriygold/task-pool` by default via `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
+  - Optional overrides: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`.
+  - If the task-pool repo is private, set `GITHUB_TOKEN` (server-side only) so API calls can read it.
 - **Migrations (prod)**: run `npm run migrate:deploy`. Use `prisma migrate reset` only locally.
 - **Seeding**: production should not be seeded. For staging-only, `npm run db:seed:staging` (same as local seed) — do not run in prod.
 - **Health check**: start the app (`npm run dev` locally) and hit `/dashboard`; prod should boot cleanly even with empty data.

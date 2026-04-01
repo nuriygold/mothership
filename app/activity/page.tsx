@@ -50,6 +50,11 @@ export default function ActivityPage() {
             <div key={evt.id} className="rounded-lg border border-border p-3">
               <p className="text-sm text-white">{evt.eventType}</p>
               <p className="text-xs text-slate-400">{evt.entityType} • {new Date(evt.createdAt).toLocaleString()}</p>
+              {evt.metadata?.url && (
+                <a className="text-xs text-cyan-300 hover:text-cyan-200" href={evt.metadata.url} target="_blank" rel="noreferrer">
+                  Open source task
+                </a>
+              )}
             </div>
           ))}
           {events.length === 0 && <p className="text-sm text-slate-500">No events match filters.</p>}

@@ -1,7 +1,12 @@
 import { prisma } from '@/lib/prisma';
 import { RunStatus, Prisma } from '@prisma/client';
+import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 
 export async function listRuns() {
+  if (isTaskPoolRepositorySource()) {
+    return [];
+  }
+
   return prisma.run.findMany({
     include: { workflow: true, task: true, submission: true },
     orderBy: { startedAt: 'desc' },
@@ -9,6 +14,10 @@ export async function listRuns() {
 }
 
 export async function getRun(id: string) {
+  if (isTaskPoolRepositorySource()) {
+    return null;
+  }
+
   return prisma.run.findUnique({
     where: { id },
     include: { workflow: true, task: true, submission: true, commands: true },

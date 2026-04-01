@@ -1,7 +1,13 @@
 import { prisma } from '@/lib/prisma';
 import { WorkflowStatus, WorkflowType, Prisma } from '@prisma/client';
+import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 export async function listWorkflows() {
+  if (isTaskPoolRepositorySource()) {
+    const repositoryWorkflows = await listTaskPoolWorkflows();
+    if (repositoryWorkflows) return repositoryWorkflows;
+  }
+
   return prisma.workflow.findMany({
     include: {
       owner: true,
@@ -15,6 +21,11 @@ export async function listWorkflows() {
 }
 
 export async function getWorkflow(id: string) {
+  if (isTaskPoolRepositorySource() && id.startsWith('tpw_')) {
+    const repositoryWorkflow = await getTaskPoolWorkflow(id);
+    if (repositoryWorkflow) return repositoryWorkflow;
+  }
+
   return prisma.workflow.findUnique({
     where: { id },
     include: {

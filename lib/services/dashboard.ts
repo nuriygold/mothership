@@ -1,6 +1,31 @@
 import { prisma } from '@/lib/prisma';
+import { isTaskPoolRepositorySource, listTaskPoolActivityEvents, listTaskPoolTasks, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 export async function getDashboard() {
+  if (isTaskPoolRepositorySource()) {
+    const [tasks, workflows, activity] = await Promise.all([
+      listTaskPoolTasks(),
+      listTaskPoolWorkflows(),
+      listTaskPoolActivityEvents(10),
+    ]);
+
+    if (tasks && workflows && activity) {
+      return {
+        counts: {
+          workflows: workflows.length,
+          tasks: tasks.length,
+          approvals: 0,
+          runs: 0,
+          commands: 0,
+        },
+        activeWorkflows: workflows.slice(0, 5),
+        pendingApprovals: [],
+        recentRuns: [],
+        activity,
+      };
+    }
+  }
+
   const [workflows, tasks, approvals, runs, commands, activity] = await Promise.all([
     prisma.workflow.count(),
     prisma.task.count(),

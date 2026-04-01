@@ -30,7 +30,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardTitle>Active workflows</CardTitle>
-          <CardSubtitle>Top flows across Boomerang and OpenClaw</CardSubtitle>
+          <CardSubtitle>Projected from task-pool repository domains</CardSubtitle>
           <div className="mt-4 divide-y divide-border/80">
             {activeWorkflows.map((wf) => (
               <div key={wf.id} className="flex items-center justify-between py-3">
@@ -43,6 +43,9 @@ export default async function DashboardPage() {
                 </Link>
               </div>
             ))}
+            {activeWorkflows.length === 0 && (
+              <p className="py-3 text-sm text-slate-500">No task-pool workflows detected yet.</p>
+            )}
           </div>
         </Card>
 
@@ -64,7 +67,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardTitle>Recent runs</CardTitle>
-          <CardSubtitle>Includes Paperclip/Festival handoff placeholders</CardSubtitle>
+          <CardSubtitle>Execution feed will populate after Dispatch-Bot integration</CardSubtitle>
           <div className="mt-4 space-y-3">
             {recentRuns.map((run) => (
               <div key={run.id} className="flex items-center justify-between rounded-lg border border-border p-3">
@@ -78,12 +81,15 @@ export default async function DashboardPage() {
                 </Link>
               </div>
             ))}
+            {recentRuns.length === 0 && (
+              <p className="text-sm text-slate-500">No execution runs connected yet.</p>
+            )}
           </div>
         </Card>
 
         <Card>
           <CardTitle>Recent activity</CardTitle>
-          <CardSubtitle>Audit log excerpts</CardSubtitle>
+          <CardSubtitle>Live task updates from task-pool repository</CardSubtitle>
           <div className="mt-4 space-y-3">
             {activity.map((evt) => (
               <div key={evt.id} className="rounded-lg border border-border p-3">
@@ -91,6 +97,7 @@ export default async function DashboardPage() {
                 <p className="text-xs text-slate-400">{evt.entityType} • {new Date(evt.createdAt).toLocaleString()}</p>
               </div>
             ))}
+            {activity.length === 0 && <p className="text-sm text-slate-500">No activity available.</p>}
           </div>
         </Card>
       </div>

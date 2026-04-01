@@ -24,6 +24,11 @@ export default async function RunsPage() {
               </Link>
             </div>
           ))}
+          {runs.length === 0 && (
+            <p className="py-6 text-sm text-slate-500">
+              No runs available yet. This surface will populate when Dispatch-Bot integration is connected.
+            </p>
+          )}
         </div>
       </Card>
     </div>

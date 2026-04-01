@@ -1,7 +1,13 @@
 import { prisma } from '@/lib/prisma';
 import { TaskPriority, TaskStatus } from '@prisma/client';
+import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
 
 export async function listTasks() {
+  if (isTaskPoolRepositorySource()) {
+    const repositoryTasks = await listTaskPoolTasks();
+    if (repositoryTasks) return repositoryTasks;
+  }
+
   return prisma.task.findMany({
     include: { workflow: true, owner: true },
     orderBy: { createdAt: 'desc' },
@@ -17,6 +23,11 @@ export async function createTask(input: {
   priority?: TaskPriority;
   dueAt?: Date | null;
 }) {
+  if (isTaskPoolRepositorySource()) {
+    const repositoryTask = await createTaskPoolIssue(input);
+    if (repositoryTask) return repositoryTask;
+  }
+
   return prisma.task.create({
     data: {
       title: input.title,
