@@ -3,6 +3,8 @@ import { Card, CardTitle, CardSubtitle } from '@/components/ui/card';
 
 interface Params { params: { id: string } }
 
+export const dynamic = 'force-dynamic';
+
 export default async function WorkflowDetail({ params }: Params) {
   const workflow = await getWorkflow(params.id);
   if (!workflow) return <div className="text-sm text-slate-400">Not found</div>;

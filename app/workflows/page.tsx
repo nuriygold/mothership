@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { listWorkflows } from '@/lib/services/workflows';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 
+export const dynamic = 'force-dynamic';
+
 export default async function WorkflowsPage() {
   const workflows = await listWorkflows();
 

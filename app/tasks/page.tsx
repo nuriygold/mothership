@@ -1,6 +1,8 @@
 import { listTasks } from '@/lib/services/tasks';
 import { Card, CardTitle } from '@/components/ui/card';
 
+export const dynamic = 'force-dynamic';
+
 const statusColors: Record<string, string> = {
   TODO: 'text-slate-300',
   IN_PROGRESS: 'text-amber-300',

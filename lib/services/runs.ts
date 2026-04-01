@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { RunStatus } from '@prisma/client';
+import { RunStatus, Prisma } from '@prisma/client';
 
 export async function listRuns() {
   return prisma.run.findMany({
@@ -22,7 +22,7 @@ export async function createRun(input: {
   type: string;
   sourceSystem: string;
   status?: RunStatus;
-  metadata?: Record<string, unknown>;
+  metadata?: Prisma.InputJsonValue;
 }) {
   return prisma.run.create({
     data: {
@@ -32,7 +32,7 @@ export async function createRun(input: {
       type: input.type,
       sourceSystem: input.sourceSystem,
       status: input.status ?? RunStatus.QUEUED,
-      metadata: input.metadata ?? {},
+      metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
       startedAt: new Date(),
     },
   });

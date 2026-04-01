@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { WorkflowStatus, WorkflowType } from '@prisma/client';
+import { WorkflowStatus, WorkflowType, Prisma } from '@prisma/client';
 
 export async function listWorkflows() {
   return prisma.workflow.findMany({
@@ -35,7 +35,7 @@ export async function createWorkflow(input: {
   type?: WorkflowType;
   ownerId: string;
   status?: WorkflowStatus;
-  schemaJson?: Record<string, unknown>;
+  schemaJson?: Prisma.InputJsonValue;
 }) {
   const workflow = await prisma.workflow.create({
     data: {

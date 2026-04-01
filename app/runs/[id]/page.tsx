@@ -3,6 +3,8 @@ import { Card, CardTitle } from '@/components/ui/card';
 
 interface Params { params: { id: string } }
 
+export const dynamic = 'force-dynamic';
+
 export default async function RunDetail({ params }: Params) {
   const run = await getRun(params.id);
   if (!run) return <div className="text-sm text-slate-400">Not found</div>;

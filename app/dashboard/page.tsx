@@ -2,6 +2,8 @@ import { getDashboard } from '@/lib/services/dashboard';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const data = await getDashboard();
   const { counts, activeWorkflows, pendingApprovals, recentRuns, activity } = data;

@@ -2,6 +2,8 @@ import { listRuns } from '@/lib/services/runs';
 import { Card, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default async function RunsPage() {
   const runs = await listRuns();
 
