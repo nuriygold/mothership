@@ -69,7 +69,7 @@ export default async function DashboardPage() {
                 <div>
                   <p className="text-sm text-white">{run.type}</p>
                   <p className="text-xs text-slate-400">{run.sourceSystem} • {run.status}</p>
-                  <p className="text-xs text-slate-500">{run.workflow?.name ?? 'Unlinked'}</p>
+                  <p className="text-xs text-slate-500">{(run as any).workflow?.name ?? 'Unlinked'}</p>
                 </div>
                 <Link className="text-sm text-accent" href={`/runs/${run.id}`}>
                   Details

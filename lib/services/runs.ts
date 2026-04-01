@@ -4,14 +4,14 @@ import { RunStatus } from '@prisma/client';
 export async function listRuns() {
   return prisma.run.findMany({
     include: { workflow: true, task: true, submission: true },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { startedAt: 'desc' },
   });
 }
 
 export async function getRun(id: string) {
   return prisma.run.findUnique({
     where: { id },
-    include: { workflow: true, task: true, submission: true, auditEvents: true, commands: true },
+    include: { workflow: true, task: true, submission: true, commands: true },
   });
 }
 
@@ -32,7 +32,7 @@ export async function createRun(input: {
       type: input.type,
       sourceSystem: input.sourceSystem,
       status: input.status ?? RunStatus.QUEUED,
-      metadata: input.metadata,
+      metadata: input.metadata ?? {},
       startedAt: new Date(),
     },
   });

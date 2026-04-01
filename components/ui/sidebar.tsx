@@ -23,7 +23,7 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href as any}
                 className={cn(
                   'flex items-center rounded-lg px-3 py-2 text-sm transition hover:bg-panel',
                   active ? 'bg-panel text-white' : 'text-slate-300'

@@ -20,19 +20,6 @@ export default async function RunDetail({ params }: Params) {
         <CardTitle>Metadata</CardTitle>
         <pre className="mt-2 whitespace-pre-wrap rounded-md bg-panel p-3 text-xs text-slate-300">{JSON.stringify(run.metadata ?? {}, null, 2)}</pre>
       </Card>
-
-      <Card>
-        <CardTitle>Audit events</CardTitle>
-        <div className="mt-2 space-y-2">
-          {run.auditEvents.map((evt) => (
-            <div key={evt.id} className="rounded-lg border border-border p-2 text-xs text-slate-300">
-              <div>{evt.eventType}</div>
-              <div className="text-slate-500">{new Date(evt.createdAt).toLocaleString()}</div>
-            </div>
-          ))}
-          {run.auditEvents.length === 0 && <p className="text-sm text-slate-500">No events yet.</p>}
-        </div>
-      </Card>
     </div>
   );
 }

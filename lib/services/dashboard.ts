@@ -24,7 +24,7 @@ export async function getDashboard() {
 
   const recentRuns = await prisma.run.findMany({
     include: { workflow: true },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { startedAt: 'desc' },
     take: 5,
   });
 
