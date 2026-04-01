@@ -1,12 +1,14 @@
 import { getDashboard } from '@/lib/services/dashboard';
+import { listTasks } from '@/lib/services/tasks';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const data = await getDashboard();
+  const [data, tasks] = await Promise.all([getDashboard(), listTasks()]);
   const { counts, activeWorkflows, pendingApprovals, recentRuns, activity } = data;
+  const taskList = tasks as Array<any>;
 
   const stats = [
     { label: 'Workflows', value: counts.workflows },
@@ -15,6 +17,19 @@ export default async function DashboardPage() {
     { label: 'Runs', value: counts.runs },
     { label: 'Commands', value: counts.commands },
   ];
+
+  const now = new Date();
+  const openTasks = taskList.filter((task) => task.status !== 'DONE');
+  const overdue = openTasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < now.getTime());
+  const dueSoon = openTasks
+    .filter((task) => task.dueAt && new Date(task.dueAt).getTime() >= now.getTime())
+    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+    .slice(0, 5);
+  const needsAttention = openTasks.filter(
+    (task) => task.status === 'BLOCKED' || task.priority === 'CRITICAL' || task.priority === 'HIGH'
+  );
+  const delegationQueue = openTasks.filter((task) => !task.ownerId && !task.ownerName);
+  const inProgress = openTasks.filter((task) => task.status === 'IN_PROGRESS');
 
   return (
     <div className="space-y-6">
@@ -25,6 +40,78 @@ export default async function DashboardPage() {
             <p className="text-2xl font-semibold text-white">{item.value}</p>
           </Card>
         ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardTitle>To-do items</CardTitle>
+          <CardSubtitle>Open execution list</CardSubtitle>
+          <div className="mt-3 space-y-2 text-sm text-slate-200">
+            <p>{openTasks.length} open tasks</p>
+            <p>{inProgress.length} in progress</p>
+            <p>{delegationQueue.length} unassigned</p>
+            <Link href="/tasks" className="text-cyan-300 hover:text-cyan-200">
+              Open tasks board
+            </Link>
+          </div>
+        </Card>
+        <Card>
+          <CardTitle>Due / overdue</CardTitle>
+          <CardSubtitle>What needs timing attention</CardSubtitle>
+          <div className="mt-3 space-y-2 text-sm text-slate-200">
+            <p className={overdue.length > 0 ? 'text-rose-300' : 'text-slate-300'}>
+              {overdue.length} overdue
+            </p>
+            {dueSoon.slice(0, 3).map((task) => (
+              <p key={task.id} className="text-xs text-slate-300">
+                {task.title} · {new Date(task.dueAt).toLocaleDateString()}
+              </p>
+            ))}
+            {dueSoon.length === 0 && <p className="text-xs text-slate-500">No dated tasks yet.</p>}
+          </div>
+        </Card>
+        <Card>
+          <CardTitle>Delegation queue</CardTitle>
+          <CardSubtitle>Who needs assignment</CardSubtitle>
+          <div className="mt-3 space-y-2">
+            {delegationQueue.slice(0, 3).map((task) => (
+              <p key={task.id} className="text-xs text-slate-300">
+                {task.title}
+              </p>
+            ))}
+            {delegationQueue.length === 0 && <p className="text-xs text-slate-500">No delegation gaps right now.</p>}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardTitle>Email summary</CardTitle>
+          <CardSubtitle>Connector placeholder (next step: Gmail/Outlook)</CardSubtitle>
+          <div className="mt-3 text-sm text-slate-300">
+            Email ingestion is not wired yet. Once connected, this panel will show unread, needs-reply, and urgent senders.
+          </div>
+          <div className="mt-3 flex gap-3 text-xs">
+            <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
+              Open Google Calendar
+            </a>
+            <a href="https://outlook.office.com/calendar/" target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
+              Open Outlook Calendar
+            </a>
+          </div>
+        </Card>
+        <Card>
+          <CardTitle>Needs attention</CardTitle>
+          <CardSubtitle>Blocked and high-priority items</CardSubtitle>
+          <div className="mt-3 space-y-2">
+            {needsAttention.slice(0, 5).map((task) => (
+              <p key={task.id} className="text-xs text-slate-300">
+                {task.title} · {task.status} · {task.priority}
+              </p>
+            ))}
+            {needsAttention.length === 0 && <p className="text-xs text-slate-500">No urgent blockers detected.</p>}
+          </div>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

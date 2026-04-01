@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { TaskPriority, TaskStatus } from '@prisma/client';
-import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
+import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks, updateTaskPoolIssue } from '@/lib/integrations/task-pool';
 
 export async function listTasks() {
   if (isTaskPoolRepositorySource()) {
@@ -38,5 +38,33 @@ export async function createTask(input: {
       priority: input.priority ?? TaskPriority.MEDIUM,
       dueAt: input.dueAt ?? null,
     },
+  });
+}
+
+export async function updateTask(input: {
+  id: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  ownerId?: string | null;
+  dueAt?: Date | null;
+}) {
+  if (isTaskPoolRepositorySource()) {
+    const repositoryTask = await updateTaskPoolIssue({
+      id: input.id,
+      status: input.status,
+      priority: input.priority,
+    });
+    if (repositoryTask) return repositoryTask;
+  }
+
+  return prisma.task.update({
+    where: { id: input.id },
+    data: {
+      status: input.status,
+      priority: input.priority,
+      ownerId: input.ownerId,
+      dueAt: input.dueAt,
+    },
+    include: { workflow: true, owner: true },
   });
 }

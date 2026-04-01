@@ -1,15 +1,48 @@
 import { prisma } from '@/lib/prisma';
-import { isTaskPoolRepositorySource, listTaskPoolActivityEvents, listTaskPoolTasks, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
+import { isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
 
 export async function getDashboard() {
   if (isTaskPoolRepositorySource()) {
-    const [tasks, workflows, activity] = await Promise.all([
-      listTaskPoolTasks(),
-      listTaskPoolWorkflows(),
-      listTaskPoolActivityEvents(10),
-    ]);
+    const tasks = await listTaskPoolTasks();
+    if (tasks) {
+      const workflowMap = new Map<string, (typeof tasks)[number]['workflow'] & { submissions: never[]; runs: never[]; createdAt: Date; updatedAt: Date }>();
+      const activity = tasks.slice(0, 10).map((task) => ({
+        id: `${task.id}:${task.updatedAt.toISOString()}`,
+        entityType: 'task',
+        entityId: task.id,
+        eventType:
+          task.status === 'DONE'
+            ? 'completed'
+            : task.status === 'BLOCKED'
+              ? 'blocked'
+              : 'updated',
+        actorId: null,
+        metadata: {
+          title: task.title,
+          domain: task.domain,
+          priority: task.priorityLabel,
+          url: task.sourceUrl,
+        },
+        createdAt: task.updatedAt,
+      }));
 
-    if (tasks && workflows && activity) {
+      for (const task of tasks) {
+        if (!workflowMap.has(task.workflow.id)) {
+          workflowMap.set(task.workflow.id, {
+            ...task.workflow,
+            submissions: [],
+            runs: [],
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+          });
+          continue;
+        }
+        const current = workflowMap.get(task.workflow.id);
+        if (!current) continue;
+        if (task.updatedAt > current.updatedAt) current.updatedAt = task.updatedAt;
+      }
+      const workflows = [...workflowMap.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
       return {
         counts: {
           workflows: workflows.length,

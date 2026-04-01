@@ -7,6 +7,7 @@ const DEFAULT_BRANCH = 'main';
 const DEFAULT_SNAPSHOT_PATH = 'data/task-pool-snapshot.json';
 
 type GitHubIssueLabel = { name?: string };
+type GitHubIssueAssignee = { login?: string };
 
 type GitHubIssue = {
   id: number;
@@ -15,6 +16,7 @@ type GitHubIssue = {
   body: string | null;
   state: 'open' | 'closed';
   labels: Array<GitHubIssueLabel | string>;
+  assignees?: GitHubIssueAssignee[];
   html_url: string;
   created_at: string;
   updated_at: string;
@@ -33,6 +35,7 @@ export type TaskPoolTask = {
   priority: TaskPriority;
   workflowId: string;
   ownerId: string | null;
+  ownerName: string | null;
   dueAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -119,6 +122,20 @@ function normalizeLabels(labels: Array<GitHubIssueLabel | string>) {
     .filter(Boolean);
 }
 
+function parseDueAtFromBody(body: string | null): Date | null {
+  if (!body) return null;
+
+  const candidates = [
+    body.match(/(?:^|\n)\s*(?:due|deadline)\s*[:\-]\s*(\d{4}-\d{2}-\d{2})/i),
+    body.match(/(?:^|\n)\s*(\d{4}-\d{2}-\d{2})\s*(?:due|deadline)/i),
+  ];
+  const rawDate = candidates.find(Boolean)?.[1];
+  if (!rawDate) return null;
+
+  const parsed = new Date(`${rawDate}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function getDomain(labels: string[]) {
   const domainLabel = labels.find((label) => label.startsWith('domain:'));
   if (!domainLabel) return 'ops';
@@ -162,6 +179,8 @@ function toTaskPoolTask(issue: GitHubIssue): TaskPoolTask {
   const { priority, label: priorityLabel } = mapPriority(labels);
   const workflowType = mapWorkflowType(issue, labels);
 
+  const ownerName = issue.assignees?.[0]?.login ?? null;
+
   return {
     id: `tpt_${issue.number}`,
     title: issue.title,
@@ -169,8 +188,9 @@ function toTaskPoolTask(issue: GitHubIssue): TaskPoolTask {
     status,
     priority,
     workflowId,
-    ownerId: null,
-    dueAt: null,
+    ownerId: ownerName ? `gh:${ownerName}` : null,
+    ownerName,
+    dueAt: parseDueAtFromBody(issue.body),
     createdAt: new Date(issue.created_at),
     updatedAt: new Date(issue.updated_at),
     workflow: {
@@ -238,9 +258,10 @@ async function fetchIssuesFromGitHubApi(): Promise<GitHubIssue[] | null> {
 }
 
 async function getTaskPoolIssues(): Promise<GitHubIssue[] | null> {
+  const liveIssues = await fetchIssuesFromGitHubApi();
+  if (liveIssues) return liveIssues;
   const snapshot = (await fetchSnapshotFromRawUrl()) ?? (await fetchSnapshotFromContentsApi());
-  if (snapshot?.issues) return snapshot.issues;
-  return fetchIssuesFromGitHubApi();
+  return snapshot?.issues ?? null;
 }
 
 export async function listTaskPoolTasks(): Promise<TaskPoolTask[] | null> {
@@ -365,4 +386,123 @@ export async function createTaskPoolIssue(input: {
   if (!response.ok) return null;
   const issue = (await response.json()) as GitHubIssue;
   return toTaskPoolTask(issue);
+}
+
+function statusToLabel(status: TaskStatus) {
+  switch (status) {
+    case TaskStatus.DONE:
+      return 'status:done';
+    case TaskStatus.BLOCKED:
+      return 'status:blocked';
+    case TaskStatus.IN_PROGRESS:
+      return 'status:active';
+    case TaskStatus.TODO:
+    default:
+      return 'status:waiting';
+  }
+}
+
+function priorityToLabel(priority: TaskPriority) {
+  switch (priority) {
+    case TaskPriority.CRITICAL:
+      return 'priority:A+';
+    case TaskPriority.HIGH:
+      return 'priority:A';
+    case TaskPriority.LOW:
+      return 'priority:C';
+    case TaskPriority.MEDIUM:
+    default:
+      return 'priority:B';
+  }
+}
+
+function parseIssueNumber(taskId: string) {
+  if (!taskId.startsWith('tpt_')) return null;
+  const parsed = Number.parseInt(taskId.replace('tpt_', ''), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+export async function updateTaskPoolIssue(input: {
+  id: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+}): Promise<TaskPoolTask | null> {
+  const { owner, repo, token } = getConfig();
+  if (!token) return null;
+
+  const issueNumber = parseIssueNumber(input.id);
+  if (!issueNumber) return null;
+
+  const issueRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    cache: 'no-store',
+  });
+  if (!issueRes.ok) return null;
+
+  const issue = (await issueRes.json()) as GitHubIssue;
+  const currentLabels = (issue.labels ?? [])
+    .map((label) => (typeof label === 'string' ? label : label.name ?? ''))
+    .filter(Boolean);
+
+  const labelsWithoutStatusOrPriority = currentLabels.filter((label) => {
+    const lower = label.toLowerCase();
+    return !lower.startsWith('status:') && !lower.startsWith('priority:');
+  });
+
+  const nextStatus = input.status ?? mapStatus(issue, normalizeLabels(issue.labels)).status;
+  const nextPriority = input.priority ?? mapPriority(normalizeLabels(issue.labels)).priority;
+
+  const nextLabels = [...labelsWithoutStatusOrPriority, statusToLabel(nextStatus), priorityToLabel(nextPriority)];
+
+  const labelRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/labels`, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ labels: nextLabels }),
+  });
+  if (!labelRes.ok) return null;
+
+  if (nextStatus === TaskStatus.DONE && issue.state !== 'closed') {
+    await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ state: 'closed' }),
+    });
+  } else if (nextStatus !== TaskStatus.DONE && issue.state === 'closed') {
+    await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ state: 'open' }),
+    });
+  }
+
+  const refreshedRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    cache: 'no-store',
+  });
+  if (!refreshedRes.ok) return null;
+
+  return toTaskPoolTask((await refreshedRes.json()) as GitHubIssue);
 }
