@@ -1,14 +1,21 @@
 import { getDashboard } from '@/lib/services/dashboard';
 import { listTasks } from '@/lib/services/tasks';
+import { getEmailSummary } from '@/lib/services/email';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const [data, tasks] = await Promise.all([getDashboard(), listTasks()]);
+  const [data, tasks, email] = await Promise.all([getDashboard(), listTasks(), getEmailSummary()]);
   const { counts, activeWorkflows, pendingApprovals, recentRuns, activity } = data;
   const taskList = tasks as Array<any>;
+  const googleCalendarId = process.env.GOOGLE_CALENDAR_ID ?? '';
+  const calendarWebUrl = googleCalendarId
+    ? `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(googleCalendarId)}`
+    : 'https://calendar.google.com';
+  const calendarIcalUrl = process.env.GOOGLE_CALENDAR_ICAL_URL;
+  const openclawApiUrl = process.env.OPENCLAW_API_URL;
 
   const stats = [
     { label: 'Workflows', value: counts.workflows },
@@ -87,17 +94,31 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardTitle>Email summary</CardTitle>
-          <CardSubtitle>Connector placeholder (next step: Gmail/Outlook)</CardSubtitle>
-          <div className="mt-3 text-sm text-slate-300">
-            Email ingestion is not wired yet. Once connected, this panel will show unread, needs-reply, and urgent senders.
+          <CardSubtitle>{email.provider.toUpperCase()} connector</CardSubtitle>
+          <div className="mt-3 space-y-1 text-sm text-slate-300">
+            <p className={email.connected ? 'text-emerald-300' : 'text-amber-300'}>
+              {email.connected ? 'Connected' : 'Needs OAuth credentials'}
+            </p>
+            <p>{email.unreadCount} unread</p>
+            <p>{email.needsReplyCount} need reply</p>
+            <p>{email.urgentCount} urgent</p>
+            {email.inboxes.length > 0 && (
+              <p className="text-xs text-slate-400">Inboxes: {email.inboxes.join(', ')}</p>
+            )}
+            <p className="text-xs text-slate-500">{email.note}</p>
           </div>
           <div className="mt-3 flex gap-3 text-xs">
-            <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
+            <a href={calendarWebUrl} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
               Open Google Calendar
             </a>
             <a href="https://outlook.office.com/calendar/" target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
               Open Outlook Calendar
             </a>
+            {calendarIcalUrl && (
+              <a href={calendarIcalUrl} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
+                Open Calendar Feed
+              </a>
+            )}
           </div>
         </Card>
         <Card>
@@ -111,6 +132,11 @@ export default async function DashboardPage() {
             ))}
             {needsAttention.length === 0 && <p className="text-xs text-slate-500">No urgent blockers detected.</p>}
           </div>
+          {openclawApiUrl && (
+            <p className="mt-3 text-xs text-slate-500">
+              Command route: {openclawApiUrl}
+            </p>
+          )}
         </Card>
       </div>
 

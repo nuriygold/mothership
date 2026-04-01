@@ -28,6 +28,11 @@ Mothership is a next-generation personalized operations hub designed to centrali
 - **Task source**: Mothership now reads tasks/workflows from `nuriygold/task-pool` by default via `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
   - Optional overrides: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`.
   - If the task-pool repo is private, set `GITHUB_TOKEN` (server-side only) so API calls can read it.
+- **Email scaffold**: set `EMAIL_PROVIDER=gmail` and `EMAIL_INBOXES` (comma-separated) for dashboard visibility.
+  - For live Gmail sync (next step), add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
+- **Zoho option**: set `EMAIL_PROVIDER=zoho` and `ZOHO_IMAP_USERNAME` / `ZOHO_IMAP_PASSWORD` to mark Zoho inbox connectivity.
+- **Calendar/OpenClaw env**: set `GOOGLE_CALENDAR_ID`, optional `GOOGLE_CALENDAR_ICAL_URL`, and `OPENCLAW_API_URL`.
+- **Env naming**: this project is Next.js, not Vite. Use `EMAIL_*`, `GOOGLE_*`, `OPENCLAW_*` names here (not `VITE_*`).
 - **Migrations (prod)**: run `npm run migrate:deploy`. Use `prisma migrate reset` only locally.
 - **Seeding**: production should not be seeded. For staging-only, `npm run db:seed:staging` (same as local seed) — do not run in prod.
 - **Health check**: start the app (`npm run dev` locally) and hit `/dashboard`; prod should boot cleanly even with empty data.
