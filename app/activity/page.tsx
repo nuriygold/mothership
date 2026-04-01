@@ -16,7 +16,7 @@ export default function ActivityPage() {
     return true;
   });
 
-  const entityTypes = Array.from(new Set((data ?? []).map((evt: any) => evt.entityType)));
+  const entityTypes = Array.from(new Set((data ?? []).map((evt: any) => evt.entityType))) as string[];
 
   return (
     <div className="space-y-4">
