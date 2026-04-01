@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #0d1017;
+  color: #e5e7eb;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.card {
+  @apply rounded-xl border border-border bg-surface shadow-sm;
+}
+
+.panel {
+  @apply rounded-lg border border-border bg-panel;
+}
+
+a {
+  color: inherit;
+}
