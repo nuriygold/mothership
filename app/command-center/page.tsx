@@ -19,11 +19,26 @@ async function postCommand(payload: { input: string; sourceChannel: string; requ
   return res.json();
 }
 
+async function sendTelegram(payload: { text: string; botKey?: string }) {
+  const res = await fetch('/api/telegram/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message ?? 'Failed to send Telegram message');
+  }
+  return res.json();
+}
+
 export default function CommandCenterPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
   const [input, setInput] = useState('');
   const [source, setSource] = useState('web');
+  const [telegramMessage, setTelegramMessage] = useState('');
+  const [telegramBot, setTelegramBot] = useState('bot2');
 
   const mutation = useMutation({
     mutationFn: postCommand,
@@ -31,6 +46,11 @@ export default function CommandCenterPage() {
       qc.invalidateQueries({ queryKey: ['commands'] });
       setInput('');
     },
+  });
+
+  const telegramMutation = useMutation({
+    mutationFn: sendTelegram,
+    onSuccess: () => setTelegramMessage(''),
   });
 
   return (
@@ -58,6 +78,42 @@ export default function CommandCenterPage() {
         {mutation.isSuccess && (
           <p className="mt-2 text-xs text-emerald-300">Command accepted and logged.</p>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Telegram dispatch</CardTitle>
+        <div className="mt-3 space-y-3">
+          <textarea
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-white"
+            rows={3}
+            placeholder="Send a quick update or instruction to Telegram"
+            value={telegramMessage}
+            onChange={(e) => setTelegramMessage(e.target.value)}
+          />
+          <div className="flex items-center gap-3">
+            <select
+              className="rounded-md border border-border bg-surface px-2 text-sm"
+              value={telegramBot}
+              onChange={(e) => setTelegramBot(e.target.value)}
+            >
+              <option value="bot1">Bot 1</option>
+              <option value="bot2">Bot 2 (default)</option>
+              <option value="bot3">Bot 3</option>
+            </select>
+            <Button
+              onClick={() => telegramMutation.mutate({ text: telegramMessage, botKey: telegramBot })}
+              disabled={!telegramMessage || telegramMutation.isLoading}
+            >
+              Send
+            </Button>
+            {telegramMutation.isSuccess && (
+              <p className="text-xs text-emerald-300">Sent to Telegram.</p>
+            )}
+            {telegramMutation.isError && (
+              <p className="text-xs text-rose-400">Failed: {(telegramMutation.error as Error).message}</p>
+            )}
+          </div>
+        </div>
       </Card>
 
       <Card>
