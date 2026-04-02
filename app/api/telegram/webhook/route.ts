@@ -54,6 +54,15 @@ async function handleCreate(rest: string) {
   return `Created task ${task.id}: ${task.title}`;
 }
 
+async function handleAssign(rest: string) {
+  const [taskId, owner] = rest.split(/\s+/, 2);
+  if (!taskId || !owner) {
+    return 'Usage: /assign <taskId> <github_login>';
+  }
+  await updateTask({ id: taskId, ownerLogin: owner });
+  return `Assigned ${taskId} to ${owner}.`;
+}
+
 async function handleListOpen() {
   const tasks = await listTasks();
   const open = (tasks as any[]).filter((t) => t.status !== 'DONE').slice(0, 5);
@@ -88,8 +97,10 @@ export async function POST(req: Request) {
       reply = await handlePriority(command.rest);
     } else if (command.cmd === '/create') {
       reply = await handleCreate(command.rest);
+    } else if (command.cmd === '/assign') {
+      reply = await handleAssign(command.rest);
     } else {
-      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>';
+      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>, /assign <taskId> <github_login>';
     }
 
     await sendTelegramMessage({ text: reply, chatId: String(chatId) });

@@ -45,6 +45,7 @@ export async function updateTask(input: {
   id: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  ownerLogin?: string;
   ownerId?: string | null;
   dueAt?: Date | null;
 }) {
@@ -53,6 +54,7 @@ export async function updateTask(input: {
       id: input.id,
       status: input.status,
       priority: input.priority,
+      ownerLogin: input.ownerLogin,
     });
     if (repositoryTask) return repositoryTask;
   }
