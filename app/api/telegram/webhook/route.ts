@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listTasks, updateTask, createTask } from '@/lib/services/tasks';
+import { createAuditEvent } from '@/lib/services/audit';
 import { sendTelegramMessage } from '@/lib/services/telegram';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 
@@ -30,6 +31,12 @@ async function handleTaskStatus(rest: string, status: TaskStatus) {
   if (!rest) return 'Please provide a task id. Example: /done tpt_123';
   const taskId = rest.split(/\s+/)[0];
   await updateTask({ id: taskId, status });
+  await createAuditEvent({
+    entityType: 'task',
+    entityId: taskId,
+    eventType: 'telegram_status_change',
+    metadata: { status },
+  });
   return `Updated ${taskId} to ${status}.`;
 }
 
@@ -44,13 +51,30 @@ async function handlePriority(rest: string) {
     return 'Priority must be LOW, MEDIUM, HIGH, or CRITICAL.';
   }
   await updateTask({ id: taskId, priority: value as TaskPriority });
+  await createAuditEvent({
+    entityType: 'task',
+    entityId: taskId,
+    eventType: 'telegram_priority_change',
+    metadata: { priority: value },
+  });
   return `Updated ${taskId} priority to ${value}.`;
 }
 
 async function handleCreate(rest: string) {
   const title = rest.trim();
   if (!title) return 'Usage: /create <task title>';
-  const task = await createTask({ title, sourceChannel: 'telegram' } as any);
+  const task = await createTask({
+    title,
+    sourceChannel: 'telegram',
+    priority: TaskPriority.HIGH,
+    ownerLogin: process.env.DEFAULT_TASK_OWNER_LOGIN ?? null,
+  } as any);
+  await createAuditEvent({
+    entityType: 'task',
+    entityId: task.id,
+    eventType: 'telegram_create',
+    metadata: { title, priority: TaskPriority.HIGH, ownerLogin: process.env.DEFAULT_TASK_OWNER_LOGIN ?? null },
+  });
   return `Created task ${task.id}: ${task.title}`;
 }
 
@@ -68,6 +92,12 @@ async function handleAssign(rest: string) {
     : TaskPriority.HIGH; // default priority when omitted or invalid
 
   await updateTask({ id: taskId, ownerLogin: owner, priority: parsedPriority });
+  await createAuditEvent({
+    entityType: 'task',
+    entityId: taskId,
+    eventType: 'telegram_assign',
+    metadata: { ownerLogin: owner, priority: parsedPriority },
+  });
   return `Assigned ${taskId} to ${owner} with priority ${parsedPriority}.`;
 }
 

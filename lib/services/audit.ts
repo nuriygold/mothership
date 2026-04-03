@@ -18,7 +18,7 @@ export async function createAuditEvent(input: {
   entityId: string;
   eventType: string;
   actorId?: string | null;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, any>;
 }) {
   return prisma.auditEvent.create({
     data: {
@@ -26,7 +26,7 @@ export async function createAuditEvent(input: {
       entityId: input.entityId,
       eventType: input.eventType,
       actorId: input.actorId ?? null,
-      metadata: input.metadata ?? {},
+      metadata: (input.metadata ?? {}) as any,
     },
   });
 }
