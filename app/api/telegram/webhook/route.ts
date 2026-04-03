@@ -55,12 +55,18 @@ async function handleCreate(rest: string) {
 }
 
 async function handleAssign(rest: string) {
-  const [taskId, owner] = rest.split(/\s+/, 2);
+  const parts = rest.split(/\s+/).filter(Boolean);
+  const [taskId, owner, maybePriority] = parts;
   if (!taskId || !owner) {
-    return 'Usage: /assign <taskId> <github_login>';
+    return 'Usage: /assign <taskId> <github_login> [priority]';
   }
-  await updateTask({ id: taskId, ownerLogin: owner });
-  return `Assigned ${taskId} to ${owner}.`;
+
+  const priority = maybePriority ? maybePriority.toUpperCase() : undefined;
+  const valid = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+  const parsedPriority = valid.includes(priority as any) ? (priority as TaskPriority) : undefined;
+
+  await updateTask({ id: taskId, ownerLogin: owner, priority: parsedPriority });
+  return `Assigned ${taskId} to ${owner}${parsedPriority ? ` with priority ${parsedPriority}` : ''}.`;
 }
 
 async function handleListOpen() {
@@ -100,7 +106,7 @@ export async function POST(req: Request) {
     } else if (command.cmd === '/assign') {
       reply = await handleAssign(command.rest);
     } else {
-      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>, /assign <taskId> <github_login>';
+      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>, /assign <taskId> <github_login> [priority]';
     }
 
     await sendTelegramMessage({ text: reply, chatId: String(chatId) });
