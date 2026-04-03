@@ -32,6 +32,28 @@ async function sendTelegram(payload: { text: string; botKey?: string }) {
   return res.json();
 }
 
+async function dispatchOpenClaw(payload: { text: string; agentId?: string; sessionKey?: string }) {
+  const res = await fetch('/api/openclaw/dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message ?? 'Failed to dispatch to OpenClaw');
+  }
+  return res.json();
+}
+
+async function checkGateway() {
+  const res = await fetch('/api/openclaw/health');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message ?? 'Gateway unreachable');
+  }
+  return res.json();
+}
+
 export default function CommandCenterPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
@@ -39,6 +61,10 @@ export default function CommandCenterPage() {
   const [source, setSource] = useState('web');
   const [telegramMessage, setTelegramMessage] = useState('');
   const [telegramBot, setTelegramBot] = useState('bot2');
+  const [ocText, setOcText] = useState('');
+  const [ocAgent, setOcAgent] = useState('main');
+  const [ocSession, setOcSession] = useState('');
+  const [ocResult, setOcResult] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: postCommand,
@@ -51,6 +77,15 @@ export default function CommandCenterPage() {
   const telegramMutation = useMutation({
     mutationFn: sendTelegram,
     onSuccess: () => setTelegramMessage(''),
+  });
+
+  const openClawMutation = useMutation({
+    mutationFn: dispatchOpenClaw,
+    onSuccess: (data) => setOcResult(data?.result?.output ?? 'Dispatched.'),
+  });
+
+  const gatewayMutation = useMutation({
+    mutationFn: checkGateway,
   });
 
   return (
@@ -113,6 +148,68 @@ export default function CommandCenterPage() {
               <p className="text-xs text-rose-400">Failed: {(telegramMutation.error as Error).message}</p>
             )}
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardTitle>OpenClaw dispatch</CardTitle>
+        <div className="mt-3 space-y-3">
+          <textarea
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-white"
+            rows={3}
+            placeholder="Send instruction to OpenClaw agents"
+            value={ocText}
+            onChange={(e) => setOcText(e.target.value)}
+          />
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <select
+              className="rounded-md border border-border bg-surface px-2 py-1"
+              value={ocAgent}
+              onChange={(e) => setOcAgent(e.target.value)}
+            >
+              <option value="main">bot_one · Adrian · Mistral-Large-3</option>
+              <option value="ruby">bot_two · Ruby · Codestral-2501</option>
+              <option value="emerald">bot_three · Emerald · mistral-medium-2505</option>
+            </select>
+            <input
+              className="w-48 rounded-md border border-border bg-surface px-2 py-1 text-xs text-white"
+              placeholder="Session key (optional)"
+              value={ocSession}
+              onChange={(e) => setOcSession(e.target.value)}
+            />
+            <Button
+              onClick={() =>
+                openClawMutation.mutate({ text: ocText, agentId: ocAgent, sessionKey: ocSession || undefined })
+              }
+              disabled={!ocText || openClawMutation.isLoading}
+            >
+              Dispatch
+            </Button>
+            {openClawMutation.isError && (
+              <p className="text-xs text-rose-400">Failed: {(openClawMutation.error as Error).message}</p>
+            )}
+          </div>
+          <div className="mt-3 flex items-center gap-3 text-xs text-slate-300">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => gatewayMutation.mutate()}
+              disabled={gatewayMutation.isLoading}
+            >
+              Check gateway
+            </Button>
+            {gatewayMutation.isSuccess && (
+              <span className="text-emerald-300">Gateway OK</span>
+            )}
+            {gatewayMutation.isError && (
+              <span className="text-rose-300">Gateway error: {(gatewayMutation.error as Error).message}</span>
+            )}
+          </div>
+          {ocResult && (
+            <pre className="whitespace-pre-wrap rounded-md border border-border bg-panel p-3 text-xs text-slate-200">
+              {ocResult}
+            </pre>
+          )}
         </div>
       </Card>
 

@@ -101,6 +101,22 @@ async function handleAssign(rest: string) {
   return `Assigned ${taskId} to ${owner} with priority ${parsedPriority}.`;
 }
 
+async function handleReassign(rest: string) {
+  const parts = rest.split(/\s+/).filter(Boolean);
+  const [taskId, owner] = parts;
+  if (!taskId || !owner) {
+    return 'Usage: /reassign <taskId> <github_login>';
+  }
+  await updateTask({ id: taskId, ownerLogin: owner });
+  await createAuditEvent({
+    entityType: 'task',
+    entityId: taskId,
+    eventType: 'telegram_reassign',
+    metadata: { ownerLogin: owner },
+  });
+  return `Reassigned ${taskId} to ${owner}.`;
+}
+
 async function handleListOpen() {
   const tasks = await listTasks();
   const open = (tasks as any[]).filter((t) => t.status !== 'DONE').slice(0, 5);
@@ -137,8 +153,10 @@ export async function POST(req: Request) {
       reply = await handleCreate(command.rest);
     } else if (command.cmd === '/assign') {
       reply = await handleAssign(command.rest);
+    } else if (command.cmd === '/reassign') {
+      reply = await handleReassign(command.rest);
     } else {
-      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>, /assign <taskId> <github_login> [priority]';
+      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>, /assign <taskId> <github_login> [priority], /reassign <taskId> <github_login>';
     }
 
     await sendTelegramMessage({ text: reply, chatId: String(chatId) });
