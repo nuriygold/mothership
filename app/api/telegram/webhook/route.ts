@@ -63,10 +63,12 @@ async function handleAssign(rest: string) {
 
   const priority = maybePriority ? maybePriority.toUpperCase() : undefined;
   const valid = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
-  const parsedPriority = valid.includes(priority as any) ? (priority as TaskPriority) : undefined;
+  const parsedPriority = valid.includes(priority as any)
+    ? (priority as TaskPriority)
+    : TaskPriority.HIGH; // default priority when omitted or invalid
 
   await updateTask({ id: taskId, ownerLogin: owner, priority: parsedPriority });
-  return `Assigned ${taskId} to ${owner}${parsedPriority ? ` with priority ${parsedPriority}` : ''}.`;
+  return `Assigned ${taskId} to ${owner} with priority ${parsedPriority}.`;
 }
 
 async function handleListOpen() {
