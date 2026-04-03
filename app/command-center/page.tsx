@@ -134,6 +134,7 @@ export default function CommandCenterPage() {
               <option value="bot1">Bot 1</option>
               <option value="bot2">Bot 2 (default)</option>
               <option value="bot3">Bot 3</option>
+              <option value="botAdobe">Adobe Bot</option>
             </select>
             <Button
               onClick={() => telegramMutation.mutate({ text: telegramMessage, botKey: telegramBot })}

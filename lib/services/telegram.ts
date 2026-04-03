@@ -1,14 +1,16 @@
-type TelegramBotKey = 'bot1' | 'bot2' | 'bot3' | 'default';
+type TelegramBotKey = 'bot1' | 'bot2' | 'bot3' | 'botAdobe' | 'default';
 
 function getTokens() {
   const bot1 = process.env.TELEGRAM_BOT_TOKEN ?? '';
   const bot2 = process.env.TELEGRAM_BOT_TOKEN_2 ?? '';
   const bot3 = process.env.TELEGRAM_BOT_TOKEN_3 ?? '';
+  const botAdobe = process.env.TELEGRAM_BOT_TOKEN_ADOBE ?? '';
   const defaultKey = (process.env.TELEGRAM_DEFAULT_BOT_KEY as TelegramBotKey) ?? 'bot2';
   return {
     bot1,
     bot2,
     bot3,
+    botAdobe,
     defaultKey,
   };
 }

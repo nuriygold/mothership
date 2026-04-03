@@ -1,13 +1,19 @@
 import { getDashboard } from '@/lib/services/dashboard';
 import { listTasks } from '@/lib/services/tasks';
 import { getEmailSummary } from '@/lib/services/email';
+import { checkGateway } from '@/lib/services/openclaw';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const [data, tasks, email] = await Promise.all([getDashboard(), listTasks(), getEmailSummary()]);
+  const [data, tasks, email, gateway] = await Promise.all([
+    getDashboard(),
+    listTasks(),
+    getEmailSummary(),
+    checkGateway(),
+  ]);
   const { counts, activeWorkflows, pendingApprovals, recentRuns, activity } = data;
   const taskList = tasks as Array<any>;
   const googleCalendarId = process.env.GOOGLE_CALENDAR_ID ?? '';
@@ -47,6 +53,13 @@ export default async function DashboardPage() {
             <p className="text-2xl font-semibold text-white">{item.value}</p>
           </Card>
         ))}
+        <Card className="p-4">
+          <p className="text-xs uppercase text-slate-400">Gateway</p>
+          <p className={`text-sm font-semibold ${gateway.ok ? 'text-emerald-300' : 'text-rose-300'}`}>
+            {gateway.ok ? 'Reachable' : 'Unreachable'}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500 line-clamp-2">{gateway.message}</p>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
