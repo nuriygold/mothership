@@ -358,9 +358,17 @@ export default function CommandCenterPage() {
             </select>
             <span className="text-xs text-slate-400">{voiceStatus || 'Idle'}</span>
             {voiceError && <span className="text-xs text-rose-400">{voiceError}</span>}
-            {voiceStatus?.startsWith('Error') && (
-              <Button size="sm" variant="outline" onClick={() => { setVoiceError(''); setVoiceStatus(''); }}>
-                Clear
+            {(voiceError || voiceStatus?.startsWith('Error') || voiceStatus === 'STT error') && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setVoiceError('');
+                  setVoiceStatus('');
+                  startRecording().catch(() => setVoiceStatus('Mic blocked'));
+                }}
+              >
+                Retry
               </Button>
             )}
           </div>
