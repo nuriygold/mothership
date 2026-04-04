@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -66,6 +66,11 @@ export default function CommandCenterPage() {
   const [ocAgent, setOcAgent] = useState('main');
   const [ocSession, setOcSession] = useState('');
   const [ocResult, setOcResult] = useState<string | null>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<string>('');
 
   const mutation = useMutation({
     mutationFn: postCommand,
@@ -85,9 +90,93 @@ export default function CommandCenterPage() {
     onSuccess: (data) => setOcResult(data?.result?.output ?? 'Dispatched.'),
   });
 
+  const ttsMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? 'TTS failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        await audioRef.current.play();
+      }
+      return true;
+    },
+  });
+
   const gatewayMutation = useMutation({
     mutationFn: checkGateway,
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: any) => {
+      let finalText = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += transcript;
+        } else {
+          setVoiceTranscript((prev) => transcript);
+        }
+      }
+      if (finalText) {
+        setVoiceTranscript(finalText);
+        setVoiceStatus('Dispatching…');
+        openClawMutation.mutate(
+          { text: finalText, agentId: ocAgent },
+          {
+            onSuccess: (data) => {
+              const output = data?.result?.output ?? 'Dispatched.';
+              setOcResult(output);
+              setVoiceStatus('Speaking…');
+              ttsMutation.mutate(output, {
+                onSettled: () => setVoiceStatus('Idle'),
+              });
+            },
+            onError: () => setVoiceStatus('Error'),
+          }
+        );
+      }
+    };
+
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onerror = () => setVoiceListening(false);
+
+    recognitionRef.current = recognition;
+    return () => recognition.stop();
+  }, [ocAgent, openClawMutation, ttsMutation]);
+
+  const toggleVoice = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      alert('Speech recognition not supported in this browser.');
+      return;
+    }
+    if (voiceListening) {
+      recognition.stop();
+      setVoiceListening(false);
+    } else {
+      setVoiceTranscript('');
+      setVoiceStatus('Listening…');
+      recognition.start();
+      setVoiceListening(true);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -227,6 +316,39 @@ export default function CommandCenterPage() {
             <pre className="whitespace-pre-wrap rounded-md border border-border bg-panel p-3 text-xs text-slate-200">
               {ocResult}
             </pre>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <CardTitle>Voice (Jarvis)</CardTitle>
+        <div className="mt-3 space-y-3 text-sm text-slate-200">
+          <div className="flex items-center gap-3">
+            <Button onClick={toggleVoice} variant={voiceListening ? 'outline' : 'default'}>
+              {voiceListening ? 'Stop Listening' : 'Push to Talk'}
+            </Button>
+            <select
+              className="rounded-md border border-border bg-surface px-2 py-1 text-xs"
+              value={ocAgent}
+              onChange={(e) => setOcAgent(e.target.value)}
+            >
+              <option value="main">bot_one · Adrian</option>
+              <option value="ruby">bot_two · Ruby</option>
+              <option value="emerald">bot_three · Emerald</option>
+            </select>
+            <span className="text-xs text-slate-400">{voiceStatus || 'Idle'}</span>
+          </div>
+          <div className="rounded-md border border-border bg-panel px-3 py-2 text-xs text-slate-100 min-h-[48px]">
+            {voiceTranscript || 'Transcript will appear here.'}
+          </div>
+          {ocResult && (
+            <pre className="whitespace-pre-wrap rounded-md border border-border bg-panel p-3 text-xs text-slate-200">
+              {ocResult}
+            </pre>
+          )}
+          <audio ref={audioRef} hidden />
+          {ttsMutation.isError && (
+            <p className="text-xs text-rose-400">TTS failed: {(ttsMutation.error as Error).message}</p>
           )}
         </div>
       </Card>
