@@ -22,7 +22,7 @@ Mothership is a next-generation personalized operations hub designed to centrali
 - Modular design to allow clean extension with Boomerang-style workflows for intake, validation, approvals, transformations
 - Scalable, maintainable codebase optimized for executive productivity
 
-## Deployment & Operations (Supabase)
+## Deployment & Operations
 
 - **Env secrets**: set `DATABASE_URL` (service role) in your host secrets (e.g., Vercel) using the format in `env/.env.production.example`. Never commit real credentials.
 - **Task source**: Mothership now reads tasks/workflows from `nuriygold/task-pool` by default via `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
@@ -37,6 +37,15 @@ Mothership is a next-generation personalized operations hub designed to centrali
 - **Seeding**: production should not be seeded. For staging-only, `npm run db:seed:staging` (same as local seed) — do not run in prod.
 - **Health check**: start the app (`npm run dev` locally) and hit `/dashboard`; prod should boot cleanly even with empty data.
 - **MCP vs Supabase**: Supabase DB setup is independent of any MCP server; MCP entries will not appear automatically.
+
+### Voice (all Azure)
+- STT: Azure Speech (standard) — endpoint `https://<region>.stt.speech.microsoft.com/...` (we use `eastus2`).
+- TTS: Azure Speech Neural — endpoint `https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`.
+- Required envs: `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (e.g., `eastus2`), optional `AZURE_SPEECH_VOICE` (default `en-US-AriaNeural`).
+
+### Telegram / OpenClaw
+- Telegram: `TELEGRAM_BOT_TOKEN`, optional `_2`, `_3`, `_ADOBE`, `TELEGRAM_DEFAULT_BOT_KEY`, `TELEGRAM_CHAT_ID`.
+- OpenClaw gateway (Azure AIServices brain): `OPENCLAW_GATEWAY=https://blessed-abundance-resource.cognitiveservices.azure.com` (or the proxy you’re using), `OPENCLAW_TOKEN`, `OPENCLAW_DEFAULT_AGENT`, `OPENCLAW_AGENT_RUBY`, `OPENCLAW_AGENT_EMERALD`.
 
 See `LAUNCH_CHECKLIST.md` for a step-by-step launch runbook (secrets, deploy, smoke tests, rollback notes).
 
