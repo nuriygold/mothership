@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -54,6 +54,19 @@ async function checkGateway() {
   return res.json();
 }
 
+async function transcribeAzure(audio: Blob) {
+  const res = await fetch('/api/voice/stt', {
+    method: 'POST',
+    headers: { 'Content-Type': audio.type || 'audio/ogg' },
+    body: audio,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message ?? 'STT failed');
+  }
+  return res.json();
+}
+
 export default function CommandCenterPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
@@ -68,9 +81,10 @@ export default function CommandCenterPage() {
   const [ocResult, setOcResult] = useState<string | null>(null);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
-  const recognitionRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<string>('');
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const mutation = useMutation({
     mutationFn: postCommand,
@@ -88,6 +102,10 @@ export default function CommandCenterPage() {
   const openClawMutation = useMutation({
     mutationFn: dispatchOpenClaw,
     onSuccess: (data) => setOcResult(data?.result?.output ?? 'Dispatched.'),
+  });
+
+  const sttMutation = useMutation({
+    mutationFn: transcribeAzure,
   });
 
   const ttsMutation = useMutation({
@@ -115,66 +133,61 @@ export default function CommandCenterPage() {
     mutationFn: checkGateway,
   });
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    if (!SpeechRecognition) return;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event: any) => {
-      let finalText = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalText += transcript;
+  const startRecording = async () => {
+    setVoiceTranscript('');
+    setVoiceStatus('Listening…');
+    audioChunksRef.current = [];
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) audioChunksRef.current.push(event.data);
+    };
+    recorder.onstop = async () => {
+      setVoiceStatus('Transcribing…');
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+      try {
+        const stt = await sttMutation.mutateAsync(blob as any);
+        const text = stt?.text ?? '';
+        setVoiceTranscript(text);
+        if (text) {
+          setVoiceStatus('Dispatching…');
+          openClawMutation.mutate(
+            { text, agentId: ocAgent },
+            {
+              onSuccess: (data) => {
+                const output = data?.result?.output ?? 'Dispatched.';
+                setOcResult(output);
+                setVoiceStatus('Speaking…');
+                ttsMutation.mutate(output, { onSettled: () => setVoiceStatus('Idle') });
+              },
+              onError: () => setVoiceStatus('Error'),
+            }
+          );
         } else {
-          setVoiceTranscript((prev) => transcript);
+          setVoiceStatus('No transcript');
         }
-      }
-      if (finalText) {
-        setVoiceTranscript(finalText);
-        setVoiceStatus('Dispatching…');
-        openClawMutation.mutate(
-          { text: finalText, agentId: ocAgent },
-          {
-            onSuccess: (data) => {
-              const output = data?.result?.output ?? 'Dispatched.';
-              setOcResult(output);
-              setVoiceStatus('Speaking…');
-              ttsMutation.mutate(output, {
-                onSettled: () => setVoiceStatus('Idle'),
-              });
-            },
-            onError: () => setVoiceStatus('Error'),
-          }
-        );
+      } catch (err) {
+        setVoiceStatus('STT error');
       }
     };
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setVoiceListening(true);
+  };
 
-    recognition.onend = () => setVoiceListening(false);
-    recognition.onerror = () => setVoiceListening(false);
-
-    recognitionRef.current = recognition;
-    return () => recognition.stop();
-  }, [ocAgent, openClawMutation, ttsMutation]);
+  const stopRecording = () => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== 'inactive') {
+      rec.stop();
+    }
+    setVoiceListening(false);
+  };
 
   const toggleVoice = () => {
-    const recognition = recognitionRef.current;
-    if (!recognition) {
-      alert('Speech recognition not supported in this browser.');
-      return;
-    }
     if (voiceListening) {
-      recognition.stop();
-      setVoiceListening(false);
+      stopRecording();
     } else {
-      setVoiceTranscript('');
-      setVoiceStatus('Listening…');
-      recognition.start();
-      setVoiceListening(true);
+      startRecording().catch(() => setVoiceStatus('Mic blocked'));
     }
   };
 
