@@ -85,6 +85,7 @@ export default function CommandCenterPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [voiceError, setVoiceError] = useState<string>('');
 
   const mutation = useMutation({
     mutationFn: postCommand,
@@ -127,6 +128,10 @@ export default function CommandCenterPage() {
       }
       return true;
     },
+    onError: (err: any) => {
+      setVoiceError(err?.message ?? 'TTS error');
+      setVoiceStatus('Error');
+    },
   });
 
   const gatewayMutation = useMutation({
@@ -138,38 +143,40 @@ export default function CommandCenterPage() {
     setVoiceStatus('Listening…');
     audioChunksRef.current = [];
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+    const recorder = new MediaRecorder(stream, { mimeType: mime });
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) audioChunksRef.current.push(event.data);
     };
     recorder.onstop = async () => {
-      setVoiceStatus('Transcribing…');
-      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-      try {
-        const stt = await sttMutation.mutateAsync(blob as any);
-        const text = stt?.text ?? '';
-        setVoiceTranscript(text);
-        if (text) {
-          setVoiceStatus('Dispatching…');
-          openClawMutation.mutate(
-            { text, agentId: ocAgent },
-            {
-              onSuccess: (data) => {
-                const output = data?.result?.output ?? 'Dispatched.';
-                setOcResult(output);
-                setVoiceStatus('Speaking…');
-                ttsMutation.mutate(output, { onSettled: () => setVoiceStatus('Idle') });
-              },
-              onError: () => setVoiceStatus('Error'),
-            }
-          );
-        } else {
-          setVoiceStatus('No transcript');
+        setVoiceStatus('Transcribing…');
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        try {
+          const stt = await sttMutation.mutateAsync(blob as any);
+          const text = stt?.text ?? '';
+          setVoiceTranscript(text);
+          if (text) {
+            setVoiceStatus('Dispatching…');
+            openClawMutation.mutate(
+              { text, agentId: ocAgent },
+              {
+                onSuccess: (data) => {
+                  const output = data?.result?.output ?? 'Dispatched.';
+                  setOcResult(output);
+                  setVoiceStatus('Speaking…');
+                  ttsMutation.mutate(output, { onSettled: () => setVoiceStatus('Idle') });
+                },
+                onError: () => setVoiceStatus('Error'),
+              }
+            );
+          } else {
+            setVoiceStatus('No transcript');
+          }
+        } catch (err) {
+          setVoiceStatus('STT error');
+          setVoiceError((err as any)?.message ?? 'STT error');
         }
-      } catch (err) {
-        setVoiceStatus('STT error');
-      }
-    };
+      };
     mediaRecorderRef.current = recorder;
     recorder.start();
     setVoiceListening(true);
@@ -350,6 +357,12 @@ export default function CommandCenterPage() {
               <option value="emerald">bot_three · Emerald</option>
             </select>
             <span className="text-xs text-slate-400">{voiceStatus || 'Idle'}</span>
+            {voiceError && <span className="text-xs text-rose-400">{voiceError}</span>}
+            {voiceStatus?.startsWith('Error') && (
+              <Button size="sm" variant="outline" onClick={() => { setVoiceError(''); setVoiceStatus(''); }}>
+                Clear
+              </Button>
+            )}
           </div>
           <div className="rounded-md border border-border bg-panel px-3 py-2 text-xs text-slate-100 min-h-[48px]">
             {voiceTranscript || 'Transcript will appear here.'}
