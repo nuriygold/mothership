@@ -28,6 +28,7 @@ Mothership is a next-generation personalized operations hub designed to centrali
 - **Task source**: Mothership now reads tasks/workflows from `nuriygold/task-pool` by default via `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
   - Optional overrides: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`.
   - If the task-pool repo is private, set `GITHUB_TOKEN` (server-side only) so API calls can read it.
+- **Task-pool workflow (current reality)**: `task-pool.md` is edited locally; `sync-tasks-to-github.sh` pushes to Issues; `sync-github-to-local.sh` pulls back; hourly GH Action writes `data/task-pool-snapshot.json` (backup); daily cron backs up file to `data/task-pool.md`; GitHub Pages is removed; Mothership is the only dashboard consuming Issues live.
 - **Email scaffold**: set `EMAIL_PROVIDER=gmail` and `EMAIL_INBOXES` (comma-separated) for dashboard visibility.
   - For live Gmail sync (next step), add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
 - **Zoho option**: set `EMAIL_PROVIDER=zoho` and `ZOHO_IMAP_USERNAME` / `ZOHO_IMAP_PASSWORD` to mark Zoho inbox connectivity.

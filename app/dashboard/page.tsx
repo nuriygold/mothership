@@ -16,6 +16,7 @@ export default async function DashboardPage() {
   ]);
   const { counts, activeWorkflows, pendingApprovals, recentRuns, activity } = data;
   const taskList = tasks as Array<any>;
+  const taskSourceNote = 'Source: GitHub Issues (nuriygold/task-pool) — use Refresh on Tasks page for latest.';
   const googleCalendarId = process.env.GOOGLE_CALENDAR_ID ?? '';
   const calendarWebUrl = googleCalendarId
     ? `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(googleCalendarId)}`
@@ -65,7 +66,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardTitle>To-do items</CardTitle>
-          <CardSubtitle>Open execution list</CardSubtitle>
+          <CardSubtitle>Open execution list. {taskSourceNote}</CardSubtitle>
           <div className="mt-3 space-y-2 text-sm text-slate-200">
             <p>{openTasks.length} open tasks</p>
             <p>{inProgress.length} in progress</p>
