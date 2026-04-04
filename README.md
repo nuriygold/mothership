@@ -22,12 +22,13 @@ Mothership is a next-generation personalized operations hub designed to centrali
 - Modular design to allow clean extension with Boomerang-style workflows for intake, validation, approvals, transformations
 - Scalable, maintainable codebase optimized for executive productivity
 
-## Deployment & Operations (Supabase)
+## Deployment & Operations
 
 - **Env secrets**: set `DATABASE_URL` (service role) in your host secrets (e.g., Vercel) using the format in `env/.env.production.example`. Never commit real credentials.
 - **Task source**: Mothership now reads tasks/workflows from `nuriygold/task-pool` by default via `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
   - Optional overrides: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`.
   - If the task-pool repo is private, set `GITHUB_TOKEN` (server-side only) so API calls can read it.
+- **Task-pool workflow (current reality)**: `task-pool.md` is edited locally; `sync-tasks-to-github.sh` pushes to Issues; `sync-github-to-local.sh` pulls back; hourly GH Action writes `data/task-pool-snapshot.json` (backup); daily cron backs up file to `data/task-pool.md`; GitHub Pages is removed; Mothership is the only dashboard consuming Issues live.
 - **Email scaffold**: set `EMAIL_PROVIDER=gmail` and `EMAIL_INBOXES` (comma-separated) for dashboard visibility.
   - For live Gmail sync (next step), add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
 - **Zoho option**: set `EMAIL_PROVIDER=zoho` and `ZOHO_IMAP_USERNAME` / `ZOHO_IMAP_PASSWORD` to mark Zoho inbox connectivity.
@@ -37,6 +38,15 @@ Mothership is a next-generation personalized operations hub designed to centrali
 - **Seeding**: production should not be seeded. For staging-only, `npm run db:seed:staging` (same as local seed) — do not run in prod.
 - **Health check**: start the app (`npm run dev` locally) and hit `/dashboard`; prod should boot cleanly even with empty data.
 - **MCP vs Supabase**: Supabase DB setup is independent of any MCP server; MCP entries will not appear automatically.
+
+### Voice (all Azure)
+- STT: Azure Speech (standard) — endpoint `https://<region>.stt.speech.microsoft.com/...` (we use `eastus2`).
+- TTS: Azure Speech Neural — endpoint `https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`.
+- Required envs: `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (e.g., `eastus2`), optional `AZURE_SPEECH_VOICE` (default `en-US-AriaNeural`).
+
+### Telegram / OpenClaw
+- Telegram: `TELEGRAM_BOT_TOKEN`, optional `_2`, `_3`, `_ADOBE`, `TELEGRAM_DEFAULT_BOT_KEY`, `TELEGRAM_CHAT_ID`.
+- OpenClaw gateway (Azure AIServices brain): `OPENCLAW_GATEWAY=https://blessed-abundance-resource.cognitiveservices.azure.com` (or the proxy you’re using), `OPENCLAW_TOKEN`, `OPENCLAW_DEFAULT_AGENT`, `OPENCLAW_AGENT_RUBY`, `OPENCLAW_AGENT_EMERALD`.
 
 See `LAUNCH_CHECKLIST.md` for a step-by-step launch runbook (secrets, deploy, smoke tests, rollback notes).
 

@@ -40,8 +40,15 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardTitle>Tasks</CardTitle>
-        <p className="mt-1 text-xs text-cyan-300">Source: nuriygold/task-pool repository</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Tasks</CardTitle>
+            <p className="mt-1 text-xs text-cyan-300">Source: nuriygold/task-pool repository</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => mutate()}>
+            Refresh tasks
+          </Button>
+        </div>
         <div className="mt-4 divide-y divide-border/80">
           {isLoading && <p className="py-6 text-sm text-slate-500">Loading tasks...</p>}
 

@@ -426,6 +426,7 @@ export async function updateTaskPoolIssue(input: {
   id: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  ownerLogin?: string;
 }): Promise<TaskPoolTask | null> {
   const { owner, repo, token } = getConfig();
   if (!token) return null;
@@ -491,6 +492,19 @@ export async function updateTaskPoolIssue(input: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ state: 'open' }),
+    });
+  }
+
+  if (input.ownerLogin) {
+    await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ assignees: [input.ownerLogin] }),
     });
   }
 

@@ -12,3 +12,21 @@ export async function listAuditEvents(limit = 50) {
     take: limit,
   });
 }
+
+export async function createAuditEvent(input: {
+  entityType: string;
+  entityId: string;
+  eventType: string;
+  actorId?: string | null;
+  metadata?: Record<string, any>;
+}) {
+  return prisma.auditEvent.create({
+    data: {
+      entityType: input.entityType,
+      entityId: input.entityId,
+      eventType: input.eventType,
+      actorId: input.actorId ?? null,
+      metadata: (input.metadata ?? {}) as any,
+    },
+  });
+}
