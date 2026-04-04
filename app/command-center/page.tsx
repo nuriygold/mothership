@@ -57,6 +57,7 @@ async function checkGateway() {
 export default function CommandCenterPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
+  const gateway = useQuery({ queryKey: ['gateway'], queryFn: checkGateway, staleTime: 15_000 });
   const [input, setInput] = useState('');
   const [source, setSource] = useState('web');
   const [telegramMessage, setTelegramMessage] = useState('');
@@ -91,7 +92,23 @@ export default function CommandCenterPage() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardTitle>Command input</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>Command input</CardTitle>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400">Gateway</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                gateway.data?.ok ? 'bg-emerald-900/50 text-emerald-200' : 'bg-rose-900/50 text-rose-200'
+              }`}
+            >
+              {gateway.isFetching
+                ? 'Checking...'
+                : gateway.data?.ok
+                ? 'Reachable'
+                : 'Unreachable'}
+            </span>
+          </div>
+        </div>
         <div className="mt-3 flex gap-2">
           <input
             className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-white"
