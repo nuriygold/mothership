@@ -21,10 +21,10 @@ const quickActions = [
 ] as const;
 
 const priorityColors: Record<string, string> = {
-  CRITICAL: 'bg-rose-100 text-rose-700',
-  HIGH: 'bg-amber-100 text-amber-700',
-  MEDIUM: 'bg-indigo-100 text-indigo-700',
-  LOW: 'bg-emerald-100 text-emerald-700',
+  CRITICAL: 'bg-[var(--color-sky)] text-[var(--foreground)]',
+  HIGH: 'bg-[var(--color-peach)] text-[var(--foreground)]',
+  MEDIUM: 'bg-[var(--color-lavender)] text-[var(--foreground)]',
+  LOW: 'bg-[var(--color-mint)] text-[var(--foreground)]',
 };
 
 async function setTaskStatus(taskId: string, status: string) {

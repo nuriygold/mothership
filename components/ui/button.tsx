@@ -6,9 +6,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-white hover:opacity-90 focus-visible:outline-primary',
-        ghost: 'bg-transparent text-slate-200 hover:bg-panel',
-        outline: 'border border-border text-slate-100 hover:border-slate-300',
+        default: 'bg-[var(--primary)] text-white hover:opacity-95 focus-visible:outline-[var(--primary)]',
+        ghost: 'bg-transparent text-[var(--muted-foreground)] hover:bg-[var(--muted)]',
+        outline: 'border border-border text-[var(--foreground)] hover:bg-[var(--muted)]',
       },
       size: {
         sm: 'px-3 py-1.5',

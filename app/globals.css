@@ -22,7 +22,12 @@
   --destructive-foreground: #ffffff;
   --border: rgba(196, 149, 159, 0.15);
   --input: transparent;
-  --input-background: #faf8fb;
+  --input-background: #f6f4f9;
+  --sidebar: #faf9f8;
+  --sidebar-accent: #f0eef3;
+  --sidebar-foreground: #2d2839;
+  --sidebar-border: rgba(196, 149, 159, 0.15);
+  --muted-foreground: #7d7689;
   --switch-background: #e8dff5;
   --ring: #c4959f;
   --color-pink: #fce7f3;
