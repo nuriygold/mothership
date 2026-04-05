@@ -66,6 +66,19 @@ enum CommandStatus {
   FAILED
 }
 
+enum PredictiveActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+}
+
+enum IntegrationEventStatus {
+  RECEIVED
+  ROUTED
+  FAILED
+}
+
 model User {
   id                 String       @id @default(uuid())
   email              String       @unique
@@ -222,4 +235,86 @@ model Command {
 
   requestedBy User? @relation("CommandRequester", fields: [requestedById], references: [id])
   run         Run?  @relation(fields: [runId], references: [id])
+}
+
+model PredictiveAction {
+  id                String                 @id @default(uuid())
+  dedupeKey         String                 @unique
+  title             String
+  category          String
+  sourceIntegration String
+  assignedBot       String
+  status            PredictiveActionStatus @default(PENDING)
+  payload           Json?
+  actionWebhook     String
+  executedAt        DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}
+
+model BotProfile {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  name           String
+  role           String
+  workingStyle   String?
+  personality    String?
+  strengths      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  liveSnapshots  BotLiveStateSnapshot[]
+  outputs        BotOutput[]
+}
+
+model BotLiveStateSnapshot {
+  id          String   @id @default(uuid())
+  botProfileId String
+  currentTask String?
+  status      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  botProfile BotProfile @relation(fields: [botProfileId], references: [id])
+}
+
+model BotOutput {
+  id          String   @id @default(uuid())
+  botProfileId String
+  title       String
+  type        String
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  botProfile BotProfile @relation(fields: [botProfileId], references: [id])
+}
+
+model IntegrationEvent {
+  id                String                 @id @default(uuid())
+  sourceIntegration String
+  eventType         String
+  payload           Json
+  correlationKey    String?
+  status            IntegrationEventStatus @default(RECEIVED)
+  routedBot         String?
+  errorMessage      String?
+  createdAt         DateTime               @default(now())
+}
+
+model EmailDraftSuggestion {
+  id             String   @id @default(uuid())
+  emailExternalId String
+  tone           String
+  body           String
+  source         String
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model SystemHealthMetricSnapshot {
+  id              String   @id @default(uuid())
+  primarySystems  Int
+  botPerformance  Int
+  emailProcessing Int
+  dataSync        Int
+  createdAt       DateTime @default(now())
 }

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  /* Pastel luxury palette from Mothershipux */
+  /* V2 light palette */
   --background: #faf9f8;
   --foreground: #2d2839;
   --card: #ffffff;
@@ -40,10 +40,38 @@
   color-scheme: light;
 }
 
+[data-theme='dark'] {
+  --background: #0a1328;
+  --foreground: #e6ebff;
+  --card: #f4f8ff;
+  --card-foreground: #1a2742;
+  --popover: #ecf2ff;
+  --popover-foreground: #1a2742;
+  --primary: #42d0ff;
+  --primary-foreground: #05111e;
+  --secondary: #182a4f;
+  --secondary-foreground: #d8e2ff;
+  --muted: #111f3e;
+  --muted-foreground: #9fb1d8;
+  --accent: #42d0ff;
+  --accent-foreground: #05111e;
+  --border: rgba(66, 208, 255, 0.22);
+  --input-background: #e9f0ff;
+  --sidebar: #0b1730;
+  --sidebar-accent: #15284f;
+  --sidebar-foreground: #d8e2ff;
+  --sidebar-border: rgba(66, 208, 255, 0.22);
+  --ring: #42d0ff;
+  color-scheme: dark;
+}
+
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 15% 10%, rgba(66, 208, 255, 0.08), transparent 38%),
+    radial-gradient(circle at 85% 0%, rgba(182, 130, 255, 0.08), transparent 42%),
+    var(--background);
   color: var(--foreground);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: Sora, 'Avenir Next', 'Segoe UI', sans-serif;
 }
 
 .card {

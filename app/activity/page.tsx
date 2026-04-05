@@ -2,64 +2,30 @@
 
 import useSWR from 'swr';
 import { Card, CardTitle } from '@/components/ui/card';
-import { useActivityFilters } from '@/lib/state/filters';
+import type { V2ActivityFeed } from '@/lib/v2/types';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export default function ActivityPage() {
-  const { data } = useSWR('/api/activity', fetcher);
-  const { entityType, status, setEntityType, setStatus } = useActivityFilters();
-
-  const events = (data ?? []).filter((evt: any) => {
-    if (entityType && evt.entityType !== entityType) return false;
-    if (status && evt.eventType !== status) return false;
-    return true;
-  });
-
-  const entityTypes = Array.from(
-    new Set<string>((data ?? []).map((evt: any) => String(evt.entityType ?? '')))
-  ).filter((val) => val.length > 0);
+  const { data } = useSWR<V2ActivityFeed>('/api/v2/activity/log?page=1&pageSize=50', fetcher, { refreshInterval: 30000 });
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-3 text-xs text-slate-300">
-        <select
-          className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
-          value={entityType ?? ''}
-          onChange={(e) => setEntityType(e.target.value || null)}
-        >
-          <option value="">All entities</option>
-          {entityTypes.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-        <input
-          className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
-          placeholder="Filter event type"
-          value={status ?? ''}
-          onChange={(e) => setStatus(e.target.value || null)}
-        />
-      </div>
-
       <Card>
-        <CardTitle>Activity</CardTitle>
+        <CardTitle>Activity (High-Signal Timeline)</CardTitle>
         <div className="mt-3 space-y-3">
-          {events.map((evt: any) => (
+          {(data?.events ?? []).map((evt) => (
             <div key={evt.id} className="rounded-lg border border-border p-3">
-              <p className="text-sm text-white">{evt.eventType}</p>
-              <p className="text-xs text-slate-400">{evt.entityType} • {new Date(evt.createdAt).toLocaleString()}</p>
-              {evt.metadata?.url && (
-                <a className="text-xs text-cyan-300 hover:text-cyan-200" href={evt.metadata.url} target="_blank" rel="noreferrer">
-                  Open source task
-                </a>
-              )}
+              <p className="text-sm text-slate-900">{evt.description}</p>
+              <p className="text-xs text-slate-500">
+                {new Date(evt.timestamp).toLocaleString()} • {evt.eventType} • {evt.actor} • {evt.sourceIntegration}
+              </p>
             </div>
           ))}
-          {events.length === 0 && <p className="text-sm text-slate-500">No events match filters.</p>}
+          {(data?.events ?? []).length === 0 && <p className="text-sm text-slate-500">No events match filters.</p>}
         </div>
       </Card>
     </div>
   );
 }
+

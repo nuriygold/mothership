@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 async function checkGateway() {
@@ -8,6 +9,21 @@ async function checkGateway() {
 }
 
 export function Header() {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const nextTheme = (localStorage.getItem('mothership-theme') as 'light' | 'dark') || 'light';
+    setTheme(nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('mothership-theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ['header-gateway'],
     queryFn: checkGateway,
@@ -44,6 +60,14 @@ export function Header() {
           <span className="h-2 w-2 rounded-full bg-cyan-400" />
           <span style={{ color: 'var(--foreground)' }}>Voice: Azure</span>
         </div>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="rounded-full border border-border px-2 py-1 text-[11px] shadow-sm"
+          style={{ background: 'var(--card)', color: 'var(--foreground)' }}
+        >
+          {theme === 'light' ? 'Dark mode' : 'Light mode'}
+        </button>
       </div>
     </header>
   );
