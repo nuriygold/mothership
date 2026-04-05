@@ -15,7 +15,7 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
 
   return (
     <aside className="w-64 border-r border-border backdrop-blur-xl" style={{ background: 'var(--sidebar)' }}>
-      <div className="px-6 py-6 text-xl font-semibold tracking-tight" style={{ color: 'var(--foreground)' }}>
+      <div className="px-6 py-6 text-xl font-semibold tracking-tight" style={{ color: 'var(--sidebar-foreground)' }}>
         Mothership
       </div>
       <ScrollArea style={{ height: 'calc(100vh - 80px)' }}>
@@ -34,7 +34,8 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
                 )}
                 style={{
                   background: active ? 'var(--sidebar-accent)' : 'transparent',
-                  color: active ? 'var(--sidebar-foreground)' : 'var(--muted-foreground)',
+                  color: 'var(--sidebar-foreground)',
+                  opacity: active ? 1 : 0.65,
                   borderColor: 'var(--sidebar-border)',
                 }}
               >

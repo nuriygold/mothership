@@ -10,12 +10,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#faf9f8",
-        surface: "#ffffff",
-        panel: "#ffffff",
-        border: "rgba(196,149,159,0.15)",
-        primary: "#c4959f",
-        accent: "#b8c5e0",
+        background: "#F2F5FF",
+        surface: "#FFFFFF",
+        panel: "#FFFFFF",
+        border: "rgba(100,130,200,0.18)",
+        primary: "#00D9FF",
+        accent: "#7B68EE",
+        cyan: "#00D9FF",
+        navy: "#0A1628",
+        purple: "#7B68EE",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui"],

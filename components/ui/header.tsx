@@ -42,29 +42,29 @@ export function Header() {
 
   return (
     <header
-      className="sticky top-0 z-10 flex items-center justify-between border-b border-border px-6 py-4 backdrop-blur-xl"
-      style={{ background: 'var(--sidebar)', color: 'var(--foreground)' }}
+      className="sticky top-0 z-10 flex items-center justify-between border-b px-6 py-4 backdrop-blur-xl"
+      style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)', color: 'var(--sidebar-foreground)' }}
     >
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">OpenClaw Control Plane</p>
-        <p className="text-lg font-semibold text-[color:var(--foreground)]">Mothership</p>
+        <p className="text-xs uppercase tracking-[0.2em]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.6 }}>OpenClaw Control Plane</p>
+        <p className="text-lg font-semibold" style={{ color: 'var(--sidebar-foreground)' }}>Mothership</p>
       </div>
-      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--sidebar-foreground)', opacity: 0.8 }}>
         <div
           className={`h-2 w-2 rounded-full ${
             statusState === 'healthy' ? 'bg-emerald-400' : statusState === 'checking' ? 'bg-amber-300' : 'bg-rose-400'
           }`}
         />
         <span>{statusText}</span>
-        <div className="flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[11px] shadow-sm" style={{ background: 'var(--card)' }}>
-          <span className="h-2 w-2 rounded-full bg-cyan-400" />
-          <span style={{ color: 'var(--foreground)' }}>Voice: Azure</span>
+        <div className="flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] shadow-sm" style={{ background: 'var(--sidebar-accent)', borderColor: 'var(--sidebar-border)', color: 'var(--sidebar-foreground)' }}>
+          <span className="h-2 w-2 rounded-full" style={{ background: 'var(--color-cyan)' }} />
+          <span>Voice: Azure</span>
         </div>
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border border-border px-2 py-1 text-[11px] shadow-sm"
-          style={{ background: 'var(--card)', color: 'var(--foreground)' }}
+          className="rounded-full border px-2 py-1 text-[11px] shadow-sm"
+          style={{ background: 'var(--sidebar-accent)', borderColor: 'var(--sidebar-border)', color: 'var(--sidebar-foreground)', opacity: 1 }}
         >
           {theme === 'light' ? 'Dark mode' : 'Light mode'}
         </button>
