@@ -41,20 +41,21 @@ export function KissinBooth() {
   const commands = (data ?? []) as Array<{ id: string; input: string; status: string; sourceChannel: string }>;
 
   return (
-    <Card>
+    <Card className="border-transparent bg-gradient-to-br from-indigo-100 via-fuchsia-100 to-cyan-100">
       <CardTitle>The Kissin&apos; Booth</CardTitle>
-      <p className="mt-1 text-xs text-slate-500">Chat interface for quick dispatches to your operations layer.</p>
+      <p className="mt-1 text-xs text-slate-600">Chat interface for quick dispatches to your operations layer.</p>
 
       <div className="mt-3 flex gap-2">
         <input
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
-          className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
+          className="w-full rounded-md border border-white/70 bg-white/80 px-3 py-2 text-sm text-slate-900"
           placeholder="Ask Mothership to do something now..."
         />
         <Button
           onClick={() => mutation.mutate({ input: prompt, sourceChannel: 'today-booth' })}
           disabled={!prompt.trim() || mutation.isLoading}
+          className="bg-violet-500 hover:bg-violet-600"
         >
           Send
         </Button>
@@ -66,7 +67,7 @@ export function KissinBooth() {
 
       <div className="mt-3 space-y-2">
         {commands.slice(0, 3).map((command) => (
-          <div key={command.id} className="rounded-lg border border-border bg-[var(--input-background)] p-2">
+          <div key={command.id} className="rounded-lg border border-white/70 bg-white/70 p-2">
             <p className="truncate text-xs font-semibold text-slate-800">{command.input}</p>
             <p className="text-[11px] text-slate-500">
               {command.sourceChannel} • {command.status}
