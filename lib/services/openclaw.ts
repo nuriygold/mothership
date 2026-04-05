@@ -26,6 +26,7 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
     stream: true,
     model,
     messages: [{ role: 'user', content: input.text }],
+    input: input.text,
   };
 
   const res = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
