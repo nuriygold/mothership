@@ -15,6 +15,7 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
   const defaultAgent = process.env.OPENCLAW_DEFAULT_AGENT || 'main';
+  const model = process.env.OPENCLAW_MODEL || 'blessed-abundance-responses/gpt-5.3-chat';
 
   if (!gateway || !token) {
     throw new Error('OPENCLAW_GATEWAY or OPENCLAW_TOKEN not set');
@@ -23,6 +24,7 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
   const agentId = agentForKey(input.agentId) || defaultAgent;
   const body = {
     stream: true,
+    model,
     messages: [{ role: 'user', content: input.text }],
   };
 
