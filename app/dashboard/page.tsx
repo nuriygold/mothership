@@ -111,7 +111,7 @@ export default async function DashboardPage() {
           <CardSubtitle>{email.provider.toUpperCase()} connector</CardSubtitle>
           <div className="mt-3 space-y-1 text-sm text-slate-300">
             <p className={email.connected ? 'text-emerald-300' : 'text-amber-300'}>
-              {email.connected ? 'Connected' : 'Needs OAuth credentials'}
+              {email.connected ? 'Connected (live sync)' : 'Needs OAuth credentials'}
             </p>
             <p>{email.unreadCount} unread</p>
             <p>{email.needsReplyCount} need reply</p>
@@ -120,6 +120,16 @@ export default async function DashboardPage() {
               <p className="text-xs text-slate-400">Inboxes: {email.inboxes.join(', ')}</p>
             )}
             <p className="text-xs text-slate-500">{email.note}</p>
+            {email.previews.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {email.previews.slice(0, 3).map((preview) => (
+                  <div key={preview.id} className="rounded-lg border border-border bg-[var(--input-background)] p-2">
+                    <p className="truncate text-xs font-semibold text-slate-800">{preview.subject}</p>
+                    <p className="truncate text-[11px] text-slate-500">{preview.from}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="mt-3 flex gap-3 text-xs">
             <a href={calendarWebUrl} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">

@@ -1,3 +1,4 @@
+import { google } from 'googleapis';
 import { ImapFlow } from 'imapflow';
 
 type EmailProvider = 'gmail' | 'zoho' | 'outlook' | 'none';
@@ -18,6 +19,16 @@ export type EmailSummary = {
   }>;
 };
 
+type LiveEmailCounts = {
+  connected: boolean;
+  unread: number;
+  needsReply: number;
+  urgent: number;
+  previews: EmailSummary['previews'];
+  note: string;
+  inferredInbox?: string;
+};
+
 function parseInboxes(raw: string | undefined) {
   if (!raw) return [];
   return raw
@@ -26,7 +37,137 @@ function parseInboxes(raw: string | undefined) {
     .filter(Boolean);
 }
 
-async function fetchZohoCounts() {
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 6000): Promise<T> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function getHeader(headers: Array<{ name?: string | null; value?: string | null }> | undefined, key: string) {
+  if (!headers) return '';
+  const match = headers.find((header) => header.name?.toLowerCase() === key.toLowerCase());
+  return match?.value?.trim() ?? '';
+}
+
+function toIsoDate(input: string) {
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString();
+  return parsed.toISOString();
+}
+
+function summarizeError(prefix: string, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes('invalid_grant')) {
+    return `${prefix} refresh token expired or revoked. Reconnect Gmail OAuth.`;
+  }
+  if (message.includes('insufficient authentication scopes')) {
+    return `${prefix} token missing gmail.readonly scope. Re-authorize OAuth credentials.`;
+  }
+  return `${prefix} error: ${message.slice(0, 140)}`;
+}
+
+async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || '';
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    return {
+      connected: false,
+      unread: 0,
+      needsReply: 0,
+      urgent: 0,
+      previews: [],
+      note: 'Gmail OAuth credentials missing. Set GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN.',
+    };
+  }
+
+  const oauth = new google.auth.OAuth2(clientId, clientSecret);
+  oauth.setCredentials({ refresh_token: refreshToken });
+  const gmail = google.gmail({ version: 'v1', auth: oauth });
+
+  try {
+    const profile = await withTimeout(gmail.users.getProfile({ userId: 'me' }));
+    const inferredInbox = profile.data.emailAddress ?? undefined;
+
+    const [unreadRes, needsReplyRes, urgentRes] = await Promise.all([
+      withTimeout(gmail.users.messages.list({ userId: 'me', q: 'in:inbox is:unread', maxResults: 25 })),
+      withTimeout(gmail.users.messages.list({ userId: 'me', q: 'in:inbox is:unread -from:me', maxResults: 25 })),
+      withTimeout(
+        gmail.users.messages.list({
+          userId: 'me',
+          q: 'in:inbox is:unread {subject:urgent subject:asap subject:"action required"}',
+          maxResults: 25,
+        })
+      ),
+    ]);
+
+    const unreadMessages = unreadRes.data.messages ?? [];
+    const previewIds = unreadMessages.slice(0, 5).map((message) => message.id).filter(Boolean) as string[];
+
+    const previewResults = await Promise.all(
+      previewIds.map(async (id) => {
+        try {
+          return await withTimeout(
+            gmail.users.messages.get({
+              userId: 'me',
+              id,
+              format: 'metadata',
+              metadataHeaders: ['From', 'Subject', 'Date'],
+            })
+          );
+        } catch (_err) {
+          return null;
+        }
+      })
+    );
+
+    const previews: EmailSummary['previews'] = previewResults
+      .filter((result): result is NonNullable<typeof result> => Boolean(result))
+      .map((result, index) => {
+        const headers = result.data.payload?.headers;
+        const from = getHeader(headers, 'From') || 'Unknown sender';
+        const subject = getHeader(headers, 'Subject') || '(no subject)';
+        const rawDate = getHeader(headers, 'Date');
+        return {
+          id: result.data.id || `gmail-${index}`,
+          from,
+          subject,
+          date: rawDate ? toIsoDate(rawDate) : new Date().toISOString(),
+        };
+      });
+
+    const resolvedInboxes = inboxes.length > 0 ? inboxes : inferredInbox ? [inferredInbox] : [];
+    const inboxNote = resolvedInboxes.length > 0 ? `Tracking: ${resolvedInboxes.join(', ')}` : 'Tracking primary Gmail inbox.';
+
+    return {
+      connected: true,
+      unread: unreadMessages.length,
+      needsReply: (needsReplyRes.data.messages ?? []).length,
+      urgent: (urgentRes.data.messages ?? []).length,
+      previews,
+      note: `Live Gmail sync active. ${inboxNote}`,
+      inferredInbox,
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      unread: 0,
+      needsReply: 0,
+      urgent: 0,
+      previews: [],
+      note: summarizeError('Gmail API', err),
+    };
+  }
+}
+
+async function fetchZohoCounts(): Promise<LiveEmailCounts> {
   const host = process.env.ZOHO_IMAP_HOST || 'imap.zoho.com';
   const port = Number(process.env.ZOHO_IMAP_PORT || 993);
   const auth = {
@@ -35,7 +176,7 @@ async function fetchZohoCounts() {
   };
 
   if (!auth.user || !auth.pass) {
-    return { connected: false, unread: 0, needsReply: 0, urgent: 0, note: 'Zoho credentials missing' };
+    return { connected: false, unread: 0, needsReply: 0, urgent: 0, previews: [], note: 'Zoho credentials missing' };
   }
 
   const client = new ImapFlow({
@@ -111,34 +252,13 @@ async function fetchZohoCounts() {
 
 export async function getEmailSummary(): Promise<EmailSummary> {
   const provider = ((process.env.EMAIL_PROVIDER ?? 'gmail').toLowerCase() as EmailProvider) || 'none';
-  const inboxes = parseInboxes(process.env.EMAIL_INBOXES);
-
-  // v1 connector posture: we treat credentials as "connected" once server-side OAuth
-  // values are present. Live mailbox sync will be implemented in Phase 4.
-  const hasGmailCreds = Boolean(
-    process.env.GOOGLE_CLIENT_ID &&
-      process.env.GOOGLE_CLIENT_SECRET &&
-      process.env.GOOGLE_REFRESH_TOKEN
-  );
-
-  const hasZohoCreds = Boolean(process.env.ZOHO_IMAP_USERNAME && process.env.ZOHO_IMAP_PASSWORD);
-
-  const connected =
-    provider === 'gmail'
-      ? hasGmailCreds
-      : provider === 'zoho'
-        ? hasZohoCreds
-      : provider === 'outlook'
-        ? false
-        : provider === 'none'
-          ? false
-          : false;
+  const configuredInboxes = parseInboxes(process.env.EMAIL_INBOXES);
 
   if (provider === 'zoho') {
     const zoho = await fetchZohoCounts();
     return {
       provider,
-      inboxes,
+      inboxes: configuredInboxes,
       connected: zoho.connected,
       unreadCount: zoho.unread,
       needsReplyCount: zoho.needsReply,
@@ -148,18 +268,35 @@ export async function getEmailSummary(): Promise<EmailSummary> {
     };
   }
 
+  if (provider === 'gmail') {
+    const gmail = await fetchGmailCounts(configuredInboxes);
+    const resolvedInboxes =
+      configuredInboxes.length > 0
+        ? configuredInboxes
+        : gmail.inferredInbox
+          ? [gmail.inferredInbox]
+          : [];
+
+    return {
+      provider,
+      inboxes: resolvedInboxes,
+      connected: gmail.connected,
+      unreadCount: gmail.unread,
+      needsReplyCount: gmail.needsReply,
+      urgentCount: gmail.urgent,
+      previews: gmail.previews,
+      note: gmail.note,
+    };
+  }
+
   return {
     provider,
-    inboxes,
-    connected,
+    inboxes: configuredInboxes,
+    connected: false,
     unreadCount: 0,
     needsReplyCount: 0,
     urgentCount: 0,
     previews: [],
-    note: connected
-      ? 'Mailbox connector credentials are present. Live thread sync is next.'
-      : provider === 'gmail'
-        ? 'Email connector not fully configured yet. Add Gmail OAuth env vars to enable sync.'
-        : 'Email connector not fully configured yet. Add provider credentials to enable sync.',
+    note: 'Email connector not fully configured yet. Add provider credentials to enable sync.',
   };
 }
