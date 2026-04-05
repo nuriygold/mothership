@@ -11,6 +11,7 @@
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "migrate:deploy": "prisma migrate deploy",
     "db:seed:staging": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
+    "finance:ingest": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/ingest-finance-plan.ts",
     "test:v2:contracts": "node scripts/v2-contract-check.mjs",
     "test:v2:sse": "node scripts/v2-sse-load.mjs",
     "test:v2:idempotency": "node scripts/v2-idempotency-auth-check.mjs"

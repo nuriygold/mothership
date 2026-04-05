@@ -318,3 +318,40 @@ model SystemHealthMetricSnapshot {
   dataSync        Int
   createdAt       DateTime @default(now())
 }
+
+enum FinancePlanType {
+  CREDIT_SCORE
+  BUDGET
+  SAVINGS
+  DEBT_PAYOFF
+  INVESTMENT
+  EXPENSE_REDUCTION
+  CUSTOM
+}
+
+enum FinancePlanStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+model FinancePlan {
+  id           String            @id @default(uuid())
+  title        String
+  type         FinancePlanType   @default(CUSTOM)
+  status       FinancePlanStatus @default(ACTIVE)
+  description  String?
+  goal         String?
+  currentValue Float?
+  targetValue  Float?
+  unit         String?
+  startDate    DateTime?
+  targetDate   DateTime?
+  managedByBot String            @default("adrian")
+  milestones   Json?
+  notes        String?
+  sourceFile   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
