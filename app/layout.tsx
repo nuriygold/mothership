@@ -13,12 +13,12 @@ export const metadata: Metadata = {
 };
 
 const navItems = [
-  { label: 'Dashboard', href: '/dashboard' },
+  { label: 'Today', href: '/today' },
   { label: 'Tasks', href: '/tasks' },
-  { label: 'Workflows', href: '/workflows' },
-  { label: 'Activity', href: '/activity' },
-  { label: 'Command Center', href: '/command-center' },
-  { label: 'Runs', href: '/runs' },
+  { label: 'Bots', href: '/bots' },
+  { label: 'Email', href: '/email' },
+  { label: 'Finance', href: '/finance' },
+  { label: 'Activity (Log)', href: '/activity' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
