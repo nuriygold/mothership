@@ -1,62 +1,151 @@
 # Mothership
 
-Personalized Operations Hub for Nuriy
+Agentic Operations Platform for Nuriy
 
----
+## Current Status
 
-## Overview
+Mothership is now running a dual-layer architecture:
 
-Mothership is a next-generation personalized operations hub designed to centralize executive schedules, task management, accomplishments, and next steps in one dashboard.
+- **V1** endpoints and flows remain available for backward compatibility.
+- **V2** is live under `/api/v2/*` with bot-centric orchestration, SSE streams, and action-first UI behavior.
 
-## Technology Stack
+Primary UI routes:
 
-- Frontend: Next.js + React + TypeScript, premium dashboard UI components
-- Backend: PostgreSQL for persistent structured data
-- Task Source: GitHub Issues/Projects integration for structured task syncing
-- Orchestration: OpenClaw as command/control proxy and orchestration layer
-- Communication: Telegram as primary command and notification surface
-- Authentication: Lightweight for v1, no paid subscriptions
+- `/today`
+- `/tasks`
+- `/bots`
+- `/email`
+- `/finance`
+- `/activity`
 
-## Architecture Goals
+## Tech Stack
 
-- Modular design to allow clean extension with Boomerang-style workflows for intake, validation, approvals, transformations
-- Scalable, maintainable codebase optimized for executive productivity
+- **Frontend:** Next.js 14, React, TypeScript, SWR/TanStack Query
+- **Backend:** Next.js API routes + Prisma + PostgreSQL (Supabase)
+- **Task source:** GitHub task-pool (`nuriygold/task-pool`)
+- **Orchestration:** OpenClaw gateway + named agents
+- **Comms:** Telegram + in-app command center
+- **Voice:** Azure Speech STT/TTS
+- **Realtime:** SSE-first with polling fallback
+
+## V2 API Surface
+
+### Core feeds
+
+- `GET /api/v2/dashboard/today`
+- `GET /api/v2/tasks`
+- `GET /api/v2/bots`
+- `GET /api/v2/email`
+- `GET /api/v2/email/:id/ai-drafts`
+- `GET /api/v2/finance/overview`
+- `GET /api/v2/activity/log`
+
+### Mutations
+
+- `POST /api/v2/actions/:id/approve` (idempotent approval handling)
+- `PATCH /api/v2/tasks/:id` (action-based task mutation: `start|defer|complete|unblock`)
+
+### SSE streams
+
+- `GET /api/v2/stream/dashboard`
+- `GET /api/v2/stream/bots`
+- `GET /api/v2/stream/kissin-booth`
+- `GET /api/v2/stream/email/:id/drafts`
+
+## Bot Routing
+
+Mothership routes work by domain intent:
+
+- **Finance** -> Adrian
+- **Comms / Email** -> Ruby
+- **Research / Synthesis** -> Emerald
+- **Document intelligence** -> Adobe Pettaway
+- **System orchestration / fallback** -> Gateway/default agent
+
+## Email Drafting (Hybrid V2)
+
+`/api/v2/email/:id/ai-drafts` returns:
+
+1. Two immediate deterministic template drafts.
+2. A third **Ruby Custom** draft asynchronously via SSE (`/api/v2/stream/email/:id/drafts`).
+
+If Ruby generation fails, template actions still work.
 
 ## Deployment & Operations
 
-- **Env secrets**: set `DATABASE_URL` (service role) in your host secrets (e.g., Vercel) using the format in `env/.env.production.example`. Never commit real credentials.
-- **Task source**: Mothership now reads tasks/workflows from `nuriygold/task-pool` by default via `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
-  - Optional overrides: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`.
-  - If the task-pool repo is private, set `GITHUB_TOKEN` (server-side only) so API calls can read it.
-- **Task-pool workflow (current reality)**: `task-pool.md` is edited locally; `sync-tasks-to-github.sh` pushes to Issues; `sync-github-to-local.sh` pulls back; hourly GH Action writes `data/task-pool-snapshot.json` (backup); daily cron backs up file to `data/task-pool.md`; GitHub Pages is removed; Mothership is the only dashboard consuming Issues live.
-- **Email scaffold**: set `EMAIL_PROVIDER=gmail` and `EMAIL_INBOXES` (comma-separated) for dashboard visibility.
-  - For live Gmail sync (next step), add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
-- **Zoho option**: set `EMAIL_PROVIDER=zoho` and `ZOHO_IMAP_USERNAME` / `ZOHO_IMAP_PASSWORD` to mark Zoho inbox connectivity.
-- **Calendar/OpenClaw env**: set `GOOGLE_CALENDAR_ID`, optional `GOOGLE_CALENDAR_ICAL_URL`, and `OPENCLAW_API_URL`.
-- **Env naming**: this project is Next.js, not Vite. Use `EMAIL_*`, `GOOGLE_*`, `OPENCLAW_*` names here (not `VITE_*`).
-- **Migrations (prod)**: run `npm run migrate:deploy`. Use `prisma migrate reset` only locally.
-- **Seeding**: production should not be seeded. For staging-only, `npm run db:seed:staging` (same as local seed) — do not run in prod.
-- **Health check**: start the app (`npm run dev` locally) and hit `/dashboard`; prod should boot cleanly even with empty data.
-- **MCP vs Supabase**: Supabase DB setup is independent of any MCP server; MCP entries will not appear automatically.
+- **Secrets location:** host-managed secrets only (Vercel), never committed.
+- **Database:** set `DATABASE_URL` (Supabase service role URL with SSL).
+- **Task source:** set `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
+  - Optional: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`
+  - Private repo support: `GITHUB_TOKEN`
+- **Migrations (prod):** `npm run migrate:deploy`
+- **Seeding:** never in production; staging-only with `npm run db:seed:staging`
+- **Primary health checks:** `/today`, `/api/openclaw/health`, `/api/v2/dashboard/today`
 
-### Voice (all Azure)
-- STT: Azure Speech (standard) — endpoint `https://<region>.stt.speech.microsoft.com/...` (we use `eastus2`).
-- TTS: Azure Speech Neural — endpoint `https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`.
-- Required envs: `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (e.g., `eastus2`), optional `AZURE_SPEECH_VOICE` (default `en-US-AriaNeural`).
+## Environment Variables
 
-### Telegram / OpenClaw
-- Telegram: `TELEGRAM_BOT_TOKEN`, optional `_2`, `_3`, `_ADOBE`, `TELEGRAM_DEFAULT_BOT_KEY`, `TELEGRAM_CHAT_ID`.
-- OpenClaw gateway (Azure AIServices brain): `OPENCLAW_GATEWAY=https://blessed-abundance-resource.cognitiveservices.azure.com` (or the proxy you’re using), `OPENCLAW_TOKEN`, `OPENCLAW_DEFAULT_AGENT`, `OPENCLAW_AGENT_RUBY`, `OPENCLAW_AGENT_EMERALD`.
+### OpenClaw
 
-See `LAUNCH_CHECKLIST.md` for a step-by-step launch runbook (secrets, deploy, smoke tests, rollback notes).
+- `OPENCLAW_GATEWAY`
+- `OPENCLAW_TOKEN`
+- `OPENCLAW_DEFAULT_AGENT`
+- `OPENCLAW_AGENT_RUBY`
+- `OPENCLAW_AGENT_EMERALD`
+- optional mappings (recommended): `OPENCLAW_AGENT_ADRIAN`, `OPENCLAW_AGENT_ADOBE`
+- optional model override: `OPENCLAW_MODEL`
 
-## Next Steps
+### Email
 
-- Scaffold Next.js + React + TypeScript project boilerplate
-- Set up PostgreSQL schema for tasks, accomplishments, user schedules
-- Integrate GitHub Issues API for task sync
-- Embed Telegram command/notification interfaces
-- Design premium dashboard UI mocks
+- `EMAIL_PROVIDER` (`gmail` or `zoho`)
+- `EMAIL_INBOXES`
+- Gmail: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
+- Zoho: `ZOHO_IMAP_USERNAME`, `ZOHO_IMAP_PASSWORD`
+
+### Voice (Azure)
+
+- `AZURE_SPEECH_KEY`
+- `AZURE_SPEECH_REGION` (example: `eastus2`)
+- optional `AZURE_SPEECH_VOICE` (default: `en-US-AriaNeural`)
+
+### V2 API Guard (optional but recommended)
+
+- `MOTHERSHIP_V2_API_KEY`
+  - When set, `/api/v2/*` expects header: `x-mothership-v2-key`
+  - Unauthorized responses use a consistent JSON error envelope
+
+## Local Development
+
+```bash
+npm install
+npm run dev
+```
+
+Then open [http://localhost:3000/today](http://localhost:3000/today).
+
+## V2 Validation Scripts
+
+```bash
+# Contracts
+npm run test:v2:contracts
+
+# Idempotency + auth envelope checks
+npm run test:v2:idempotency
+
+# SSE concurrency smoke
+npm run test:v2:sse
+```
+
+Use `BASE_URL` to target deployed environments, for example:
+
+```bash
+BASE_URL=https://mothership-blush.vercel.app npm run test:v2:contracts
+```
+
+## Notes
+
+- V1 routes remain in place by design.
+- Legacy file `services/workflowService.ts` was removed because it is incompatible with current Prisma schema and breaks builds.
+- See `LAUNCH_CHECKLIST.md` for launch/runbook details.
 
 ---
 
