@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   const key = process.env.AZURE_SPEECH_KEY;
   const region = process.env.AZURE_SPEECH_REGION;
-  const voice = process.env.AZURE_SPEECH_VOICE ?? 'en-US-AriaNeural';
+  const voice = process.env.AZURE_SPEECH_VOICE ?? 'en-US-Aria:DragonHDLatestNeural';
 
   if (!key || !region) {
     return NextResponse.json({ message: 'AZURE_SPEECH_KEY or AZURE_SPEECH_REGION missing' }, { status: 500 });
@@ -18,15 +18,17 @@ export async function POST(req: Request) {
     }
 
     const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+    const voiceName = voiceId || voice;
     const ssml = `<?xml version="1.0" encoding="UTF-8"?>
 <speak version="1.0" xml:lang="en-US">
-  <voice xml:lang="en-US" name="${voiceId || voice}">${text}</voice>
+  <voice xml:lang="en-US" name="${voiceName}">${text}</voice>
 </speak>`;
 
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Ocp-Apim-Subscription-Key': key,
+        'Ocp-Apim-Subscription-Region': region,
         'Content-Type': 'application/ssml+xml',
         'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
       },

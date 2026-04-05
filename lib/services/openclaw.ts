@@ -15,6 +15,7 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
   const defaultAgent = process.env.OPENCLAW_DEFAULT_AGENT || 'main';
+  const model = process.env.OPENCLAW_MODEL || 'openclaw/ruby';
 
   if (!gateway || !token) {
     throw new Error('OPENCLAW_GATEWAY or OPENCLAW_TOKEN not set');
@@ -23,7 +24,8 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
   const agentId = agentForKey(input.agentId) || defaultAgent;
   const body = {
     stream: true,
-    messages: [{ role: 'user', content: input.text }],
+    model,
+    input: input.text,
   };
 
   const res = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
