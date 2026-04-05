@@ -29,6 +29,28 @@ type LiveEmailCounts = {
   inferredInbox?: string;
 };
 
+const GMAIL_WINDOW_DAYS = 14;
+const GMAIL_MAX_COUNT_RESULTS = 100;
+const GMAIL_MAX_PREVIEWS = 5;
+
+function logEmailEvent(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}) {
+  const payload = {
+    service: 'email',
+    event,
+    ...data,
+    timestamp: new Date().toISOString(),
+  };
+  if (level === 'error') {
+    console.error(JSON.stringify(payload));
+    return;
+  }
+  if (level === 'warn') {
+    console.warn(JSON.stringify(payload));
+    return;
+  }
+  console.info(JSON.stringify(payload));
+}
+
 function parseInboxes(raw: string | undefined) {
   if (!raw) return [];
   return raw
@@ -96,20 +118,33 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
     const profile = await withTimeout(gmail.users.getProfile({ userId: 'me' }));
     const inferredInbox = profile.data.emailAddress ?? undefined;
 
+    const windowQuery = `newer_than:${GMAIL_WINDOW_DAYS}d`;
     const [unreadRes, needsReplyRes, urgentRes] = await Promise.all([
-      withTimeout(gmail.users.messages.list({ userId: 'me', q: 'in:inbox is:unread', maxResults: 25 })),
-      withTimeout(gmail.users.messages.list({ userId: 'me', q: 'in:inbox is:unread -from:me', maxResults: 25 })),
       withTimeout(
         gmail.users.messages.list({
           userId: 'me',
-          q: 'in:inbox is:unread {subject:urgent subject:asap subject:"action required"}',
-          maxResults: 25,
+          q: `in:inbox is:unread ${windowQuery}`,
+          maxResults: GMAIL_MAX_COUNT_RESULTS,
+        })
+      ),
+      withTimeout(
+        gmail.users.threads.list({
+          userId: 'me',
+          q: `in:inbox is:unread -from:me ${windowQuery}`,
+          maxResults: GMAIL_MAX_COUNT_RESULTS,
+        })
+      ),
+      withTimeout(
+        gmail.users.messages.list({
+          userId: 'me',
+          q: `in:inbox is:unread ${windowQuery} {subject:urgent subject:asap subject:"action required"}`,
+          maxResults: GMAIL_MAX_COUNT_RESULTS,
         })
       ),
     ]);
 
     const unreadMessages = unreadRes.data.messages ?? [];
-    const previewIds = unreadMessages.slice(0, 5).map((message) => message.id).filter(Boolean) as string[];
+    const previewIds = unreadMessages.slice(0, GMAIL_MAX_PREVIEWS).map((message) => message.id).filter(Boolean) as string[];
 
     const previewResults = await Promise.all(
       previewIds.map(async (id) => {
@@ -141,21 +176,34 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
           subject,
           date: rawDate ? toIsoDate(rawDate) : new Date().toISOString(),
         };
-      });
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const resolvedInboxes = inboxes.length > 0 ? inboxes : inferredInbox ? [inferredInbox] : [];
     const inboxNote = resolvedInboxes.length > 0 ? `Tracking: ${resolvedInboxes.join(', ')}` : 'Tracking primary Gmail inbox.';
 
+    logEmailEvent('info', 'gmail_sync_success', {
+      unread: unreadMessages.length,
+      needsReply: (needsReplyRes.data.threads ?? []).length,
+      urgent: (urgentRes.data.messages ?? []).length,
+      previewCount: previews.length,
+      inferredInbox: inferredInbox ?? null,
+      windowDays: GMAIL_WINDOW_DAYS,
+    });
+
     return {
       connected: true,
       unread: unreadMessages.length,
-      needsReply: (needsReplyRes.data.messages ?? []).length,
+      needsReply: (needsReplyRes.data.threads ?? []).length,
       urgent: (urgentRes.data.messages ?? []).length,
       previews,
       note: `Live Gmail sync active. ${inboxNote}`,
       inferredInbox,
     };
   } catch (err) {
+    logEmailEvent('error', 'gmail_sync_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return {
       connected: false,
       unread: 0,
@@ -176,6 +224,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
   };
 
   if (!auth.user || !auth.pass) {
+    logEmailEvent('warn', 'zoho_credentials_missing');
     return { connected: false, unread: 0, needsReply: 0, urgent: 0, previews: [], note: 'Zoho credentials missing' };
   }
 
@@ -232,6 +281,9 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
       note: 'Live Zoho IMAP counts (unread/urgent).',
     };
   } catch (err) {
+    logEmailEvent('error', 'zoho_sync_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     try {
       if (client?.loggedIn) await client.logout();
     } catch (_e) {

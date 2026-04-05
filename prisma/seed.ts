@@ -2,7 +2,29 @@ import { PrismaClient, WorkflowType, WorkflowStatus, SubmissionValidationStatus,
 
 const prisma = new PrismaClient();
 
+function isLikelyRemoteDatabase(url: string) {
+  return /(supabase\.com|render\.com|railway\.app|neon\.tech|rds\.amazonaws\.com|pooler\.supabase\.com)/i.test(url);
+}
+
+function assertSeedSafety() {
+  const dbUrl = process.env.DATABASE_URL || '';
+  const allowProdSeed = process.env.ALLOW_PROD_SEED === 'true';
+  const isProdNode = process.env.NODE_ENV === 'production';
+
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL is required for seeding.');
+  }
+
+  if ((isProdNode || isLikelyRemoteDatabase(dbUrl)) && !allowProdSeed) {
+    throw new Error(
+      'Safety stop: refusing to seed a production/remote database. Set ALLOW_PROD_SEED=true only when intentionally seeding staging.'
+    );
+  }
+}
+
 async function main() {
+  assertSeedSafety();
+
   await prisma.auditEvent.deleteMany();
   await prisma.command.deleteMany();
   await prisma.connector.deleteMany();

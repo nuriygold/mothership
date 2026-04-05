@@ -5,6 +5,26 @@ const DEFAULT_OWNER = 'nuriygold';
 const DEFAULT_REPO = 'task-pool';
 const DEFAULT_BRANCH = 'main';
 const DEFAULT_SNAPSHOT_PATH = 'data/task-pool-snapshot.json';
+let didLogSourceNormalization = false;
+let didWarnInvalidSource = false;
+
+function logTaskPoolEvent(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}) {
+  const payload = {
+    service: 'task_pool',
+    event,
+    ...data,
+    timestamp: new Date().toISOString(),
+  };
+  if (level === 'error') {
+    console.error(JSON.stringify(payload));
+    return;
+  }
+  if (level === 'warn') {
+    console.warn(JSON.stringify(payload));
+    return;
+  }
+  console.info(JSON.stringify(payload));
+}
 
 type GitHubIssueLabel = { name?: string };
 type GitHubIssueAssignee = { login?: string };
@@ -95,6 +115,17 @@ function getConfig() {
     (rawSource.includes('github.com') && rawSource.includes('task-pool'))
       ? 'task_pool_repo'
       : rawSource;
+
+  if (rawSource !== normalizedSource && !didLogSourceNormalization) {
+    logTaskPoolEvent('info', 'source_normalized', { rawSource, normalizedSource });
+    didLogSourceNormalization = true;
+  }
+
+  const recognized = ['task_pool_repo', 'database', 'db', 'none'];
+  if (!recognized.includes(normalizedSource) && !didWarnInvalidSource) {
+    logTaskPoolEvent('warn', 'invalid_source_value', { rawSource, normalizedSource });
+    didWarnInvalidSource = true;
+  }
 
   return {
     source: normalizedSource,
@@ -221,9 +252,17 @@ function toTaskPoolTask(issue: GitHubIssue): TaskPoolTask {
 async function fetchSnapshotFromRawUrl(): Promise<TaskPoolSnapshot | null> {
   const { owner, repo, branch, snapshotPath } = getConfig();
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${snapshotPath}`;
-  const res = await fetch(url, { next: { revalidate: 60 } });
-  if (!res.ok) return null;
-  return (await res.json()) as TaskPoolSnapshot;
+  try {
+    const res = await fetch(url, { next: { revalidate: 60 } });
+    if (!res.ok) {
+      logTaskPoolEvent('warn', 'snapshot_raw_fetch_failed', { status: res.status, url });
+      return null;
+    }
+    return (await res.json()) as TaskPoolSnapshot;
+  } catch (error) {
+    logTaskPoolEvent('error', 'snapshot_raw_fetch_error', { url, error: String(error) });
+    return null;
+  }
 }
 
 async function fetchSnapshotFromContentsApi(): Promise<TaskPoolSnapshot | null> {
@@ -234,20 +273,31 @@ async function fetchSnapshotFromContentsApi(): Promise<TaskPoolSnapshot | null> 
     .map((part) => encodeURIComponent(part))
     .join('/');
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
-  const res = await fetch(url, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    next: { revalidate: 60 },
-  });
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      next: { revalidate: 60 },
+    });
 
-  if (!res.ok) return null;
-  const payload = (await res.json()) as { content?: string; encoding?: string };
-  if (!payload.content || payload.encoding !== 'base64') return null;
-  const decoded = Buffer.from(payload.content, 'base64').toString('utf8');
-  return JSON.parse(decoded) as TaskPoolSnapshot;
+    if (!res.ok) {
+      logTaskPoolEvent('warn', 'snapshot_contents_fetch_failed', { status: res.status, owner, repo, branch, snapshotPath });
+      return null;
+    }
+    const payload = (await res.json()) as { content?: string; encoding?: string };
+    if (!payload.content || payload.encoding !== 'base64') {
+      logTaskPoolEvent('warn', 'snapshot_contents_invalid_payload', { owner, repo, branch, snapshotPath });
+      return null;
+    }
+    const decoded = Buffer.from(payload.content, 'base64').toString('utf8');
+    return JSON.parse(decoded) as TaskPoolSnapshot;
+  } catch (error) {
+    logTaskPoolEvent('error', 'snapshot_contents_fetch_error', { owner, repo, branch, snapshotPath, error: String(error) });
+    return null;
+  }
 }
 
 async function fetchIssuesFromGitHubApi(): Promise<GitHubIssue[] | null> {
@@ -260,17 +310,28 @@ async function fetchIssuesFromGitHubApi(): Promise<GitHubIssue[] | null> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(url, { headers, next: { revalidate: 60 } });
-  if (!res.ok) return null;
+  try {
+    const res = await fetch(url, { headers, next: { revalidate: 60 } });
+    if (!res.ok) {
+      logTaskPoolEvent('warn', 'issues_fetch_failed', { status: res.status, owner, repo });
+      return null;
+    }
 
-  const issues = (await res.json()) as Array<GitHubIssue & { pull_request?: unknown }>;
-  return issues.filter((issue) => !issue.pull_request);
+    const issues = (await res.json()) as Array<GitHubIssue & { pull_request?: unknown }>;
+    return issues.filter((issue) => !issue.pull_request);
+  } catch (error) {
+    logTaskPoolEvent('error', 'issues_fetch_error', { owner, repo, error: String(error) });
+    return null;
+  }
 }
 
 async function getTaskPoolIssues(): Promise<GitHubIssue[] | null> {
   const liveIssues = await fetchIssuesFromGitHubApi();
   if (liveIssues) return liveIssues;
   const snapshot = (await fetchSnapshotFromRawUrl()) ?? (await fetchSnapshotFromContentsApi());
+  if (snapshot?.issues?.length) {
+    logTaskPoolEvent('warn', 'using_snapshot_fallback', { issueCount: snapshot.issues.length });
+  }
   return snapshot?.issues ?? null;
 }
 
