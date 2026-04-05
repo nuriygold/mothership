@@ -6,6 +6,7 @@ export async function listWorkflows() {
   if (isTaskPoolRepositorySource()) {
     const repositoryWorkflows = await listTaskPoolWorkflows();
     if (repositoryWorkflows) return repositoryWorkflows;
+    return [];
   }
 
   return prisma.workflow.findMany({
@@ -21,9 +22,11 @@ export async function listWorkflows() {
 }
 
 export async function getWorkflow(id: string) {
-  if (isTaskPoolRepositorySource() && id.startsWith('tpw_')) {
+  if (isTaskPoolRepositorySource()) {
+    if (!id.startsWith('tpw_')) return null;
     const repositoryWorkflow = await getTaskPoolWorkflow(id);
     if (repositoryWorkflow) return repositoryWorkflow;
+    return null;
   }
 
   return prisma.workflow.findUnique({

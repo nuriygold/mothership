@@ -86,8 +86,18 @@ export type TaskPoolActivityEvent = {
 };
 
 function getConfig() {
+  const rawSource = (process.env.MOTHERSHIP_TASK_SOURCE ?? 'task_pool_repo').trim().toLowerCase();
+  const normalizedSource =
+    rawSource === 'task_pool_repo' ||
+    rawSource === 'task_pool' ||
+    rawSource === 'task-pool' ||
+    rawSource === 'github_task_pool' ||
+    (rawSource.includes('github.com') && rawSource.includes('task-pool'))
+      ? 'task_pool_repo'
+      : rawSource;
+
   return {
-    source: (process.env.MOTHERSHIP_TASK_SOURCE ?? 'task_pool_repo').toLowerCase(),
+    source: normalizedSource,
     owner: process.env.TASK_POOL_REPO_OWNER ?? DEFAULT_OWNER,
     repo: process.env.TASK_POOL_REPO_NAME ?? DEFAULT_REPO,
     branch: process.env.TASK_POOL_REPO_BRANCH ?? DEFAULT_BRANCH,

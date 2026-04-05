@@ -57,6 +57,20 @@ export async function getDashboard() {
         activity,
       };
     }
+
+    return {
+      counts: {
+        workflows: 0,
+        tasks: 0,
+        approvals: 0,
+        runs: 0,
+        commands: 0,
+      },
+      activeWorkflows: [],
+      pendingApprovals: [],
+      recentRuns: [],
+      activity: [],
+    };
   }
 
   const [workflows, tasks, approvals, runs, commands, activity] = await Promise.all([

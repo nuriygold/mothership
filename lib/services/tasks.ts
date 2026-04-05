@@ -6,6 +6,7 @@ export async function listTasks() {
   if (isTaskPoolRepositorySource()) {
     const repositoryTasks = await listTaskPoolTasks();
     if (repositoryTasks) return repositoryTasks;
+    return [];
   }
 
   return prisma.task.findMany({
@@ -26,6 +27,7 @@ export async function createTask(input: {
   if (isTaskPoolRepositorySource()) {
     const repositoryTask = await createTaskPoolIssue(input);
     if (repositoryTask) return repositoryTask;
+    throw new Error('Task-pool repository unavailable. Task creation is disabled in source-controlled mode.');
   }
 
   return prisma.task.create({
@@ -57,6 +59,7 @@ export async function updateTask(input: {
       ownerLogin: input.ownerLogin,
     });
     if (repositoryTask) return repositoryTask;
+    throw new Error('Task-pool repository unavailable. Task updates are disabled in source-controlled mode.');
   }
 
   return prisma.task.update({

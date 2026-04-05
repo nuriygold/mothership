@@ -5,6 +5,7 @@ export async function listAuditEvents(limit = 50) {
   if (isTaskPoolRepositorySource()) {
     const repositoryActivity = await listTaskPoolActivityEvents(limit);
     if (repositoryActivity) return repositoryActivity;
+    return [];
   }
 
   return prisma.auditEvent.findMany({
