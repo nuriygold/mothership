@@ -51,7 +51,7 @@ export default async function DashboardPage() {
         {stats.map((item) => (
           <Card key={item.label} className="p-4">
             <p className="text-xs uppercase text-slate-400">{item.label}</p>
-            <p className="text-2xl font-semibold text-white">{item.value}</p>
+            <p className="text-2xl font-semibold text-slate-900">{item.value}</p>
           </Card>
         ))}
         <Card className="p-4">
@@ -162,7 +162,7 @@ export default async function DashboardPage() {
             {activeWorkflows.map((wf) => (
               <div key={wf.id} className="flex items-center justify-between py-3">
                 <div>
-                  <p className="font-medium text-white">{wf.name}</p>
+                  <p className="font-medium text-slate-900">{wf.name}</p>
                   <p className="text-xs text-slate-400">{wf.type.toLowerCase()} • {wf.submissions.length} submissions • {wf.runs.length} runs</p>
                 </div>
                 <Link className="text-sm text-accent" href={`/workflows/${wf.id}`}>
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
           <div className="mt-4 space-y-3">
             {pendingApprovals.map((appr) => (
               <div key={appr.id} className="rounded-lg border border-border p-3">
-                <p className="text-sm text-white">{appr.workflow?.name ?? 'Workflow'}</p>
+                <p className="text-sm text-slate-900">{appr.workflow?.name ?? 'Workflow'}</p>
                 <p className="text-xs text-slate-400">{appr.reason ?? 'Approval requested'}</p>
               </div>
             ))}
@@ -199,7 +199,7 @@ export default async function DashboardPage() {
             {recentRuns.map((run) => (
               <div key={run.id} className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div>
-                  <p className="text-sm text-white">{run.type}</p>
+                  <p className="text-sm text-slate-900">{run.type}</p>
                   <p className="text-xs text-slate-400">{run.sourceSystem} • {run.status}</p>
                   <p className="text-xs text-slate-500">{(run as any).workflow?.name ?? 'Unlinked'}</p>
                 </div>
@@ -220,7 +220,7 @@ export default async function DashboardPage() {
           <div className="mt-4 space-y-3">
             {activity.map((evt) => (
               <div key={evt.id} className="rounded-lg border border-border p-3">
-                <p className="text-sm text-white">{evt.eventType}</p>
+                <p className="text-sm text-slate-900">{evt.eventType}</p>
                 <p className="text-xs text-slate-400">{evt.entityType} • {new Date(evt.createdAt).toLocaleString()}</p>
               </div>
             ))}

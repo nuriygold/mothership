@@ -3,37 +3,56 @@
 @tailwind utilities;
 
 :root {
-  /* Pastel / glass variables inspired by Mothershipux */
-  --background: radial-gradient(120% 120% at 20% 20%, #f8e9ff 0%, #e7f5ff 45%, #f4f4ff 70%, #e8f7f2 100%);
-  --surface: rgba(255, 255, 255, 0.65);
-  --surface-strong: rgba(255, 255, 255, 0.8);
-  --border: rgba(0, 0, 0, 0.08);
-  --text: #0f172a;
-  --muted: #475569;
-  --accent: #9b87f5;
-  --accent-2: #7dd3c0;
-  --accent-3: #fca5a5;
+  /* Pastel luxury palette from Mothershipux */
+  --background: #faf9f8;
+  --foreground: #2d2839;
+  --card: #ffffff;
+  --card-foreground: #2d2839;
+  --popover: #ffffff;
+  --popover-foreground: #2d2839;
+  --primary: #c4959f;
+  --primary-foreground: #ffffff;
+  --secondary: #e8dff5;
+  --secondary-foreground: #2d2839;
+  --muted: #f0eef3;
+  --muted-foreground: #7d7689;
+  --accent: #c4959f;
+  --accent-foreground: #ffffff;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: rgba(196, 149, 159, 0.15);
+  --input: transparent;
+  --input-background: #faf8fb;
+  --switch-background: #e8dff5;
+  --ring: #c4959f;
+  --color-pink: #fce7f3;
+  --color-lavender: #e8dff5;
+  --color-mint: #c7e8d9;
+  --color-peach: #ffd4c9;
+  --color-sky: #b8c5e0;
+  --color-mauve: #c4959f;
+  --color-mauve-dark: #a87d89;
   color-scheme: light;
 }
 
 body {
   background: var(--background);
-  color: var(--text);
+  color: var(--foreground);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 .card {
-  @apply rounded-2xl border shadow-lg;
-  background: var(--surface);
+  @apply rounded-2xl border shadow-sm;
+  background: var(--card);
   border-color: var(--border);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(10px);
 }
 
 .panel {
   @apply rounded-2xl border;
-  background: var(--surface-strong);
+  background: var(--popover);
   border-color: var(--border);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(8px);
 }
 
 a {

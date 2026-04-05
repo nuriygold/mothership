@@ -220,13 +220,13 @@ export default function CommandCenterPage() {
         </div>
         <div className="mt-3 flex gap-2">
           <input
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-white"
+            className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
             placeholder="Send instruction to OpenClaw/Dispatch-Bot bridge"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
           <select
-            className="rounded-md border border-border bg-surface px-2 text-sm"
+            className="rounded-md border border-border bg-[var(--input-background)] px-2 text-sm"
             value={source}
             onChange={(e) => setSource(e.target.value)}
           >
@@ -245,7 +245,7 @@ export default function CommandCenterPage() {
         <CardTitle>Telegram dispatch</CardTitle>
         <div className="mt-3 space-y-3">
           <textarea
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-white"
+            className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
             rows={3}
             placeholder="Send a quick update or instruction to Telegram"
             value={telegramMessage}
@@ -253,7 +253,7 @@ export default function CommandCenterPage() {
           />
           <div className="flex items-center gap-3">
             <select
-              className="rounded-md border border-border bg-surface px-2 text-sm"
+              className="rounded-md border border-border bg-[var(--input-background)] px-2 text-sm"
               value={telegramBot}
               onChange={(e) => setTelegramBot(e.target.value)}
             >
@@ -282,7 +282,7 @@ export default function CommandCenterPage() {
         <CardTitle>OpenClaw dispatch</CardTitle>
         <div className="mt-3 space-y-3">
           <textarea
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-white"
+            className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
             rows={3}
             placeholder="Send instruction to OpenClaw agents"
             value={ocText}
@@ -290,7 +290,7 @@ export default function CommandCenterPage() {
           />
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <select
-              className="rounded-md border border-border bg-surface px-2 py-1"
+              className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
               value={ocAgent}
               onChange={(e) => setOcAgent(e.target.value)}
             >
@@ -299,7 +299,7 @@ export default function CommandCenterPage() {
               <option value="emerald">bot_three · Emerald · mistral-medium-2505</option>
             </select>
             <input
-              className="w-48 rounded-md border border-border bg-surface px-2 py-1 text-xs text-white"
+              className="w-48 rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
               placeholder="Session key (optional)"
               value={ocSession}
               onChange={(e) => setOcSession(e.target.value)}
@@ -348,7 +348,7 @@ export default function CommandCenterPage() {
               {voiceListening ? 'Stop Listening' : 'Push to Talk'}
             </Button>
             <select
-              className="rounded-md border border-border bg-surface px-2 py-1 text-xs"
+              className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs"
               value={ocAgent}
               onChange={(e) => setOcAgent(e.target.value)}
             >
@@ -392,7 +392,7 @@ export default function CommandCenterPage() {
         <div className="mt-3 space-y-3">
           {(data ?? []).map((cmd: any) => (
             <div key={cmd.id} className="rounded-lg border border-border p-3">
-              <p className="text-sm text-white">{cmd.input}</p>
+              <p className="text-sm text-slate-900">{cmd.input}</p>
               <p className="text-xs text-slate-400">{cmd.sourceChannel} • {cmd.status}</p>
               {cmd.run && <p className="text-xs text-slate-500">Run: {cmd.run.type}</p>}
             </div>

@@ -24,7 +24,7 @@ export default function ActivityPage() {
     <div className="space-y-4">
       <div className="flex gap-3 text-xs text-slate-300">
         <select
-          className="rounded-md border border-border bg-surface px-2 py-1"
+          className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
           value={entityType ?? ''}
           onChange={(e) => setEntityType(e.target.value || null)}
         >
@@ -36,7 +36,7 @@ export default function ActivityPage() {
           ))}
         </select>
         <input
-          className="rounded-md border border-border bg-surface px-2 py-1"
+          className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
           placeholder="Filter event type"
           value={status ?? ''}
           onChange={(e) => setStatus(e.target.value || null)}

@@ -24,7 +24,7 @@ const navItems = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#0d1017] text-slate-100">
+      <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <Providers>
           <div className="flex min-h-screen">
             <Sidebar items={navItems} />
