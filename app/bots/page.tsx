@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function BotsPage() {
   const gateway = await checkGateway();
+  const hasGatewayConfig = Boolean(process.env.OPENCLAW_GATEWAY && process.env.OPENCLAW_TOKEN);
+  const hasDefaultAgent = Boolean(process.env.OPENCLAW_DEFAULT_AGENT);
 
   return (
     <div className="space-y-4">
@@ -23,8 +25,20 @@ export default async function BotsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {bots.map((bot) => {
-          const configured = Boolean(process.env[bot.key]);
-          const status = bot.name === 'Gateway' ? gateway.ok : configured;
+          const hasDirectMapping = Boolean(process.env[bot.key]);
+          const status = bot.name === 'Gateway' ? gateway.ok : hasGatewayConfig;
+          const statusText =
+            bot.name === 'Gateway'
+              ? status
+                ? 'Configured'
+                : 'Needs wiring'
+              : hasDirectMapping
+                ? 'Configured'
+                : hasDefaultAgent
+                  ? 'Using default routing'
+                  : status
+                    ? 'Reachable (no explicit mapping)'
+                    : 'Needs wiring';
 
           return (
             <Card key={bot.name}>
@@ -32,10 +46,13 @@ export default async function BotsPage() {
               <CardSubtitle>{bot.role}</CardSubtitle>
               <div className="mt-2 text-sm">
                 <p className={status ? 'text-emerald-600' : 'text-amber-600'}>
-                  {status ? 'Configured' : 'Needs wiring'}
+                  {statusText}
                 </p>
                 {bot.name === 'Gateway' && (
                   <p className="text-xs text-slate-500">{gateway.message}</p>
+                )}
+                {bot.name !== 'Gateway' && !hasDirectMapping && (
+                  <p className="text-xs text-slate-500">Set {bot.key} to map this bot to a specific OpenClaw agent id.</p>
                 )}
               </div>
             </Card>

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   const key = process.env.AZURE_SPEECH_KEY;
   const region = process.env.AZURE_SPEECH_REGION;
-  const voice = process.env.AZURE_SPEECH_VOICE ?? 'en-US-Aria:DragonHDLatestNeural';
+  const voice = process.env.AZURE_SPEECH_VOICE ?? 'en-US-AriaNeural';
 
   if (!key || !region) {
     return NextResponse.json({ message: 'AZURE_SPEECH_KEY or AZURE_SPEECH_REGION missing' }, { status: 500 });
