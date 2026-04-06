@@ -3,6 +3,7 @@ import { TaskPriority, TaskStatus } from '@prisma/client';
 import { listTasks, updateTask } from '@/lib/services/tasks';
 import { listFinancePlans } from '@/lib/services/finance';
 import { getEmailSummary } from '@/lib/services/email';
+import { fetchTodayCalendarEvents } from '@/lib/services/calendar';
 import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
@@ -13,6 +14,7 @@ import type {
   V2BotProfile,
   V2BotsFeed,
   V2DashboardPriorityItem,
+  V2DashboardTimelineItem,
   V2EmailDraft,
   V2EmailDraftFeed,
   V2EmailFeed,
@@ -445,7 +447,7 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
     });
 
   const pendingApprovals = summarizePendingApprovals();
-  const timeline = buildTimeline(tasksFeed);
+  const timeline = await buildTimeline(tasksFeed);
   const health = computeHealth(tasksFeed, botsFeed, emailFeed.connected);
 
   const liveBotActivity = botsFeed.bots.slice(0, 4).map((bot) => ({
@@ -471,27 +473,45 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   };
 }
 
-function buildTimeline(tasks: V2TasksFeed): V2TodayFeed['timeline'] {
-  const base = new Date();
-  const events = [
-    { offsetHours: 0, title: 'Review overnight activity' },
-    { offsetHours: 2, title: 'Strategic planning session' },
-    { offsetHours: 5, title: 'Finance review' },
-    { offsetHours: 7, title: 'Bot performance check' },
-  ];
-  const dynamic = tasks.today.slice(0, 2).map((task, index) => ({
-    offsetHours: 9 + index,
-    title: task.title,
-  }));
+async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {
+  // Try real Google Calendar events first
+  const calEvents = await fetchTodayCalendarEvents();
 
-  return [...events, ...dynamic].map((item, index) => {
-    const when = new Date(base.getTime() + item.offsetHours * 60 * 60 * 1000);
+  if (calEvents.length > 0) {
+    return calEvents.map((ev) => ({
+      time: ev.startTime,
+      title: ev.title,
+      iconType: ev.status === 'done' ? 'check' : ev.status === 'current' ? 'spark' : 'clock',
+      status: ev.status,
+    }));
+  }
+
+  // Fallback: use today's tasks as a synthetic timeline
+  const now = new Date();
+  const taskItems = tasks.today.slice(0, 6).map((task, index) => {
+    const when = new Date(now);
+    when.setHours(9 + index, 0, 0, 0);
+    const isPast = now > when;
+    const isCurrent = !isPast && index === 0;
     return {
-      time: when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      title: item.title,
-      iconType: index === 0 ? 'check' : 'clock',
+      time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      title: task.title,
+      iconType: (isPast ? 'check' : isCurrent ? 'spark' : 'clock') as V2DashboardTimelineItem['iconType'],
+      status: (isPast ? 'done' : isCurrent ? 'current' : 'upcoming') as V2DashboardTimelineItem['status'],
     };
   });
+
+  if (taskItems.length > 0) return taskItems;
+
+  // Last resort: minimal placeholder showing real current time context
+  return [
+    {
+      time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      title: 'No calendar events found — connect Google Calendar',
+      iconType: 'alert',
+      status: 'current',
+    },
+  ];
 }
 
 function summarizePendingApprovals(): V2PendingApprovalSummary[] {
