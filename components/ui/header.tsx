@@ -20,6 +20,15 @@ async function checkAllServices() {
 function StatusDot({ service }: { service: ServiceStatus }) {
   const [show, setShow] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHide = () => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+  };
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimer.current = setTimeout(() => setShow(false), 150);
+  };
 
   const statusLabel = service.ok === null ? 'Checking…' : service.ok ? 'Online' : 'Issue detected';
 
@@ -37,8 +46,8 @@ function StatusDot({ service }: { service: ServiceStatus }) {
     <div
       ref={ref}
       className="relative flex items-center gap-1.5 flex-shrink-0 cursor-default"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={() => { cancelHide(); setShow(true); }}
+      onMouseLeave={scheduleHide}
       onClick={() => setShow((s) => !s)}
     >
       <div
@@ -56,6 +65,8 @@ function StatusDot({ service }: { service: ServiceStatus }) {
       {show && (
         <div
           className="fixed z-[9999] rounded-xl px-3 py-2.5 text-xs w-64"
+          onMouseEnter={cancelHide}
+          onMouseLeave={scheduleHide}
           style={{
             top: '48px',
             left: ref.current ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 270) : 0,
