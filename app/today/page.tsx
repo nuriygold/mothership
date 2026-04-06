@@ -476,6 +476,7 @@ export default function TodayPage() {
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [droppedTasks, setDroppedTasks] = useState<V2DashboardTimelineItem[]>([]);
+  const draggedItemRef = useRef<{ id: string; title: string; assignedBot: string; source: string } | null>(null);
   // Track completed task IDs across BOTH server + dropped tasks
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
@@ -514,14 +515,19 @@ export default function TodayPage() {
     });
   }, [serverTimeline, completedIds]);
 
+  const mergedTimeline = useMemo(() => {
+    if (droppedTasks.length === 0) return timeline;
+    return [...timeline, ...droppedTasks];
+  }, [timeline, droppedTasks]);
+
   // Find NOW position in timeline
   const nowIndex = useMemo(() => {
     const now = Date.now();
-    for (let i = 0; i < timeline.length; i++) {
-      if (timeline[i].startDate && new Date(timeline[i].startDate!).getTime() > now) return i;
+    for (let i = 0; i < mergedTimeline.length; i++) {
+      if (mergedTimeline[i].startDate && new Date(mergedTimeline[i].startDate!).getTime() > now) return i;
     }
-    return timeline.length;
-  }, [timeline]);
+    return mergedTimeline.length;
+  }, [mergedTimeline]);
 
   // Auto-scroll to now-line on load (fires after nowIndex is computed)
   useEffect(() => {
@@ -539,7 +545,7 @@ export default function TodayPage() {
   const handleComplete = useCallback(async (taskId?: string) => {
     if (!taskId) return;
     setCompletedIds((prev) => new Set([...prev, taskId]));
-    const title = timeline.find((t) => t.taskId === taskId)?.title ?? taskId;
+    const title = mergedTimeline.find((t) => t.taskId === taskId)?.title ?? taskId;
     setCompletedTitles((prev) => [...prev, title]);
     setToastMsg(`✓ "${title}" added to Trophy Collection`);
     fetch(`/api/v2/tasks/${taskId}`, {
@@ -547,7 +553,7 @@ export default function TodayPage() {
       body: JSON.stringify({ action: 'complete' }),
     }).catch(() => {});
     void mutate();
-  }, [mutate, timeline]);
+  }, [mutate, mergedTimeline]);
 
   // ── Gateway → Pre-fill Kissin' Booth ──
   const handleGateway = useCallback((title: string) => {
@@ -567,7 +573,7 @@ export default function TodayPage() {
     } catch { setToastMsg(`Failed to reach ${botName}`); }
   }, []);
 
-  // ── Assign To → Reassign bot (timeline items, Telegram only) ──
+  // ── Assign To → Reassign bot ──
   const handleAssign = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
     const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
     try {
@@ -580,23 +586,45 @@ export default function TodayPage() {
     void mutate();
   }, [mutate]);
 
-  // ── Assign task-pool issue to bot (updates GitHub assignee) ──
-  const handleAssignTask = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
-    const ownerLogin = newBot.toLowerCase() === 'adobe' ? 'adobepettaway'
-      : newBot.toLowerCase() === 'adrian' ? 'nuriygold'
-      : newBot.toLowerCase();
+  // ── Drag & Drop ──
+  const handleDragStart = useCallback((item: typeof priorities[0]) => {
+    draggedItemRef.current = { id: item.id, title: item.title, assignedBot: item.assignedBot, source: item.source };
+  }, []);
+
+  const handleDrop = useCallback((dropIdx: number) => {
+    const dragged = draggedItemRef.current;
+    if (!dragged) return;
+    const refEntry = mergedTimeline[dropIdx] ?? mergedTimeline[mergedTimeline.length - 1];
+    const newEntry: V2DashboardTimelineItem = {
+      time: refEntry?.time ?? 'TBD',
+      title: dragged.title,
+      type: 'task',
+      status: 'upcoming',
+      iconType: 'clock',
+      assignedBot: dragged.assignedBot,
+      taskId: dragged.id,
+      startDate: refEntry?.startDate ?? null,
+      endTime: null,
+      meetingUrl: null,
+    };
+    setDroppedTasks((prev) => [...prev, newEntry]);
+    setDragOverIdx(null);
+    draggedItemRef.current = null;
+    setToastMsg(`"${dragged.title}" added to timeline`);
+  }, [mergedTimeline]);
+
+  // ── Take Action with visible feedback ──
+  const handleTakeAction = useCallback(async (item: typeof priorities[0]) => {
     try {
-      await fetch(`/api/v2/tasks/${taskId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'assign', ownerLogin }),
-      });
-      const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
-      await fetch('/api/telegram/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `📌 Assigned to you: ${taskTitle}`, botKey }),
-      }).catch(() => {});
-      setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
-    } catch { setToastMsg('Assignment failed'); }
+      const res = await fetch(item.actionWebhook, { method: 'POST' });
+      if (res.ok) {
+        setToastMsg(`Action taken: "${item.title}"`);
+      } else {
+        setToastMsg(`Action failed for "${item.title}"`);
+      }
+    } catch {
+      setToastMsg(`Could not reach server for "${item.title}"`);
+    }
     void mutate();
   }, [mutate]);
 
@@ -637,21 +665,27 @@ export default function TodayPage() {
             </div>
 
             <div className="mt-3 space-y-2">
-              {timeline.length === 0 && (
+              {mergedTimeline.length === 0 && (
                 <div className="rounded-xl border-2 border-dashed p-6 text-center" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                   <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">No events yet — check back when calendar syncs</p>
                 </div>
               )}
-              {timeline.map((entry, idx) => {
+              {mergedTimeline.map((entry, idx) => {
                 const isCurrent = entry.status === 'current';
                 const isDone = entry.status === 'done';
                 const isFocus = entry.type === 'focus-block';
                 const isTask = entry.type === 'task';
                 const botColors = entry.assignedBot ? BOT_COLORS[entry.assignedBot] : null;
                 return (
-                  <div key={`${entry.time}-${entry.title}-${idx}`}>
+                  <div key={`${entry.time}-${entry.title}-${idx}`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+                    onDragLeave={() => setDragOverIdx(null)}
+                    onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}>
                     {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
+                    {dragOverIdx === idx && (
+                      <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
+                    )}
                     <div className="rounded-xl p-3 transition-all group"
                       style={{
                         border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
@@ -725,7 +759,7 @@ export default function TodayPage() {
                   </div>
                 );
               })}
-              {nowIndex >= timeline.length && timeline.length > 0 && <div ref={nowRef}><NowLine /></div>}
+              {nowIndex >= mergedTimeline.length && mergedTimeline.length > 0 && <div ref={nowRef}><NowLine /></div>}
             </div>
           </Card>
 
@@ -741,11 +775,23 @@ export default function TodayPage() {
                 const borderColor = BOT_BORDER[item.assignedBot] ?? BOT_BORDER.default;
                 const botC = BOT_COLORS[item.assignedBot];
                 return (
-                  <div key={item.id} className="flex items-center justify-between rounded-xl p-3 group"
+                  <div key={item.id}
+                    draggable
+                    onDragStart={() => handleDragStart(item)}
+                    onDragEnd={() => { draggedItemRef.current = null; setDragOverIdx(null); }}
+                    className="flex items-center justify-between rounded-xl p-3 group cursor-grab active:cursor-grabbing"
                     style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
-                      <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <GripVertical className="w-3.5 h-3.5 flex-shrink-0 opacity-30 group-hover:opacity-70 transition-opacity" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
+                          {item.dueAt && new Date(item.dueAt).getTime() < Date.now() && (
+                            <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(255,92,92,0.15)', color: '#FF5C5C' }}>OVERDUE</span>
+                          )}
+                        </div>
+                        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {botC && (
@@ -756,9 +802,13 @@ export default function TodayPage() {
                           {item.assignedBot}
                         </button>
                       )}
+                      {item.taskId && (
+                        <AssignToDropdown currentBot={item.assignedBot} taskTitle={item.title}
+                          onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
+                      )}
                       <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
                         style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
-                        onClick={async () => { await fetch(item.actionWebhook, { method: 'POST' }); void mutate(); }}>
+                        onClick={() => handleTakeAction(item)}>
                         Take Action
                       </button>
                     </div>
