@@ -149,6 +149,25 @@ function SectionHeader({ title, count, subtitle }: { title: string; count: numbe
   );
 }
 
+const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function applyFilter(tasks: V2TaskItem[], filter: string): V2TaskItem[] {
+  switch (filter) {
+    case 'Today':
+      return tasks.filter((t) => t.metadata.timeframe === 'today' || t.metadata.timeframe === 'Today');
+    case 'This Week':
+      return tasks.filter((t) => ['today', 'Today', 'this_week', 'week', 'This Week'].includes(t.metadata.timeframe));
+    case 'By Priority':
+      return [...tasks].sort((a, b) =>
+        (PRIORITY_ORDER[a.metadata.priority] ?? 4) - (PRIORITY_ORDER[b.metadata.priority] ?? 4)
+      );
+    case 'By Bot':
+      return [...tasks].sort((a, b) => a.metadata.assignedBot.localeCompare(b.metadata.assignedBot));
+    default:
+      return tasks;
+  }
+}
+
 export default function TasksPage() {
   const { data, mutate, isLoading } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
   const [activeFilter, setActiveFilter] = useState('All');
@@ -156,9 +175,24 @@ export default function TasksPage() {
   const counters = data?.counters;
   const queued = counters ? counters.tracked - counters.active - counters.blocked : 0;
 
+  const allTasks = data ? {
+    active:  applyFilter(data.active,  activeFilter),
+    today:   applyFilter(data.today,   activeFilter),
+    backlog: applyFilter(data.backlog, activeFilter),
+  } : null;
+
+  // For "By Bot" — flatten + group by bot name
+  const botGroups = activeFilter === 'By Bot' && allTasks
+    ? Object.entries(
+        [...allTasks.active, ...allTasks.today, ...allTasks.backlog].reduce<Record<string, V2TaskItem[]>>((acc, t) => {
+          (acc[t.metadata.assignedBot] ??= []).push(t);
+          return acc;
+        }, {})
+      )
+    : null;
+
   return (
     <div className="space-y-5">
-      {/* Page heading */}
       <div>
         <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Tasks</h1>
         <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Structured queue with priorities and status</p>
@@ -207,58 +241,61 @@ export default function TasksPage() {
             </button>
           ))}
         </div>
-        <button
-          className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
-        >
-          Status <ChevronDown className="w-3 h-3" />
-        </button>
+        {/* Legend for Start / Defer */}
+        <div className="flex items-center gap-3 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+          <span><strong style={{ color: 'var(--foreground)' }}>Start</strong> = begin now</span>
+          <span><strong style={{ color: 'var(--foreground)' }}>Defer</strong> = push to backlog</span>
+        </div>
       </div>
 
       {isLoading && (
         <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Loading tasks...</p>
       )}
 
-      {!isLoading && data && (
+      {!isLoading && allTasks && (
         <>
-          {/* Active section */}
-          {data.active.length > 0 && (
-            <div>
-              <SectionHeader title="Active" count={data.active.length} subtitle="Running right now" />
-              <div className="space-y-3">
-                {data.active.map((task) => (
-                  <TaskCard key={task.taskId} task={task} onRefresh={mutate} />
-                ))}
+          {/* By Bot grouped view */}
+          {botGroups ? (
+            botGroups.map(([bot, tasks]) => (
+              <div key={bot}>
+                <SectionHeader title={bot} count={tasks.length} subtitle="Assigned tasks" />
+                <div className="space-y-3">
+                  {tasks.map((task) => <TaskCard key={task.taskId} task={task} onRefresh={mutate} />)}
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Today section */}
-          {data.today.length > 0 && (
-            <div>
-              <SectionHeader title="Today" count={data.today.length} subtitle="Assigned for today, not yet started" />
-              <div className="space-y-3">
-                {data.today.map((task) => (
-                  <TaskCard key={task.taskId} task={task} onRefresh={mutate} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Backlog section */}
-          {data.backlog.length > 0 && (
-            <div>
-              <SectionHeader title="Backlog" count={data.backlog.length} subtitle="Queued for later" />
-              <div className="space-y-3">
-                {data.backlog.map((task) => (
-                  <TaskCard key={task.taskId} task={task} onRefresh={mutate} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {data.active.length === 0 && data.today.length === 0 && data.backlog.length === 0 && (
-            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No tasks found.</p>
+            ))
+          ) : (
+            <>
+              {allTasks.active.length > 0 && (
+                <div>
+                  <SectionHeader title="Active" count={allTasks.active.length} subtitle="Running right now" />
+                  <div className="space-y-3">
+                    {allTasks.active.map((task) => <TaskCard key={task.taskId} task={task} onRefresh={mutate} />)}
+                  </div>
+                </div>
+              )}
+              {allTasks.today.length > 0 && (
+                <div>
+                  <SectionHeader title="Today" count={allTasks.today.length} subtitle="Assigned for today, not yet started" />
+                  <div className="space-y-3">
+                    {allTasks.today.map((task) => <TaskCard key={task.taskId} task={task} onRefresh={mutate} />)}
+                  </div>
+                </div>
+              )}
+              {allTasks.backlog.length > 0 && (
+                <div>
+                  <SectionHeader title="Backlog" count={allTasks.backlog.length} subtitle="Queued for later" />
+                  <div className="space-y-3">
+                    {allTasks.backlog.map((task) => <TaskCard key={task.taskId} task={task} onRefresh={mutate} />)}
+                  </div>
+                </div>
+              )}
+              {allTasks.active.length === 0 && allTasks.today.length === 0 && allTasks.backlog.length === 0 && (
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                  {activeFilter !== 'All' ? `No tasks match the "${activeFilter}" filter.` : 'No tasks found.'}
+                </p>
+              )}
+            </>
           )}
         </>
       )}

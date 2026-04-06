@@ -211,6 +211,8 @@ export default function TodayPage() {
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [droppedTasks, setDroppedTasks] = useState<V2DashboardTimelineItem[]>([]);
+  // Track completed task IDs across BOTH server + dropped tasks
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const nowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -232,16 +234,21 @@ export default function TodayPage() {
   const priorities = feed?.topPriorities ?? [];
   const serverTimeline = feed?.timeline ?? [];
 
-  // Merge server timeline + dropped tasks, sorted by startDate
+  // Merge server timeline + dropped tasks, with completedIds override
   const timeline = useMemo(() => {
-    const merged = [...serverTimeline, ...droppedTasks];
+    const merged = [...serverTimeline, ...droppedTasks].map((item) => {
+      if (item.taskId && completedIds.has(item.taskId)) {
+        return { ...item, status: 'done' as const, iconType: 'check' as const };
+      }
+      return item;
+    });
     merged.sort((a, b) => {
       const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
       const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
       return aTime - bTime;
     });
     return merged;
-  }, [serverTimeline, droppedTasks]);
+  }, [serverTimeline, droppedTasks, completedIds]);
 
   // Filter out priorities that were dropped into timeline
   const availablePriorities = useMemo(() => {
@@ -309,10 +316,14 @@ export default function TodayPage() {
 
   const handleCompleteTask = useCallback(async (taskId?: string) => {
     if (!taskId) return;
-    // Remove from dropped tasks (mark done visually)
-    setDroppedTasks((prev) =>
-      prev.map((t) => t.taskId === taskId ? { ...t, status: 'done', iconType: 'check' } : t)
-    );
+    // Mark done in shared completedIds set — affects BOTH server and dropped items
+    setCompletedIds((prev) => new Set([...prev, taskId]));
+    // Attempt to mark done via API (best effort)
+    fetch(`/api/v2/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'complete' }),
+    }).catch(() => {});
     void mutate();
   }, [mutate]);
 

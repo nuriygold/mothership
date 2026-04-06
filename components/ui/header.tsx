@@ -1,16 +1,111 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface ServiceStatus {
   name: string;
-  color: string; // hex
+  color: string;
+  tooltip: string;
 }
 
-async function checkGateway() {
-  const res = await fetch('/api/openclaw/health');
-  if (!res.ok) return { ok: false };
+async function checkAllServices() {
+  const res = await fetch('/api/v2/health/services');
+  if (!res.ok) return null;
   return res.json();
+}
+
+function StatusDot({ service }: { service: ServiceStatus }) {
+  const [show, setShow] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  return (
+    <div
+      ref={ref}
+      className="relative flex items-center gap-1.5 flex-shrink-0 cursor-default"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <div
+        className="w-2 h-2 rounded-full transition-all"
+        style={{
+          background: service.color,
+          boxShadow: `0 0 6px ${service.color}80`,
+        }}
+      />
+      <span className="text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
+        {service.name}
+      </span>
+
+      {/* Tooltip */}
+      {show && (
+        <div
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-xl px-3 py-2 text-xs w-52 pointer-events-none"
+          style={{
+            background: '#0A1628',
+            border: '1px solid rgba(0,217,255,0.2)',
+            color: '#E8EDF5',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          }}
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <span
+              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+              style={{ background: service.color }}
+            />
+            <span className="font-semibold text-[11px]" style={{ color: service.color }}>
+              {service.name}
+            </span>
+          </div>
+          <p style={{ color: 'rgba(232,237,245,0.75)', lineHeight: '1.4' }}>{service.tooltip}</p>
+          {/* Arrow */}
+          <div
+            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45"
+            style={{ background: '#0A1628', borderLeft: '1px solid rgba(0,217,255,0.2)', borderTop: '1px solid rgba(0,217,255,0.2)' }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FALLBACK_SERVICES: ServiceStatus[] = [
+  { name: 'Gateway', color: '#FFB800', tooltip: 'Checking OpenClaw gateway reachability...' },
+  { name: 'Ruby', color: '#FFB800', tooltip: 'Checking Ruby bot DB task queue...' },
+  { name: 'Telegram', color: '#FFB800', tooltip: 'Checking Telegram bot token validity...' },
+  { name: 'GitHub', color: '#FFB800', tooltip: 'Checking GitHub task-pool connectivity...' },
+  { name: 'Zoho', color: '#FFB800', tooltip: 'Checking Zoho IMAP mail connection...' },
+  { name: 'Gmail', color: '#FFB800', tooltip: 'Checking Gmail OAuth token validity...' },
+];
+
+function buildServices(data: Record<string, { ok: boolean; reason?: string }> | null): ServiceStatus[] {
+  const definitions: Array<{ key: string; name: string; feedDesc: string }> = [
+    { key: 'gateway',  name: 'Gateway',  feedDesc: 'OpenClaw /health endpoint' },
+    { key: 'ruby',     name: 'Ruby',     feedDesc: 'Bot task queue (DB: active tasks assigned to Ruby)' },
+    { key: 'telegram', name: 'Telegram', feedDesc: 'Telegram Bot API token validation' },
+    { key: 'github',   name: 'GitHub',   feedDesc: 'GitHub API — task-pool repository access' },
+    { key: 'zoho',     name: 'Zoho',     feedDesc: 'Zoho Mail IMAP connection check' },
+    { key: 'gmail',    name: 'Gmail',    feedDesc: 'Gmail OAuth2 token refresh check' },
+  ];
+
+  return definitions.map(({ key, name, feedDesc }) => {
+    if (!data) {
+      return { name, color: '#FFB800', tooltip: `Checking… (${feedDesc})` };
+    }
+    const svc = data[key];
+    const ok = svc?.ok;
+    const reason = svc?.reason ?? '';
+    const color = ok ? '#00D9FF' : reason.includes('config') ? '#FFB800' : '#FF5C5C';
+
+    let tooltip = feedDesc;
+    if (!ok && reason) {
+      tooltip += `\n\n⚠ ${reason}`;
+    } else if (ok) {
+      tooltip = `✓ Online — ${feedDesc}`;
+    }
+
+    return { name, color, tooltip };
+  });
 }
 
 export function Header() {
@@ -44,24 +139,15 @@ export function Header() {
     document.documentElement.setAttribute('data-theme', next);
   };
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['header-gateway'],
-    queryFn: checkGateway,
-    staleTime: 15000,
-    refetchInterval: 15000,
+  const { data } = useQuery({
+    queryKey: ['header-services'],
+    queryFn: checkAllServices,
+    staleTime: 30000,
+    refetchInterval: 30000,
     refetchIntervalInBackground: true,
   });
 
-  const gatewayColor = isLoading ? '#FFB800' : data?.ok ? '#00D9FF' : '#FF5C5C';
-
-  const services: ServiceStatus[] = [
-    { name: 'Gateway', color: gatewayColor },
-    { name: 'Ruby', color: '#00D9FF' },
-    { name: 'Telegram', color: '#00D9FF' },
-    { name: 'GitHub', color: '#00D9FF' },
-    { name: 'Zoho', color: '#FFB800' },
-    { name: 'Gmail', color: '#00D9FF' },
-  ];
+  const services = buildServices(data);
 
   return (
     <header
@@ -69,20 +155,15 @@ export function Header() {
       style={{
         background: 'var(--sidebar)',
         borderColor: 'var(--sidebar-border)',
+        overflow: 'visible',
+        position: 'relative',
+        zIndex: 40,
       }}
     >
-      {/* Left: status dots */}
+      {/* Left: service status dots with tooltips */}
       <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
         {services.map((s) => (
-          <div key={s.name} className="flex items-center gap-1.5 flex-shrink-0">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ background: s.color, boxShadow: `0 0 6px ${s.color}80` }}
-            />
-            <span className="text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
-              {s.name}
-            </span>
-          </div>
+          <StatusDot key={s.name} service={s} />
         ))}
       </div>
 
