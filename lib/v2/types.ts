@@ -20,6 +20,7 @@ export type V2DashboardTimelineItem = {
   time: string;
   title: string;
   iconType: 'check' | 'clock' | 'alert' | 'spark';
+  status: 'done' | 'current' | 'upcoming';
 };
 
 export type V2DashboardPriorityItem = {
