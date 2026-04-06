@@ -6,7 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 interface ServiceStatus {
   name: string;
   color: string;
-  tooltip: string;
+  feed: string;    // what data source is being checked
+  reason: string;  // why it's this color (human-readable)
+  ok: boolean | null;
 }
 
 async function checkAllServices() {
@@ -18,6 +20,8 @@ async function checkAllServices() {
 function StatusDot({ service }: { service: ServiceStatus }) {
   const [show, setShow] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const statusLabel = service.ok === null ? 'Checking…' : service.ok ? 'Online' : 'Issue detected';
 
   return (
     <div
@@ -40,7 +44,7 @@ function StatusDot({ service }: { service: ServiceStatus }) {
       {/* Tooltip */}
       {show && (
         <div
-          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-xl px-3 py-2 text-xs w-52 pointer-events-none"
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-xl px-3 py-2.5 text-xs w-60 pointer-events-none"
           style={{
             background: '#0A1628',
             border: '1px solid rgba(0,217,255,0.2)',
@@ -48,16 +52,32 @@ function StatusDot({ service }: { service: ServiceStatus }) {
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
           }}
         >
-          <div className="flex items-center gap-1.5 mb-1">
-            <span
-              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{ background: service.color }}
-            />
-            <span className="font-semibold text-[11px]" style={{ color: service.color }}>
-              {service.name}
-            </span>
+          {/* Service name + status */}
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: service.color }} />
+            <span className="font-semibold" style={{ color: service.color }}>{service.name}</span>
+            <span className="ml-auto opacity-60 text-[10px]">{statusLabel}</span>
           </div>
-          <p style={{ color: 'rgba(232,237,245,0.75)', lineHeight: '1.4' }}>{service.tooltip}</p>
+
+          {/* What feed is checked */}
+          <div className="mb-1.5">
+            <span className="opacity-40 text-[10px] uppercase tracking-wide">Checking</span>
+            <p className="mt-0.5 opacity-75 leading-snug">{service.feed}</p>
+          </div>
+
+          {/* Reason */}
+          {service.reason && (
+            <div
+              className="mt-2 rounded-lg px-2 py-1.5 text-[11px] leading-snug"
+              style={{
+                background: service.ok ? 'rgba(0,217,255,0.08)' : 'rgba(255,92,92,0.12)',
+                color: service.ok ? '#00D9FF' : '#FF8080',
+              }}
+            >
+              {service.reason}
+            </div>
+          )}
+
           {/* Arrow */}
           <div
             className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45"
@@ -69,42 +89,37 @@ function StatusDot({ service }: { service: ServiceStatus }) {
   );
 }
 
-const FALLBACK_SERVICES: ServiceStatus[] = [
-  { name: 'Gateway', color: '#FFB800', tooltip: 'Checking OpenClaw gateway reachability...' },
-  { name: 'Ruby', color: '#FFB800', tooltip: 'Checking Ruby bot DB task queue...' },
-  { name: 'Telegram', color: '#FFB800', tooltip: 'Checking Telegram bot token validity...' },
-  { name: 'GitHub', color: '#FFB800', tooltip: 'Checking GitHub task-pool connectivity...' },
-  { name: 'Zoho', color: '#FFB800', tooltip: 'Checking Zoho IMAP mail connection...' },
-  { name: 'Gmail', color: '#FFB800', tooltip: 'Checking Gmail OAuth token validity...' },
+const SERVICE_DEFINITIONS: Array<{ key: string; name: string; feed: string }> = [
+  { key: 'gateway',  name: 'Gateway',  feed: 'OpenClaw gateway /health endpoint — core routing layer' },
+  { key: 'ruby',     name: 'Ruby',     feed: 'Task DB query — counts active tasks assigned to Ruby bot' },
+  { key: 'telegram', name: 'Telegram', feed: 'Telegram Bot API — validates bot token via getMe call' },
+  { key: 'github',   name: 'GitHub',   feed: 'GitHub API — checks task-pool repo access & auth token' },
+  { key: 'zoho',     name: 'Zoho',     feed: 'Zoho Mail — verifies IMAP credentials are configured' },
+  { key: 'gmail',    name: 'Gmail',    feed: 'Gmail OAuth2 — attempts token refresh to verify access' },
 ];
 
+const FALLBACK_SERVICES: ServiceStatus[] = SERVICE_DEFINITIONS.map((d) => ({
+  name: d.name,
+  feed: d.feed,
+  color: '#FFB800',
+  reason: 'Connecting…',
+  ok: null,
+}));
+
 function buildServices(data: Record<string, { ok: boolean; reason?: string }> | null): ServiceStatus[] {
-  const definitions: Array<{ key: string; name: string; feedDesc: string }> = [
-    { key: 'gateway',  name: 'Gateway',  feedDesc: 'OpenClaw /health endpoint' },
-    { key: 'ruby',     name: 'Ruby',     feedDesc: 'Bot task queue (DB: active tasks assigned to Ruby)' },
-    { key: 'telegram', name: 'Telegram', feedDesc: 'Telegram Bot API token validation' },
-    { key: 'github',   name: 'GitHub',   feedDesc: 'GitHub API — task-pool repository access' },
-    { key: 'zoho',     name: 'Zoho',     feedDesc: 'Zoho Mail IMAP connection check' },
-    { key: 'gmail',    name: 'Gmail',    feedDesc: 'Gmail OAuth2 token refresh check' },
-  ];
+  return SERVICE_DEFINITIONS.map(({ key, name, feed }) => {
+    if (!data) return { name, feed, color: '#FFB800', reason: 'Connecting…', ok: null };
 
-  return definitions.map(({ key, name, feedDesc }) => {
-    if (!data) {
-      return { name, color: '#FFB800', tooltip: `Checking… (${feedDesc})` };
-    }
     const svc = data[key];
-    const ok = svc?.ok;
-    const reason = svc?.reason ?? '';
-    const color = ok ? '#00D9FF' : reason.includes('config') ? '#FFB800' : '#FF5C5C';
+    const ok = svc?.ok ?? false;
+    const rawReason = svc?.reason ?? '';
 
-    let tooltip = feedDesc;
-    if (!ok && reason) {
-      tooltip += `\n\n⚠ ${reason}`;
-    } else if (ok) {
-      tooltip = `✓ Online — ${feedDesc}`;
-    }
+    // Yellow = misconfigured (env vars missing), Red = configured but unreachable
+    const isMisconfig = !ok && (rawReason.toLowerCase().includes('not configured') || rawReason.toLowerCase().includes('not set'));
+    const color = ok ? '#00D9FF' : isMisconfig ? '#FFB800' : '#FF5C5C';
+    const reason = ok ? rawReason || 'All checks passed' : rawReason || 'Status unknown';
 
-    return { name, color, tooltip };
+    return { name, feed, color, reason, ok };
   });
 }
 
