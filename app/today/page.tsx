@@ -567,7 +567,7 @@ export default function TodayPage() {
     } catch { setToastMsg(`Failed to reach ${botName}`); }
   }, []);
 
-  // ── Assign To → Reassign bot ──
+  // ── Assign To → Reassign bot (timeline items, Telegram only) ──
   const handleAssign = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
     const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
     try {
@@ -575,6 +575,26 @@ export default function TodayPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: `📌 New assignment: ${taskTitle}\nPlease pick this up.`, botKey }),
       });
+      setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
+    } catch { setToastMsg('Assignment failed'); }
+    void mutate();
+  }, [mutate]);
+
+  // ── Assign task-pool issue to bot (updates GitHub assignee) ──
+  const handleAssignTask = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
+    const ownerLogin = newBot.toLowerCase() === 'adobe' ? 'adobepettaway'
+      : newBot.toLowerCase() === 'adrian' ? 'nuriygold'
+      : newBot.toLowerCase();
+    try {
+      await fetch(`/api/v2/tasks/${taskId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'assign', ownerLogin }),
+      });
+      const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
+      await fetch('/api/telegram/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `📌 Assigned to you: ${taskTitle}`, botKey }),
+      }).catch(() => {});
       setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
     } catch { setToastMsg('Assignment failed'); }
     void mutate();

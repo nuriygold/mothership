@@ -426,9 +426,25 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
     getEmailSummary(),
   ]);
 
-  const topPriorities: V2DashboardPriorityItem[] = tasksFeed.today
-    .filter((item) => item.metadata.priority === 'critical' || item.metadata.priority === 'high' || item.status === 'Blocked')
-    .slice(0, 5)
+  // Sort tasks: overdue first (past dueAt), then by dueAt ascending, then undated
+  const sortedTasks = [...tasksFeed.today].sort((a, b) => {
+    const now = Date.now();
+    const aTime = a.metadata.timeframe && a.metadata.timeframe !== 'Today'
+      ? new Date(a.metadata.timeframe).getTime() : null;
+    const bTime = b.metadata.timeframe && b.metadata.timeframe !== 'Today'
+      ? new Date(b.metadata.timeframe).getTime() : null;
+    const aOverdue = aTime !== null && aTime < now;
+    const bOverdue = bTime !== null && bTime < now;
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    if (aTime !== null && bTime !== null) return aTime - bTime;
+    if (aTime !== null) return -1;
+    if (bTime !== null) return 1;
+    return 0;
+  });
+
+  const topPriorities: V2DashboardPriorityItem[] = sortedTasks
+    .slice(0, 10)
     .map((item) => {
       const action = upsertAction({
         dedupeKey: `task:${item.taskId}`,
@@ -439,10 +455,12 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
       });
       return {
         id: action.id,
+        taskId: item.taskId,
         title: item.title,
         source: `From ${item.metadata.department}`,
         actionWebhook: `/api/v2/actions/${action.id}/approve`,
         assignedBot: item.metadata.assignedBot,
+        dueAt: item.metadata.timeframe !== 'Today' ? item.metadata.timeframe : null,
       };
     });
 
