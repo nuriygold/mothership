@@ -83,7 +83,7 @@ export async function upsertFinancePlanBySourceFile(
         startDate: input.startDate ?? existing.startDate,
         targetDate: input.targetDate ?? existing.targetDate,
         managedByBot: input.managedByBot ?? existing.managedByBot,
-        milestones: input.milestones ?? existing.milestones,
+        milestones: (input.milestones ?? existing.milestones ?? []) as object[],
         notes: input.notes ?? existing.notes,
       },
     });
