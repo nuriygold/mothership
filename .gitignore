@@ -11,3 +11,5 @@ coverage/
 .env.local
 .env
 /services/workflowService.ts
+tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
