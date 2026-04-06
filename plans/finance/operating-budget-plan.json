@@ -1,0 +1,19 @@
+{
+  "title": "Q2 2026 Operating Budget",
+  "type": "BUDGET",
+  "status": "ACTIVE",
+  "description": "Quarterly operating budget tracking revenue targets and expense ceilings across core departments.",
+  "goal": "Keep operating costs below $85,000 while targeting $200,000 in revenue for Q2 2026",
+  "currentValue": 0,
+  "targetValue": 200000,
+  "unit": "USD",
+  "startDate": "2026-04-01",
+  "targetDate": "2026-06-30",
+  "managedByBot": "adrian",
+  "milestones": [
+    { "label": "April revenue target", "targetValue": 60000 },
+    { "label": "May revenue target", "targetValue": 130000 },
+    { "label": "June revenue target — Q2 close", "targetValue": 200000 }
+  ],
+  "notes": "Payroll cap: $42K/month. SaaS subscriptions should not exceed $3K/month. Review vendor contracts in May."
+}

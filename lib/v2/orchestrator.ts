@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { TaskPriority, TaskStatus } from '@prisma/client';
 import { listTasks, updateTask } from '@/lib/services/tasks';
+import { listFinancePlans } from '@/lib/services/finance';
 import { getEmailSummary } from '@/lib/services/email';
 import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
@@ -321,8 +322,8 @@ export async function getV2EmailDrafts(emailId: string): Promise<V2EmailDraftFee
 
 export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
   try {
-    const tasks = (await listTasks()) as any[];
-    const financeTasks = tasks.filter((task) => routeForTask(task) === 'adrian').slice(0, 10);
+    const [tasks, plans] = await Promise.all([listTasks(), listFinancePlans()]);
+    const financeTasks = (tasks as any[]).filter((task) => routeForTask(task) === 'adrian').slice(0, 10);
     const payables = financeTasks.map((task) => ({
       vendor: task.title.split('—')[0]?.trim() || 'Unspecified vendor',
       amount: Number(task.description?.match(/\$([0-9,.]+)/)?.[1]?.replace(/,/g, '') || 0),
@@ -333,6 +334,32 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
           ? 'overdue'
           : 'pending') as 'pending' | 'paid' | 'overdue',
     }));
+
+    const mappedPlans = plans.map((plan) => {
+      const progressPercent =
+        plan.currentValue != null && plan.targetValue != null && plan.targetValue !== 0
+          ? Math.min(100, Math.round((plan.currentValue / plan.targetValue) * 100))
+          : null;
+
+      return {
+        id: plan.id,
+        title: plan.title,
+        type: plan.type,
+        status: plan.status,
+        description: plan.description,
+        goal: plan.goal,
+        currentValue: plan.currentValue,
+        targetValue: plan.targetValue,
+        unit: plan.unit,
+        startDate: plan.startDate ? plan.startDate.toISOString() : null,
+        targetDate: plan.targetDate ? plan.targetDate.toISOString() : null,
+        managedByBot: plan.managedByBot,
+        milestones: Array.isArray(plan.milestones) ? (plan.milestones as any[]) : [],
+        progressPercent,
+        notes: plan.notes,
+        updatedAt: plan.updatedAt.toISOString(),
+      };
+    });
 
     return {
       accounts: [
@@ -347,6 +374,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
         amount: Number(task.description?.match(/\$([0-9,.]+)/)?.[1]?.replace(/,/g, '') || 0),
         handledByBot: 'Adrian',
       })),
+      plans: mappedPlans,
     };
   } catch (error) {
     console.error(JSON.stringify({
@@ -359,6 +387,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       accounts: [],
       payables: [],
       transactions: [],
+      plans: [],
     };
   }
 }

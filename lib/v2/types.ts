@@ -142,6 +142,31 @@ export type V2EmailDraftFeed = {
   streamId: string;
 };
 
+export type V2FinancePlanMilestone = {
+  label: string;
+  targetValue?: number;
+  completedAt?: string;
+};
+
+export type V2FinancePlan = {
+  id: string;
+  title: string;
+  type: 'CREDIT_SCORE' | 'BUDGET' | 'SAVINGS' | 'DEBT_PAYOFF' | 'INVESTMENT' | 'EXPENSE_REDUCTION' | 'CUSTOM';
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
+  description: string | null;
+  goal: string | null;
+  currentValue: number | null;
+  targetValue: number | null;
+  unit: string | null;
+  startDate: string | null;
+  targetDate: string | null;
+  managedByBot: string;
+  milestones: V2FinancePlanMilestone[];
+  progressPercent: number | null;
+  notes: string | null;
+  updatedAt: string;
+};
+
 export type V2FinanceOverviewFeed = {
   accounts: Array<{
     type: string;
@@ -161,6 +186,7 @@ export type V2FinanceOverviewFeed = {
     amount: number;
     handledByBot: string;
   }>;
+  plans: V2FinancePlan[];
 };
 
 export type V2ActivityItem = {
