@@ -26,17 +26,21 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/activity': Activity,
 };
 
-export function Sidebar({ items }: { items: SidebarItem[] }) {
+export function MobileNav({ items }: { items: SidebarItem[] }) {
   const pathname = usePathname();
 
   return (
-    <aside
-      className="hidden md:flex flex-shrink-0 w-20 flex-col items-center py-5 gap-1 border-r"
-      style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)', minHeight: '100vh' }}
+    <nav
+      className="flex md:hidden items-center px-2 overflow-x-auto scrollbar-hide border-b flex-shrink-0"
+      style={{
+        background: 'var(--sidebar)',
+        borderColor: 'var(--sidebar-border)',
+        height: '60px',
+      }}
     >
-      {/* Logo at top — links back to Today */}
-      <Link href="/today" className="mb-5 mt-1 transition-opacity hover:opacity-85">
-        <MothershipLogo size={44} />
+      {/* Logo */}
+      <Link href="/today" className="flex-shrink-0 mr-1 px-2 transition-opacity hover:opacity-85">
+        <MothershipLogo size={32} />
       </Link>
 
       {/* Nav items */}
@@ -49,10 +53,10 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
           <Link
             key={item.href}
             href={item.href as any}
-            className="relative flex flex-col items-center gap-1 py-2 w-full px-2 transition-all duration-200"
+            className="relative flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 transition-all duration-200"
           >
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200"
+              className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200"
               style={{ background: active ? 'var(--color-cyan)' : 'transparent' }}
             >
               <Icon
@@ -71,13 +75,13 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
             </span>
             {active && (
               <div
-                className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-8 rounded-full"
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-8 rounded-full"
                 style={{ background: 'var(--color-cyan)' }}
               />
             )}
           </Link>
         );
       })}
-    </aside>
+    </nav>
   );
 }
