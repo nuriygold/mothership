@@ -492,11 +492,6 @@ export default function TodayPage() {
     return () => stream.close();
   }, [mutate]);
 
-  // Auto-scroll to now-line on load (depends on nowIndex so it fires when position is known)
-  useEffect(() => {
-    if (nowRef.current) nowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [nowIndex]);
-
   // Toast auto-hide
   useEffect(() => {
     if (!toastMsg) return;
@@ -527,6 +522,11 @@ export default function TodayPage() {
     }
     return timeline.length;
   }, [timeline]);
+
+  // Auto-scroll to now-line on load (fires after nowIndex is computed)
+  useEffect(() => {
+    if (nowRef.current) nowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [nowIndex]);
 
   const greeting = useMemo(() => {
     if (!feed) return 'Loading...';
