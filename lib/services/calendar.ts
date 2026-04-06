@@ -6,8 +6,11 @@ export interface CalendarEvent {
   startTime: string; // "9:00 AM"
   endTime: string | null;
   startDate: string; // ISO
+  endDate: string | null; // ISO
   isAllDay: boolean;
   status: 'done' | 'current' | 'upcoming';
+  meetingUrl: string | null;
+  location: string | null;
 }
 
 function isCalendarConfigured(): boolean {
@@ -74,14 +77,22 @@ export async function fetchTodayCalendarEvents(): Promise<CalendarEvent[]> {
         const startIso = ev.start?.dateTime ?? ev.start?.date ?? now.toISOString();
         const endIso = ev.end?.dateTime ?? ev.end?.date ?? null;
 
+        const meetingUrl =
+          ev.hangoutLink ??
+          ev.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri ??
+          null;
+
         return {
           id: ev.id ?? Math.random().toString(36).slice(2),
           title: ev.summary ?? 'Untitled event',
           startTime: isAllDay ? 'All day' : fmtTime(startIso),
           endTime: endIso && !isAllDay ? fmtTime(endIso) : null,
           startDate: startIso,
+          endDate: endIso,
           isAllDay,
           status: isAllDay ? 'upcoming' : computeStatus(startIso, endIso, now),
+          meetingUrl,
+          location: ev.location ?? null,
         };
       });
   } catch (err) {
