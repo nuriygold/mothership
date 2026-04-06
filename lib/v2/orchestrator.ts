@@ -427,7 +427,8 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   ]);
 
   // Sort tasks: overdue first (past dueAt), then by dueAt ascending, then undated
-  const sortedTasks = [...tasksFeed.today].sort((a, b) => {
+  const allPendingTasks = [...tasksFeed.active, ...tasksFeed.today].filter((t, i, arr) => t.status !== 'Done' && arr.findIndex((x) => x.taskId === t.taskId) === i);
+  const sortedTasks = [...allPendingTasks].sort((a, b) => {
     const now = Date.now();
     const aTime = a.metadata.timeframe && a.metadata.timeframe !== 'Today'
       ? new Date(a.metadata.timeframe).getTime() : null;

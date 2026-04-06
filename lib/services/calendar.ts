@@ -34,7 +34,8 @@ function computeStatus(startIso: string, endIso: string | null, now: Date): Cale
 }
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const tz = process.env.APP_TIMEZONE || 'America/New_York';
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
 }
 
 export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEvent[]; error?: string }> {
@@ -57,12 +58,12 @@ export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEven
     const cal = google.calendar({ version: 'v3', auth: oauth });
     const calendarId = getCalendarId();
     const now = new Date();
+    const tz = process.env.APP_TIMEZONE || 'America/New_York';
 
-    // Fetch events from start of today through end of today
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
+    // Fetch events from start of today through end of today (timezone-aware)
+    const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const todayStart = new Date(localDateStr + 'T00:00:00');
+    const todayEnd = new Date(localDateStr + 'T23:59:59');
 
     const res = await cal.events.list({
       calendarId,
