@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Mic } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
 type Message = {
@@ -18,7 +18,6 @@ const QUICK_PROMPTS = [
   'Adrian finance queue status',
 ];
 
-// Persistent session key for conversation continuity
 const SESSION_KEY = `booth-${Math.random().toString(36).slice(2)}`;
 
 export function KissinBooth() {
@@ -28,9 +27,12 @@ export function KissinBooth() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  // Gateway health check
   useEffect(() => {
     fetch('/api/openclaw/health')
       .then((r) => r.json())
@@ -38,7 +40,6 @@ export function KissinBooth() {
       .catch(() => setConnected(false));
   }, []);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -105,6 +106,76 @@ export function KissinBooth() {
     }
   }, [loading]);
 
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Prefer webm/opus; fall back to whatever the browser supports
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch (_) {
+      // Mic permission denied or not available — silently ignore
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+
+    recorder.onstop = async () => {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      if (blob.size < 1000) {
+        // Too short — likely silence, skip STT
+        setTranscribing(false);
+        return;
+      }
+      try {
+        const res = await fetch('/api/voice/stt', {
+          method: 'POST',
+          headers: { 'Content-Type': recorder.mimeType || 'audio/webm' },
+          body: blob,
+        });
+        const data = await res.json();
+        if (data.text?.trim()) {
+          await send(data.text.trim());
+        }
+      } catch (_) {
+        // STT failed — silently ignore
+      } finally {
+        setTranscribing(false);
+      }
+    };
+
+    recorder.stop();
+    setRecording(false);
+    setTranscribing(true);
+  }, [send]);
+
+  // Pointer events handle both mouse (desktop) and touch (mobile/StanByMe)
+  const handleMicPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    startRecording();
+  }, [startRecording]);
+
+  const handleMicPointerUp = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    stopRecording();
+  }, [stopRecording]);
+
+  const isBusy = loading || transcribing;
+
   return (
     <div
       className="rounded-3xl overflow-hidden flex flex-col"
@@ -170,6 +241,19 @@ export function KissinBooth() {
             </div>
           </div>
         ))}
+
+        {/* Transcribing indicator */}
+        {transcribing && (
+          <div className="flex justify-start">
+            <MothershipLogo size={24} style={{ marginRight: 6, marginTop: 2, flexShrink: 0 }} />
+            <div
+              className="rounded-2xl px-3 py-2 text-[11px]"
+              style={{ background: 'var(--input-background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
+            >
+              Transcribing…
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quick prompts */}
@@ -178,7 +262,7 @@ export function KissinBooth() {
           <button
             key={p}
             onClick={() => send(p)}
-            disabled={loading}
+            disabled={isBusy}
             className="rounded-full px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{
               background: 'var(--muted)',
@@ -197,18 +281,39 @@ export function KissinBooth() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send(input)}
-          placeholder="Ask the Gateway anything..."
-          disabled={loading}
+          placeholder={recording ? 'Listening…' : transcribing ? 'Transcribing…' : 'Ask the Gateway anything…'}
+          disabled={isBusy}
           className="flex-1 rounded-2xl px-3 py-2 text-sm outline-none transition-all"
           style={{
             background: 'var(--input-background)',
-            border: '1px solid var(--border)',
+            border: `1px solid ${recording ? 'var(--color-cyan)' : 'var(--border)'}`,
             color: 'var(--foreground)',
           }}
         />
+
+        {/* Push-to-talk mic button — hold to speak */}
+        <button
+          onPointerDown={handleMicPointerDown}
+          onPointerUp={handleMicPointerUp}
+          onPointerLeave={handleMicPointerUp}
+          disabled={isBusy && !recording}
+          className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 transition-all disabled:opacity-40 select-none touch-none"
+          style={{
+            background: recording ? 'var(--color-cyan)' : 'var(--muted)',
+            boxShadow: recording ? '0 0 12px rgba(0,217,255,0.5)' : 'none',
+          }}
+          title="Hold to speak"
+        >
+          <Mic
+            className="w-4 h-4"
+            style={{ color: recording ? '#0A0E1A' : 'var(--muted-foreground)' }}
+          />
+        </button>
+
+        {/* Send button */}
         <button
           onClick={() => send(input)}
-          disabled={!input.trim() || loading}
+          disabled={!input.trim() || isBusy}
           className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
           style={{ background: 'var(--color-purple)' }}
         >
