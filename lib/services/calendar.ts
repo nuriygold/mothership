@@ -13,7 +13,7 @@ export interface CalendarEvent {
   location: string | null;
 }
 
-export export function isCalendarConfigured(): boolean {
+export function isCalendarConfigured(): boolean {
   return !!(
     process.env.GOOGLE_CLIENT_ID &&
     process.env.GOOGLE_CLIENT_SECRET &&
