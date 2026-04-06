@@ -327,6 +327,10 @@ function AssignToDropdown({ currentBot, taskTitle, onAssign }: { currentBot?: st
           })}
         </div>
       )}
+    </div>
+  );
+}
+
 // ── Timeline entry row ──
 function TimelineEntry({
   entry,
@@ -474,6 +478,8 @@ export default function TodayPage() {
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
   const [showTrophy, setShowTrophy] = useState(false);
+  const [gatewayPrefill, setGatewayPrefill] = useState('');
+  const [toastMsg, setToastMsg] = useState('');
   const nowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -498,6 +504,7 @@ export default function TodayPage() {
 
   const feed = data;
   const priorities = feed?.topPriorities ?? [];
+  const availablePriorities = priorities;
   const serverTimeline = feed?.timeline ?? [];
 
   // Apply completedIds overlay
@@ -736,51 +743,8 @@ export default function TodayPage() {
                   </div>
                 );
               })}
-              {priorities.length === 0 && <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>}
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, item.id, item.title, item.source, item.assignedBot)}
-                    className="flex items-center justify-between rounded-xl p-3 cursor-grab active:cursor-grabbing transition-all hover:shadow-md"
-                    style={{
-                      border: '1px solid var(--border)',
-                      background: 'var(--input-background)',
-                      borderLeft: `3px solid ${borderColor}`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <GripVertical className="w-4 h-4 flex-shrink-0 opacity-30" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
-                        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span
-                        className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{ background: 'var(--color-lavender)', color: 'var(--color-lavender-text)' }}
-                      >
-                        {item.assignedBot}
-                      </span>
-                      <button
-                        className="rounded-full px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-85"
-                        style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await fetch(item.actionWebhook, { method: 'POST' });
-                          void mutate();
-                        }}
-                      >
-                        Take Action
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
               {availablePriorities.length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  {droppedTasks.length > 0 ? 'All priorities scheduled in timeline.' : 'No high-priority tasks right now.'}
-                </p>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
               )}
             </div>
           </Card>
@@ -789,52 +753,17 @@ export default function TodayPage() {
         {/* ── Center: Google Calendar ── */}
         <div className="space-y-4">
           <GoogleCalendarPanel />
-        {/* ── Right column ── */}
-        <div className="space-y-4">
-          <KissinBooth />
-
-          {/* Pending Approvals */}
-          <Card>
-            <CardTitle>Pending Approvals</CardTitle>
-            <div className="mt-3 space-y-2">
-              {(feed?.pendingApprovals ?? []).map((item) => (
-                <div key={item.category} className="rounded-xl px-3 py-2.5 text-sm"
-                  style={{ background: APPROVAL_BG[item.category] ?? APPROVAL_BG.other, color: APPROVAL_TEXT[item.category] ?? APPROVAL_TEXT.other }}>
-                  {item.description}
-                </div>
-              ))}
-              {(feed?.pendingApprovals ?? []).length === 0 && <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No pending approvals.</p>}
-            </div>
-          </Card>
         </div>
 
         {/* ── Right: Kissin' Booth + Quick Actions ── */}
         <div className="space-y-4">
-          <KissinBooth prefill={gatewayPrefill} />
+          <KissinBooth />
 
 
           {/* Quick Actions */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: 'var(--muted-foreground)' }}>Quick Actions</p>
             <div className="grid grid-cols-2 gap-3">
-              <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}><Plus className="w-5 h-5" style={{ color: '#4A3DAA' }} /></div>
-                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>New Task</p><p className="text-[11px]" style={{ color: 'var(--color-lavender-text)' }}>Assign work to any bot</p></div>
-              </Link>
-              <Link href="/activity" className="rounded-2xl p-4 flex flex-col gap-2 hover:opacity-85" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,200,0.15)' }}><ListChecks className="w-5 h-5" style={{ color: 'var(--color-sky-text)' }} /></div>
-                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Approve Queue</p><p className="text-[11px]" style={{ color: 'var(--color-sky-text)' }}>Clear pending approvals</p></div>
-              </Link>
-              <Link href="/email" className="rounded-2xl p-4 flex flex-col gap-2 hover:opacity-85" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,120,0.15)' }}><MessageSquare className="w-5 h-5" style={{ color: 'var(--color-mint-text)' }} /></div>
-                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Draft Reply</p><p className="text-[11px]" style={{ color: 'var(--color-mint-text)' }}>Ruby writes your response</p></div>
-              </Link>
-              <button onClick={() => setShowTrophy(true)} className="rounded-2xl p-4 flex flex-col gap-2 text-left hover:opacity-85 relative" style={{ background: 'var(--color-lemon)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                {completedTitles.length > 0 && (
-                  <span className="absolute top-3 right-3 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold" style={{ background: '#B45309', color: '#FFFFFF' }}>{completedTitles.length}</span>
-                )}
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(180,83,9,0.15)' }}><Trophy className="w-5 h-5" style={{ color: '#B45309' }} /></div>
-                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Trophy Collection</p><p className="text-[11px]" style={{ color: 'var(--color-lemon-text)' }}>Daily wins &amp; completions</p></div>
               {/* New Task */}
               <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}>
