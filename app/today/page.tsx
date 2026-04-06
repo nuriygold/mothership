@@ -192,7 +192,7 @@ export default function TodayPage() {
                     color: APPROVAL_TEXT[item.category] ?? APPROVAL_TEXT.other,
                   }}
                 >
-                  {item.count} {item.description}
+                  {item.description}
                 </div>
               ))}
               {(feed?.pendingApprovals ?? []).length === 0 && (

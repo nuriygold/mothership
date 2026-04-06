@@ -131,14 +131,14 @@ body {
 }
 
 .card {
-  @apply rounded-2xl border shadow-sm;
+  @apply rounded-3xl border shadow-sm;
   background: var(--card);
   border-color: var(--border);
   backdrop-filter: blur(10px);
 }
 
 .panel {
-  @apply rounded-2xl border;
+  @apply rounded-3xl border;
   background: var(--popover);
   border-color: var(--border);
   backdrop-filter: blur(8px);

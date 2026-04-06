@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Send } from 'lucide-react';
 
 type BoothEvent = {
   id: string;
@@ -30,14 +29,10 @@ export function KissinBooth() {
     stream.addEventListener('command.received', (event) => {
       try {
         const payload = JSON.parse((event as MessageEvent).data);
-        setLiveEvents((prev) => [payload, ...prev].slice(0, 6));
-      } catch (_error) {
-        // ignore malformed payloads
-      }
+        setLiveEvents((prev) => [payload, ...prev].slice(0, 4));
+      } catch (_) {}
     });
-    stream.onerror = () => {
-      setConnected(false);
-    };
+    stream.onerror = () => setConnected(false);
     return () => stream.close();
   }, []);
 
@@ -57,14 +52,14 @@ export function KissinBooth() {
     },
   });
 
-  const cards = useMemo(() => {
+  const recentCards = useMemo(() => {
     const fromHistory = ((data ?? []) as Array<any>).slice(0, 3).map((item) => ({
       id: item.id,
       input: item.input,
       status: item.status,
       sourceChannel: item.sourceChannel,
     }));
-    return [...liveEvents, ...fromHistory].slice(0, 4);
+    return [...liveEvents, ...fromHistory].slice(0, 3);
   }, [data, liveEvents]);
 
   const quickPrompts = [
@@ -74,56 +69,114 @@ export function KissinBooth() {
   ];
 
   return (
-    <Card className="border-transparent bg-gradient-to-br from-indigo-100 via-fuchsia-100 to-cyan-100">
-      <div className="flex items-center justify-between">
-        <CardTitle>The Kissin&apos; Booth</CardTitle>
-        <span className={`rounded-full px-2 py-1 text-[11px] ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+    <div
+      className="rounded-3xl overflow-hidden border"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      {/* Gradient hero area */}
+      <div
+        className="relative flex flex-col items-center pt-8 pb-6 px-5"
+        style={{
+          background: 'linear-gradient(135deg, #fce7f3 0%, #e4e0ff 45%, #c8f5ec 100%)',
+        }}
+      >
+        {/* Live badge */}
+        <span
+          className={`absolute top-3 right-3 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            connected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+          }`}
+        >
           {connected ? 'Live stream' : 'Polling mode'}
         </span>
-      </div>
-      <p className="mt-1 text-xs text-slate-600">Rich command orchestration with real-time responses.</p>
 
-      <div className="mt-3 flex gap-2">
-        <input
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          className="w-full rounded-md border border-white/70 bg-white/80 px-3 py-2 text-sm text-slate-900"
-          placeholder="Ask me anything..."
-        />
-        <Button
-          onClick={() => mutation.mutate(prompt)}
-          disabled={!prompt.trim() || mutation.isLoading}
-          className="bg-violet-500 hover:bg-violet-600"
+        {/* Avatar circle */}
+        <div
+          className="w-16 h-16 rounded-full mb-4 flex items-center justify-center shadow-md"
+          style={{
+            background: 'radial-gradient(circle at 35% 35%, #4a3f8c, #0a0e1a)',
+            boxShadow: '0 0 20px rgba(0,217,255,0.3), 0 4px 12px rgba(0,0,0,0.3)',
+          }}
         >
-          Send
-        </Button>
-      </div>
+          <span className="text-2xl">✦</span>
+        </div>
 
-      <div className="mt-2 flex flex-wrap gap-2">
-        {quickPrompts.map((item) => (
+        {/* Title */}
+        <h3 className="font-semibold text-base" style={{ color: '#0F1B35' }}>
+          ✦ The Kissin&apos; Booth
+        </h3>
+        <p className="text-xs mt-0.5 text-center" style={{ color: '#5B6B8A' }}>
+          Hey love, what can I help you with today?
+        </p>
+
+        {/* Input */}
+        <div className="mt-4 w-full flex gap-2">
+          <input
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && prompt.trim() && mutation.mutate(prompt)}
+            className="flex-1 rounded-xl px-3 py-2 text-sm outline-none"
+            style={{
+              background: 'rgba(255,255,255,0.85)',
+              border: '1px solid rgba(255,255,255,0.7)',
+              color: '#0F1B35',
+            }}
+            placeholder="Ask me anything..."
+          />
           <button
-            key={item}
-            type="button"
-            className="rounded-full border border-white/70 bg-white/70 px-2 py-1 text-[11px] text-slate-700 hover:bg-white"
-            onClick={() => setPrompt(item)}
+            onClick={() => prompt.trim() && mutation.mutate(prompt)}
+            disabled={!prompt.trim() || mutation.isLoading}
+            className="w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+            style={{ background: '#7B68EE' }}
           >
-            {item}
+            <Send className="w-4 h-4 text-white" />
           </button>
-        ))}
+        </div>
+
+        {/* Quick prompts */}
+        <div className="mt-2 flex flex-wrap gap-1.5 w-full">
+          {quickPrompts.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="rounded-full px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80"
+              style={{
+                background: 'rgba(255,255,255,0.7)',
+                border: '1px solid rgba(255,255,255,0.7)',
+                color: '#5B6B8A',
+              }}
+              onClick={() => setPrompt(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="mt-3 space-y-2">
-        {cards.map((command) => (
-          <div key={command.id} className="rounded-lg border border-white/70 bg-white/70 p-2">
-            <p className="truncate text-xs font-semibold text-slate-800">{command.input}</p>
-            <p className="text-[11px] text-slate-500">
-              {command.sourceChannel} • {command.status}
-            </p>
-          </div>
-        ))}
-        {cards.length === 0 && <p className="text-xs text-slate-500">No booth activity yet.</p>}
-      </div>
-    </Card>
+      {/* Command history — below gradient on white/card bg */}
+      {recentCards.length > 0 && (
+        <div
+          className="px-4 py-3 space-y-2"
+          style={{ background: 'var(--card)' }}
+        >
+          {recentCards.map((command) => (
+            <div
+              key={command.id}
+              className="rounded-xl px-3 py-2"
+              style={{
+                background: 'var(--input-background)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <p className="truncate text-xs font-medium" style={{ color: 'var(--foreground)' }}>
+                {command.input}
+              </p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                {command.sourceChannel} · {command.status}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
-
