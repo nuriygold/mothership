@@ -3,8 +3,5 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "outputDirectory": ".next",
-  "env": {
-    "TZ": "America/New_York"
-  }
+  "outputDirectory": ".next"
 }

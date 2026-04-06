@@ -544,7 +544,7 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     // (when calendar is connected, tasks stay in Top Priorities for drag-drop)
     if (calEvents.length === 0) {
       const syntheticHour = 9 + items.length;
-      const tzLabel = process.env.TZ || 'America/New_York';
+      const tzLabel = process.env.APP_TIMEZONE || 'America/New_York';
       const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tzLabel });
       const syntheticLocal = new Date(`${localDateStr}T${String(syntheticHour).padStart(2, '0')}:00:00`);
       when.setTime(syntheticLocal.getTime());
