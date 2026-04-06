@@ -105,7 +105,7 @@ function StatusDot({ service }: { service: ServiceStatus }) {
           {/* Fix button for unhealthy services */}
           {!service.ok && service.ok !== null && (
             <a
-              href="https://vercel.com/nuriygold/mothership/settings/environment-variables"
+              href="https://vercel.com/nuriys-projects/mothership/settings/environment-variables"
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 flex items-center justify-center rounded-lg px-2 py-1.5 text-[11px] font-semibold hover:opacity-80 transition-opacity"
