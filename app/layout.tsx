@@ -1,11 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Sidebar } from '@/components/ui/sidebar';
 import { Header } from '@/components/ui/header';
-import { cn } from '@/components/lib/utils';
 import Providers from '@/components/lib/providers';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 export const metadata: Metadata = {
   title: 'Mothership',
@@ -24,15 +22,19 @@ const navItems = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <body className="min-h-screen" style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
         <Providers>
-          <div className="flex min-h-screen">
+          {/* Full-width thin status bar at top */}
+          <Header />
+
+          {/* Sidebar + main content below */}
+          <div className="flex" style={{ minHeight: 'calc(100vh - 44px)' }}>
             <Sidebar items={navItems} />
-            <div className="flex-1">
-              <Header />
-              <main className={cn('px-8 pb-10')}>{children}</main>
-            </div>
+            <main className="flex-1 px-8 py-8 pb-12 overflow-auto">
+              {children}
+            </main>
           </div>
+
           <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
         </Providers>
       </body>
