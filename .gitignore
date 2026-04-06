@@ -13,3 +13,4 @@ coverage/
 /services/workflowService.ts
 tsconfig.tsbuildinfo
 tsconfig.tsbuildinfo
+fix-*.js
