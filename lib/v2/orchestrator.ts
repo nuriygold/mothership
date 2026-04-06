@@ -505,7 +505,7 @@ function getDailyAffirmation(): string {
 }
 
 async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {
-  const calEvents = await fetchTodayCalendarEvents();
+  const { events: calEvents } = await fetchTodayCalendarEvents();
   const now = new Date();
   const items: V2DashboardTimelineItem[] = [];
 
@@ -544,11 +544,14 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     // (when calendar is connected, tasks stay in Top Priorities for drag-drop)
     if (calEvents.length === 0) {
       const syntheticHour = 9 + items.length;
-      when.setHours(syntheticHour, 0, 0, 0);
+      const tzLabel = process.env.TZ || 'America/New_York';
+      const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tzLabel });
+      const syntheticLocal = new Date(`${localDateStr}T${String(syntheticHour).padStart(2, '0')}:00:00`);
+      when.setTime(syntheticLocal.getTime());
       const isPast = now > when;
       const isCurrent = !isPast && items.filter((i) => i.status !== 'done').length === 0;
       items.push({
-        time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel }),
         title: task.title,
         iconType: isPast ? 'check' : isCurrent ? 'spark' : 'clock',
         status: isPast ? 'done' : isCurrent ? 'current' : 'upcoming',
