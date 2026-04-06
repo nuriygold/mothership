@@ -5,7 +5,8 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import {
   Calendar, Star, CheckCircle2, Clock, Zap, Video,
-  GripVertical, Target, Sparkles, ExternalLink,
+  GripVertical, Target, Sparkles, Trophy, Plus,
+  ListChecks, MessageSquare, X, Award,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { KissinBooth } from '@/components/today/kissin-booth';
@@ -42,6 +43,162 @@ const TIMELINE_ICON_MAP = {
   spark: Zap,
   focus: Target,
 };
+
+// ── Trophy Modal ──
+type TrophyData = {
+  since: string;
+  totals: { tasks: number; commands: number; events: number };
+  tasks: Array<{ id: string; title: string; priority: string; completedAt: string }>;
+  commands: Array<{ id: string; input: string; channel: string; completedAt: string | null }>;
+};
+
+function TrophyModal({ onClose, localCompletions }: { onClose: () => void; localCompletions: string[] }) {
+  const { data, isLoading } = useSWR<TrophyData>('/api/v2/trophy', fetcher, { revalidateOnMount: true });
+
+  // Merge server tasks with locally completed task titles
+  const allTasks = useMemo(() => {
+    const server = data?.tasks ?? [];
+    const localItems = localCompletions.map((title, i) => ({
+      id: `local-${i}`,
+      title,
+      priority: 'high',
+      completedAt: new Date().toISOString(),
+    }));
+    // Deduplicate by title
+    const seen = new Set(server.map((t) => t.title));
+    const merged = [...server, ...localItems.filter((t) => !seen.has(t.title))];
+    return merged.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  }, [data, localCompletions]);
+
+  const total = allTasks.length + (data?.commands ?? []).length;
+
+  function fmtTime(iso: string) {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="w-full max-w-lg rounded-3xl flex flex-col"
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          maxHeight: '80vh',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.3)',
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center gap-3 px-5 py-4 rounded-t-3xl flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+        >
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(217,119,6,0.15)' }}>
+            <Trophy className="w-5 h-5" style={{ color: '#B45309' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: '#0F1B35' }}>Trophy Collection</h2>
+            <p className="text-xs" style={{ color: '#92400E' }}>
+              {isLoading ? 'Loading…' : `${total} win${total !== 1 ? 's' : ''} in the last 24 hours`}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="ml-auto w-8 h-8 rounded-xl flex items-center justify-center transition-opacity hover:opacity-70"
+            style={{ background: 'rgba(0,0,0,0.06)' }}
+          >
+            <X className="w-4 h-4" style={{ color: '#0F1B35' }} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 scrollbar-hide">
+          {isLoading && (
+            <div className="py-8 text-center">
+              <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-2" style={{ borderColor: '#FFB800', borderTopColor: 'transparent' }} />
+              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Counting your wins…</p>
+            </div>
+          )}
+
+          {!isLoading && total === 0 && (
+            <div className="py-8 text-center">
+              <Award className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Nothing completed yet today</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>Mark tasks done in the timeline to see them here</p>
+            </div>
+          )}
+
+          {/* Completed Tasks */}
+          {allTasks.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                Tasks Completed · {allTasks.length}
+              </p>
+              <div className="space-y-2">
+                {allTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5"
+                    style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}
+                  >
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-mint-text)' }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate" style={{ color: '#0F1B35' }}>{task.title}</p>
+                    </div>
+                    <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--color-mint-text)', opacity: 0.75 }}>
+                      {fmtTime(task.completedAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed Commands */}
+          {(data?.commands ?? []).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                Gateway Commands · {data!.commands.length}
+              </p>
+              <div className="space-y-2">
+                {data!.commands.map((cmd) => (
+                  <div
+                    key={cmd.id}
+                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5"
+                    style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}
+                  >
+                    <Sparkles className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }} />
+                    <p className="text-sm truncate flex-1" style={{ color: '#0F1B35' }}>{cmd.input}</p>
+                    {cmd.completedAt && (
+                      <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--color-sky-text)', opacity: 0.75 }}>
+                        {fmtTime(cmd.completedAt)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 flex-shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Resets at midnight</p>
+          <button
+            onClick={onClose}
+            className="rounded-xl px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-80"
+            style={{ background: '#B45309', color: '#FFFFFF' }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Now-line: shows current time with a horizontal rule ──
 function NowLine() {
@@ -213,6 +370,8 @@ export default function TodayPage() {
   const [droppedTasks, setDroppedTasks] = useState<V2DashboardTimelineItem[]>([]);
   // Track completed task IDs across BOTH server + dropped tasks
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  const [completedTitles, setCompletedTitles] = useState<string[]>([]);
+  const [showTrophy, setShowTrophy] = useState(false);
   const nowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -318,6 +477,9 @@ export default function TodayPage() {
     if (!taskId) return;
     // Mark done in shared completedIds set — affects BOTH server and dropped items
     setCompletedIds((prev) => new Set([...prev, taskId]));
+    // Track title for trophy collection
+    const title = timeline.find((t) => t.taskId === taskId)?.title ?? taskId;
+    setCompletedTitles((prev) => [...prev, title]);
     // Attempt to mark done via API (best effort)
     fetch(`/api/v2/tasks/${taskId}`, {
       method: 'PATCH',
@@ -328,6 +490,8 @@ export default function TodayPage() {
   }, [mutate]);
 
   return (
+    <>
+    {showTrophy && <TrophyModal onClose={() => setShowTrophy(false)} localCompletions={completedTitles} />}
     <div className="space-y-6">
       {/* Greeting + Affirmation */}
       <div>
@@ -503,28 +667,69 @@ export default function TodayPage() {
           </Card>
 
           {/* Quick Actions */}
-          <Card>
-            <CardTitle>Quick Actions</CardTitle>
-            <div className="mt-3 grid gap-2 grid-cols-2">
-              {[
-                { label: 'New Task', href: '/tasks' },
-                { label: 'Approve Queue', href: '/activity' },
-                { label: 'Draft Reply', href: '/email' },
-                { label: 'Finance', href: '/finance' },
-              ].map(({ label, href }) => (
-                <Link
-                  key={href}
-                  href={href as any}
-                  className="rounded-xl border px-3 py-2 text-sm text-center transition-all hover:opacity-80"
-                  style={{ borderColor: 'var(--border)', background: 'var(--input-background)', color: 'var(--foreground)' }}
-                >
-                  {label}
-                </Link>
-              ))}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: 'var(--muted-foreground)' }}>Quick Actions</p>
+            <div className="grid grid-cols-2 gap-3">
+              {/* New Task */}
+              <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}>
+                  <Plus className="w-5 h-5" style={{ color: '#4A3DAA' }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>New Task</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-lavender-text)' }}>Create and assign work to any bot</p>
+                </div>
+              </Link>
+
+              {/* Approve Queue */}
+              <Link href="/activity" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,200,0.15)' }}>
+                  <ListChecks className="w-5 h-5" style={{ color: 'var(--color-sky-text)' }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Approve Queue</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-sky-text)' }}>Clear all pending approvals</p>
+                </div>
+              </Link>
+
+              {/* Draft Reply */}
+              <Link href="/email" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,120,0.15)' }}>
+                  <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-mint-text)' }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Draft Reply</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-mint-text)' }}>Ruby writes your urgent response</p>
+                </div>
+              </Link>
+
+              {/* Trophy Collection */}
+              <button
+                onClick={() => setShowTrophy(true)}
+                className="rounded-2xl p-4 flex flex-col gap-2 text-left transition-opacity hover:opacity-85 relative"
+                style={{ background: 'var(--color-lemon)', border: '1px solid rgba(0,0,0,0.04)' }}
+              >
+                {completedTitles.length > 0 && (
+                  <span
+                    className="absolute top-3 right-3 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold"
+                    style={{ background: '#B45309', color: '#FFFFFF' }}
+                  >
+                    {completedTitles.length}
+                  </span>
+                )}
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(180,83,9,0.15)' }}>
+                  <Trophy className="w-5 h-5" style={{ color: '#B45309' }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Trophy Collection</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-lemon-text)' }}>Daily wins &amp; completions</p>
+                </div>
+              </button>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
+    </>
   );
 }
