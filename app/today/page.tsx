@@ -603,9 +603,9 @@ export default function TodayPage() {
       iconType: 'clock',
       assignedBot: dragged.assignedBot,
       taskId: dragged.id,
-      startDate: refEntry?.startDate ?? null,
-      endTime: null,
-      meetingUrl: null,
+      startDate: refEntry?.startDate ?? undefined,
+      endTime: undefined,
+      meetingUrl: undefined,
     };
     setDroppedTasks((prev) => [...prev, newEntry]);
     setDragOverIdx(null);
