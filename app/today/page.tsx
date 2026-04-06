@@ -492,10 +492,10 @@ export default function TodayPage() {
     return () => stream.close();
   }, [mutate]);
 
-  // Auto-scroll to now-line on load
+  // Auto-scroll to now-line on load (depends on nowIndex so it fires when position is known)
   useEffect(() => {
     if (nowRef.current) nowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [data]);
+  }, [nowIndex]);
 
   // Toast auto-hide
   useEffect(() => {
