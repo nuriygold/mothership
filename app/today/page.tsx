@@ -6,13 +6,33 @@ import useSWR from 'swr';
 import {
   Calendar, Star, CheckCircle2, Clock, Zap, Video,
   GripVertical, Target, Sparkles, Trophy, Plus,
-  ListChecks, MessageSquare, X, Award,
+  ListChecks, MessageSquare, X, Award, ChevronDown,
+  Send, UserPlus,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { KissinBooth } from '@/components/today/kissin-booth';
 import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
+import type { CalendarEvent } from '@/lib/services/calendar';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+// Bot → Telegram bot key mapping
+const BOT_TELEGRAM_KEY: Record<string, string> = {
+  Adrian: 'bot1',
+  Ruby: 'bot2',
+  Emerald: 'bot3',
+  Adobe: 'botAdobe',
+  'Adobe Pettaway': 'botAdobe',
+};
+
+const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe'];
+
+const BOT_COLORS: Record<string, { bg: string; text: string }> = {
+  Adrian: { bg: 'var(--color-peach)', text: 'var(--color-peach-text)' },
+  Ruby: { bg: 'var(--color-pink)', text: 'var(--color-pink-text)' },
+  Emerald: { bg: 'var(--color-mint)', text: 'var(--color-mint-text)' },
+  Adobe: { bg: 'var(--color-lemon)', text: 'var(--color-lemon-text)' },
+};
 
 const APPROVAL_BG: Record<string, string> = {
   email: 'var(--color-lavender)',
@@ -200,37 +220,113 @@ function TrophyModal({ onClose, localCompletions }: { onClose: () => void; local
   );
 }
 
-// ── Now-line: shows current time with a horizontal rule ──
+// ── Now Line ──────────────────────────────────────────────────────────────────
 function NowLine() {
   const [time, setTime] = useState(() => new Date());
-  useEffect(() => {
-    const interval = setInterval(() => setTime(new Date()), 60000);
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => { const i = setInterval(() => setTime(new Date()), 60000); return () => clearInterval(i); }, []);
   const label = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return (
-    <div className="relative flex items-center my-3" style={{ zIndex: 10 }}>
-      {/* Time label floating just above the dot */}
-      <span
-        className="absolute -top-4 left-0 text-[10px] font-semibold"
-        style={{ color: 'var(--color-cyan)' }}
-      >
-        {label}
-      </span>
-      {/* Dot on left (Google Calendar style) */}
-      <div
-        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-        style={{ background: 'var(--color-cyan)', boxShadow: '0 0 6px rgba(0,217,255,0.6)' }}
-      />
-      {/* Full-width thin line */}
-      <div
-        className="flex-1 h-px"
-        style={{ background: 'var(--color-cyan)', opacity: 0.7 }}
-      />
+    <div className="relative flex items-center gap-3 my-1">
+      <span className="text-[11px] font-bold flex-shrink-0 px-2 py-0.5 rounded-full" style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>NOW · {label}</span>
+      <div className="flex-1 h-px" style={{ background: 'var(--color-cyan)' }} />
+      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
     </div>
   );
 }
 
+// ── Google Calendar Panel ─────────────────────────────────────────────────────
+function GoogleCalendarPanel() {
+  const { data } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
+  const events = data?.events ?? [];
+  const configured = data?.configured ?? false;
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2">
+        <Calendar className="w-4 h-4" style={{ color: 'var(--color-sky-text)' }} />
+        <CardTitle>Google Calendar</CardTitle>
+      </div>
+      <div className="mt-3 space-y-2">
+        {!configured && (
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Add <code className="rounded bg-[var(--muted)] px-1 text-xs">GOOGLE_CLIENT_ID</code> to connect your calendar.
+          </p>
+        )}
+        {configured && events.length === 0 && (
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No events on your calendar today.</p>
+        )}
+        {events.map((ev) => {
+          const isCurrent = ev.status === 'current';
+          const isDone = ev.status === 'done';
+          return (
+            <div key={ev.id} className="flex items-center justify-between rounded-xl p-3 group"
+              style={{
+                border: isCurrent ? '1.5px solid var(--color-sky-text)' : '1px solid var(--border)',
+                background: isCurrent ? 'var(--color-sky)' : 'var(--input-background)',
+                opacity: isDone ? 0.5 : 1,
+              }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-sm font-semibold w-20 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }}>{ev.startTime}</span>
+                <div className="min-w-0">
+                  <span className="text-sm block truncate" style={{ color: 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none' }}>{ev.title}</span>
+                  {ev.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{ev.startTime} – {ev.endTime}</span>}
+                  {ev.location && <span className="text-[11px] block truncate" style={{ color: 'var(--muted-foreground)' }}>{ev.location}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isCurrent && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>Now</span>}
+                {ev.meetingUrl && !isDone && (
+                  <a href={ev.meetingUrl} target="_blank" rel="noopener noreferrer"
+                    className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1"
+                    style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+                    onClick={(e) => e.stopPropagation()}>
+                    <Video className="w-3 h-3" /> Join
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ── Assign-To Dropdown ────────────────────────────────────────────────────────
+function AssignToDropdown({ currentBot, taskTitle, onAssign }: { currentBot?: string; taskTitle: string; onAssign: (bot: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)}
+        className="rounded-lg px-2 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ background: 'var(--color-lavender)', color: 'var(--color-lavender-text)' }}>
+        <UserPlus className="w-3 h-3" /> Assign
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 rounded-xl shadow-lg overflow-hidden min-w-[140px]"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+          {ALL_BOTS.filter((b) => b !== currentBot).map((bot) => {
+            const c = BOT_COLORS[bot] ?? BOT_COLORS.Adrian;
+            return (
+              <button key={bot} onClick={() => { onAssign(bot); setOpen(false); }}
+                className="w-full text-left px-3 py-2 text-xs font-medium hover:opacity-80 flex items-center gap-2 transition-all"
+                style={{ color: 'var(--foreground)' }}>
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.text }} />
+                {bot}
+              </button>
+            );
+          })}
+        </div>
+      )}
 // ── Timeline entry row ──
 function TimelineEntry({
   entry,
@@ -390,44 +486,35 @@ export default function TodayPage() {
 
   // Auto-scroll to now-line on load
   useEffect(() => {
-    if (nowRef.current) {
-      nowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (nowRef.current) nowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [data]);
+
+  // Toast auto-hide
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(''), 2500);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
 
   const feed = data;
   const priorities = feed?.topPriorities ?? [];
   const serverTimeline = feed?.timeline ?? [];
 
-  // Merge server timeline + dropped tasks, with completedIds override
+  // Apply completedIds overlay
   const timeline = useMemo(() => {
-    const merged = [...serverTimeline, ...droppedTasks].map((item) => {
+    return serverTimeline.map((item) => {
       if (item.taskId && completedIds.has(item.taskId)) {
         return { ...item, status: 'done' as const, iconType: 'check' as const };
       }
       return item;
     });
-    merged.sort((a, b) => {
-      const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
-      const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
-      return aTime - bTime;
-    });
-    return merged;
-  }, [serverTimeline, droppedTasks, completedIds]);
+  }, [serverTimeline, completedIds]);
 
-  // Filter out priorities that were dropped into timeline
-  const availablePriorities = useMemo(() => {
-    const droppedIds = new Set(droppedTasks.map((t) => t.taskId).filter(Boolean));
-    return priorities.filter((p) => !droppedIds.has(p.id));
-  }, [priorities, droppedTasks]);
-
-  // Find where "now" falls in the timeline
+  // Find NOW position in timeline
   const nowIndex = useMemo(() => {
     const now = Date.now();
     for (let i = 0; i < timeline.length; i++) {
-      if (timeline[i].startDate && new Date(timeline[i].startDate!).getTime() > now) {
-        return i;
-      }
+      if (timeline[i].startDate && new Date(timeline[i].startDate!).getTime() > now) return i;
     }
     return timeline.length;
   }, [timeline]);
@@ -437,67 +524,65 @@ export default function TodayPage() {
     return `${feed.userContext.greeting}, ${feed.userContext.userName}`;
   }, [feed]);
 
-  const affirmation = feed?.userContext.affirmation ?? '';
+  const affirmation = feed?.userContext?.affirmation ?? '';
 
-  // Drag handlers for priority tasks
-  const handleDragStart = useCallback((e: React.DragEvent, priorityId: string, title: string, source: string, bot: string) => {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ id: priorityId, title, source, bot }));
-    e.dataTransfer.effectAllowed = 'move';
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent, dropIdx: number) => {
-    e.preventDefault();
-    setDragOverIdx(null);
-    try {
-      const payload = JSON.parse(e.dataTransfer.getData('text/plain'));
-      // Calculate time for this position
-      const refItem = timeline[dropIdx];
-      let dropTime: Date;
-      if (refItem?.startDate) {
-        dropTime = new Date(refItem.startDate);
-        // Place 15 minutes before the reference item
-        dropTime = new Date(dropTime.getTime() - 15 * 60000);
-      } else {
-        dropTime = new Date();
-      }
-
-      const newItem: V2DashboardTimelineItem = {
-        time: dropTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-        title: payload.title,
-        iconType: 'spark',
-        status: 'upcoming',
-        type: 'task',
-        taskId: payload.id,
-        assignedBot: payload.bot,
-        startDate: dropTime.toISOString(),
-        isDraggable: true,
-      };
-      setDroppedTasks((prev) => [...prev, newItem]);
-
-      // Fire the action webhook to mark as started
-      fetch(`/api/v2/actions/${payload.id}/approve`, { method: 'POST' }).catch(() => {});
-    } catch (_) {}
-  }, [timeline]);
-
-  const handleCompleteTask = useCallback(async (taskId?: string) => {
+  // ── Done → Trophy ──
+  const handleComplete = useCallback(async (taskId?: string) => {
     if (!taskId) return;
-    // Mark done in shared completedIds set — affects BOTH server and dropped items
     setCompletedIds((prev) => new Set([...prev, taskId]));
-    // Track title for trophy collection
     const title = timeline.find((t) => t.taskId === taskId)?.title ?? taskId;
     setCompletedTitles((prev) => [...prev, title]);
-    // Attempt to mark done via API (best effort)
+    setToastMsg(`✓ "${title}" added to Trophy Collection`);
     fetch(`/api/v2/tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'complete' }),
     }).catch(() => {});
+    void mutate();
+  }, [mutate, timeline]);
+
+  // ── Gateway → Pre-fill Kissin' Booth ──
+  const handleGateway = useCallback((title: string) => {
+    setGatewayPrefill(`Tell me about: ${title}`);
+    setToastMsg('Message sent to Kissin\' Booth');
+  }, []);
+
+  // ── Bot badge → Telegram ──
+  const handleBotTelegram = useCallback(async (botName: string, taskTitle: string) => {
+    const botKey = BOT_TELEGRAM_KEY[botName] ?? 'bot2';
+    try {
+      await fetch('/api/telegram/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `📋 Task update: ${taskTitle}`, botKey }),
+      });
+      setToastMsg(`Message sent to ${botName} via Telegram`);
+    } catch { setToastMsg(`Failed to reach ${botName}`); }
+  }, []);
+
+  // ── Assign To → Reassign bot ──
+  const handleAssign = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
+    const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
+    try {
+      await fetch('/api/telegram/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `📌 New assignment: ${taskTitle}\nPlease pick this up.`, botKey }),
+      });
+      setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
+    } catch { setToastMsg('Assignment failed'); }
     void mutate();
   }, [mutate]);
 
   return (
     <>
     {showTrophy && <TrophyModal onClose={() => setShowTrophy(false)} localCompletions={completedTitles} />}
+
+    {/* Toast notification */}
+    {toastMsg && (
+      <div className="fixed top-4 right-4 z-50 rounded-2xl px-4 py-3 text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2"
+        style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)', border: '1px solid rgba(0,0,0,0.06)' }}>
+        {toastMsg}
+      </div>
+    )}
+
     <div className="space-y-6">
       {/* Greeting + Affirmation */}
       <div>
@@ -507,82 +592,111 @@ export default function TodayPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.8fr_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+        {/* ── Left: Today's Timeline ── */}
         <div className="space-y-4">
-
-          {/* ── Today's Timeline ── */}
           <Card>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
                 <CardTitle>Today&apos;s Timeline</CardTitle>
               </div>
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{
-                  background: streamStatus === 'live' ? 'var(--color-mint)' : 'var(--muted)',
-                  color: streamStatus === 'live' ? 'var(--color-mint-text)' : 'var(--muted-foreground)',
-                }}
-              >
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ background: streamStatus === 'live' ? 'var(--color-mint)' : 'var(--muted)', color: streamStatus === 'live' ? 'var(--color-mint-text)' : 'var(--muted-foreground)' }}>
                 {streamStatus === 'live' ? 'Live' : 'Polling'}
               </span>
             </div>
 
             <div className="mt-3 space-y-2">
               {timeline.length === 0 && (
-                <div
-                  className="rounded-xl border-2 border-dashed p-6 text-center"
-                  style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
-                  onDragOver={(e) => { e.preventDefault(); setDragOverIdx(0); }}
-                  onDragLeave={() => setDragOverIdx(null)}
-                  onDrop={(e) => handleDrop(e, 0)}
-                >
+                <div className="rounded-xl border-2 border-dashed p-6 text-center" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                   <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No events yet — drag tasks here or check back when calendar syncs</p>
+                  <p className="text-sm">No events yet — check back when calendar syncs</p>
                 </div>
               )}
+              {timeline.map((entry, idx) => {
+                const isCurrent = entry.status === 'current';
+                const isDone = entry.status === 'done';
+                const isFocus = entry.type === 'focus-block';
+                const isTask = entry.type === 'task';
+                const botColors = entry.assignedBot ? BOT_COLORS[entry.assignedBot] : null;
+                return (
+                  <div key={`${entry.time}-${entry.title}-${idx}`}>
+                    {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
+                    <div className="rounded-xl p-3 transition-all group"
+                      style={{
+                        border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
+                        background: isCurrent ? 'rgba(0,217,255,0.06)' : isFocus ? 'rgba(123,104,238,0.04)' : 'var(--input-background)',
+                        opacity: isDone ? 0.5 : 1,
+                      }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-sm font-semibold w-16 flex-shrink-0"
+                            style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)' }}>
+                            {entry.time}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="text-sm block truncate"
+                              style={{ color: isFocus ? 'var(--color-purple)' : 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none', fontStyle: isFocus ? 'italic' : 'normal' }}>
+                              {entry.title}
+                            </span>
+                            {entry.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{entry.time} – {entry.endTime}</span>}
+                          </div>
+                        </div>
+                        {isDone && <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)', opacity: 0.7 }} />}
+                        {isCurrent && !isDone && <Zap className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />}
+                      </div>
 
-              {timeline.map((entry, idx) => (
-                <div key={`${entry.time}-${entry.title}-${idx}`}>
-                  {/* Insert NOW line at the right position */}
-                  {idx === nowIndex && (
-                    <div ref={nowRef}>
-                      <NowLine />
+                      {/* ── Action buttons row ── */}
+                      {!isDone && (
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          {/* Done button */}
+                          {isTask && (
+                            <button onClick={() => handleComplete(entry.taskId)}
+                              className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity"
+                              style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}>
+                              <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Done</span>
+                            </button>
+                          )}
+
+                          {/* Gateway button */}
+                          <button onClick={() => handleGateway(entry.title)}
+                            className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity opacity-0 group-hover:opacity-100"
+                            style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
+                            <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Gateway</span>
+                          </button>
+
+                          {/* Bot badge → Telegram */}
+                          {entry.assignedBot && botColors && (
+                            <button onClick={() => handleBotTelegram(entry.assignedBot!, entry.title)}
+                              className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 transition-opacity cursor-pointer"
+                              style={{ background: botColors.bg, color: botColors.text }}
+                              title={`Message ${entry.assignedBot} on Telegram`}>
+                              {entry.assignedBot}
+                            </button>
+                          )}
+
+                          {/* Meeting link */}
+                          {entry.meetingUrl && (
+                            <a href={entry.meetingUrl} target="_blank" rel="noopener noreferrer"
+                              className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1"
+                              style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
+                              <Video className="w-3 h-3" /> Join
+                            </a>
+                          )}
+
+                          {/* Assign To */}
+                          {isTask && entry.taskId && (
+                            <AssignToDropdown currentBot={entry.assignedBot} taskTitle={entry.title}
+                              onAssign={(bot) => handleAssign(entry.taskId!, entry.title, bot)} />
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <TimelineEntry
-                    entry={entry}
-                    onComplete={entry.type === 'task' ? () => handleCompleteTask(entry.taskId) : undefined}
-                    isDragOver={dragOverIdx === idx}
-                    onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
-                    onDragLeave={() => setDragOverIdx(null)}
-                    onDrop={(e) => handleDrop(e, idx)}
-                  />
-                </div>
-              ))}
-              {/* NOW line at the end if all items are past */}
-              {nowIndex >= timeline.length && timeline.length > 0 && (
-                <div ref={nowRef}>
-                  <NowLine />
-                </div>
-              )}
-
-              {/* Drop zone at bottom */}
-              {timeline.length > 0 && (
-                <div
-                  className="rounded-xl border-2 border-dashed p-3 text-center text-xs transition-all"
-                  style={{
-                    borderColor: dragOverIdx === timeline.length ? 'var(--color-cyan)' : 'transparent',
-                    color: 'var(--muted-foreground)',
-                    opacity: dragOverIdx === timeline.length ? 1 : 0,
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); setDragOverIdx(timeline.length); }}
-                  onDragLeave={() => setDragOverIdx(null)}
-                  onDrop={(e) => handleDrop(e, timeline.length)}
-                >
-                  Drop task here
-                </div>
-              )}
+                  </div>
+                );
+              })}
+              {nowIndex >= timeline.length && timeline.length > 0 && <div ref={nowRef}><NowLine /></div>}
             </div>
           </Card>
 
@@ -596,7 +710,33 @@ export default function TodayPage() {
             <div className="mt-3 space-y-2">
               {availablePriorities.map((item) => {
                 const borderColor = BOT_BORDER[item.assignedBot] ?? BOT_BORDER.default;
+                const botC = BOT_COLORS[item.assignedBot];
                 return (
+                  <div key={item.id} className="flex items-center justify-between rounded-xl p-3 group"
+                    style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
+                      <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {botC && (
+                        <button onClick={() => handleBotTelegram(item.assignedBot, item.title)}
+                          className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
+                          style={{ background: botC.bg, color: botC.text }}
+                          title={`Message ${item.assignedBot} on Telegram`}>
+                          {item.assignedBot}
+                        </button>
+                      )}
+                      <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
+                        style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+                        onClick={async () => { await fetch(item.actionWebhook, { method: 'POST' }); void mutate(); }}>
+                        Take Action
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {priorities.length === 0 && <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>}
                   <div
                     key={item.id}
                     draggable
@@ -646,6 +786,9 @@ export default function TodayPage() {
           </Card>
         </div>
 
+        {/* ── Center: Google Calendar ── */}
+        <div className="space-y-4">
+          <GoogleCalendarPanel />
         {/* ── Right column ── */}
         <div className="space-y-4">
           <KissinBooth />
@@ -655,27 +798,43 @@ export default function TodayPage() {
             <CardTitle>Pending Approvals</CardTitle>
             <div className="mt-3 space-y-2">
               {(feed?.pendingApprovals ?? []).map((item) => (
-                <div
-                  key={item.category}
-                  className="rounded-xl px-3 py-2.5 text-sm"
-                  style={{
-                    background: APPROVAL_BG[item.category] ?? APPROVAL_BG.other,
-                    color: APPROVAL_TEXT[item.category] ?? APPROVAL_TEXT.other,
-                  }}
-                >
+                <div key={item.category} className="rounded-xl px-3 py-2.5 text-sm"
+                  style={{ background: APPROVAL_BG[item.category] ?? APPROVAL_BG.other, color: APPROVAL_TEXT[item.category] ?? APPROVAL_TEXT.other }}>
                   {item.description}
                 </div>
               ))}
-              {(feed?.pendingApprovals ?? []).length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No pending approvals.</p>
-              )}
+              {(feed?.pendingApprovals ?? []).length === 0 && <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No pending approvals.</p>}
             </div>
           </Card>
+        </div>
+
+        {/* ── Right: Kissin' Booth + Quick Actions ── */}
+        <div className="space-y-4">
+          <KissinBooth prefill={gatewayPrefill} />
+
 
           {/* Quick Actions */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: 'var(--muted-foreground)' }}>Quick Actions</p>
             <div className="grid grid-cols-2 gap-3">
+              <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}><Plus className="w-5 h-5" style={{ color: '#4A3DAA' }} /></div>
+                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>New Task</p><p className="text-[11px]" style={{ color: 'var(--color-lavender-text)' }}>Assign work to any bot</p></div>
+              </Link>
+              <Link href="/activity" className="rounded-2xl p-4 flex flex-col gap-2 hover:opacity-85" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,200,0.15)' }}><ListChecks className="w-5 h-5" style={{ color: 'var(--color-sky-text)' }} /></div>
+                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Approve Queue</p><p className="text-[11px]" style={{ color: 'var(--color-sky-text)' }}>Clear pending approvals</p></div>
+              </Link>
+              <Link href="/email" className="rounded-2xl p-4 flex flex-col gap-2 hover:opacity-85" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,120,0.15)' }}><MessageSquare className="w-5 h-5" style={{ color: 'var(--color-mint-text)' }} /></div>
+                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Draft Reply</p><p className="text-[11px]" style={{ color: 'var(--color-mint-text)' }}>Ruby writes your response</p></div>
+              </Link>
+              <button onClick={() => setShowTrophy(true)} className="rounded-2xl p-4 flex flex-col gap-2 text-left hover:opacity-85 relative" style={{ background: 'var(--color-lemon)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                {completedTitles.length > 0 && (
+                  <span className="absolute top-3 right-3 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold" style={{ background: '#B45309', color: '#FFFFFF' }}>{completedTitles.length}</span>
+                )}
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(180,83,9,0.15)' }}><Trophy className="w-5 h-5" style={{ color: '#B45309' }} /></div>
+                <div><p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Trophy Collection</p><p className="text-[11px]" style={{ color: 'var(--color-lemon-text)' }}>Daily wins &amp; completions</p></div>
               {/* New Task */}
               <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}>
