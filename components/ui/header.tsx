@@ -23,12 +23,23 @@ function StatusDot({ service }: { service: ServiceStatus }) {
 
   const statusLabel = service.ok === null ? 'Checking…' : service.ok ? 'Online' : 'Issue detected';
 
+  // Close on outside click (for touch devices where hover doesn't exist)
+  useEffect(() => {
+    if (!show) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [show]);
+
   return (
     <div
       ref={ref}
       className="relative flex items-center gap-1.5 flex-shrink-0 cursor-default"
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
+      onClick={() => setShow((s) => !s)}
     >
       <div
         className="w-2 h-2 rounded-full transition-all"
@@ -190,7 +201,7 @@ export function Header() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border px-2 py-0.5 text-[10px] transition-opacity hover:opacity-80"
+          className="rounded-full border px-3 py-1.5 text-[10px] transition-opacity hover:opacity-80"
           style={{
             borderColor: 'var(--sidebar-border)',
             color: 'var(--sidebar-foreground)',
