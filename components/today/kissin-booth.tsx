@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Send } from 'lucide-react';
 
@@ -16,12 +16,17 @@ async function fetchCommands() {
   return res.json();
 }
 
-export function KissinBooth() {
+interface KissinBoothProps {
+  prefill?: string;
+}
+
+export function KissinBooth({ prefill }: KissinBoothProps = {}) {
   const [prompt, setPrompt] = useState('');
   const [liveEvents, setLiveEvents] = useState<BoothEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['booth-commands'], queryFn: fetchCommands });
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const stream = new EventSource('/api/v2/stream/kissin-booth');
@@ -35,6 +40,14 @@ export function KissinBooth() {
     stream.onerror = () => setConnected(false);
     return () => stream.close();
   }, []);
+
+  // Pre-fill input when prefill prop changes
+  useEffect(() => {
+    if (prefill) {
+      setPrompt(prefill);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [prefill]);
 
   const mutation = useMutation({
     mutationFn: async (input: string) => {
@@ -111,6 +124,7 @@ export function KissinBooth() {
         {/* Input */}
         <div className="mt-4 w-full flex gap-2">
           <input
+            ref={inputRef}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && prompt.trim() && mutation.mutate(prompt)}
@@ -124,7 +138,7 @@ export function KissinBooth() {
           />
           <button
             onClick={() => prompt.trim() && mutation.mutate(prompt)}
-            disabled={!prompt.trim() || mutation.isLoading}
+            disabled={!prompt.trim() || mutation.isPending}
             className="w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: '#7B68EE' }}
           >
