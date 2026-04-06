@@ -26,7 +26,7 @@ export function MothershipLogo({ size = 48, className = '', style }: MothershipL
     >
       {usePng ? (
         <img
-          src="/logo.png"
+          src="/logo.jpg"
           alt="Mothership"
           width={size}
           height={size}
@@ -35,7 +35,7 @@ export function MothershipLogo({ size = 48, className = '', style }: MothershipL
         />
       ) : (
         <img
-          src="/logo.svg"
+          src="/logo.png"
           alt="Mothership"
           width={size}
           height={size}
