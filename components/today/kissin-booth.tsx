@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Send } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
 type Message = {
   id: string;
   role: 'user' | 'bot';
   text: string;
+  streaming?: boolean;
   ts: Date;
 };
 
@@ -17,40 +18,24 @@ const QUICK_PROMPTS = [
   'Adrian finance queue status',
 ];
 
-async function sendToGateway(text: string): Promise<string> {
-  const res = await fetch('/api/openclaw/dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, sessionKey: 'kissin-booth' }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message ?? `Gateway error ${res.status}`);
-  }
-  const data = await res.json();
-  return data?.result?.output ?? data?.result ?? 'No response from Gateway.';
-}
+// Persistent session key for conversation continuity
+const SESSION_KEY = `booth-${Math.random().toString(36).slice(2)}`;
 
 export function KissinBooth() {
   const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      role: 'bot',
-      text: "Hey love, what can I help you with today?",
-      ts: new Date(),
-    },
+    { id: 'welcome', role: 'bot', text: "Hey love, what can I help you with today?", ts: new Date() },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Live stream status
+  // Gateway health check
   useEffect(() => {
-    const stream = new EventSource('/api/v2/stream/kissin-booth');
-    stream.addEventListener('connected', () => setConnected(true));
-    stream.onerror = () => setConnected(false);
-    return () => stream.close();
+    fetch('/api/openclaw/health')
+      .then((r) => r.json())
+      .then((d) => setConnected(d.ok === true))
+      .catch(() => setConnected(false));
   }, []);
 
   // Auto-scroll on new messages
@@ -60,34 +45,65 @@ export function KissinBooth() {
     }
   }, [messages]);
 
-  const send = async (text: string) => {
+  const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', text: trimmed, ts: new Date() };
-    setMessages((prev) => [...prev, userMsg]);
+    const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', text: trimmed, ts: new Date() };
+    const botId = `b-${Date.now()}`;
+    setMessages((prev) => [...prev, userMsg, { id: botId, role: 'bot', text: '', streaming: true, ts: new Date() }]);
     setInput('');
     setLoading(true);
 
     try {
-      const response = await sendToGateway(trimmed);
-      setMessages((prev) => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: 'bot',
-        text: response,
-        ts: new Date(),
-      }]);
+      const res = await fetch('/api/v2/chat/gateway', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: trimmed, sessionKey: SESSION_KEY }),
+      });
+
+      if (!res.ok || !res.body) throw new Error(`Gateway ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let accumulated = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith('data:')) continue;
+          const ds = t.slice(5).trim();
+          if (ds === '[DONE]') break;
+          try {
+            const evt = JSON.parse(ds);
+            if (evt.delta) {
+              accumulated += evt.delta;
+              const snap = accumulated;
+              setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, text: snap } : m));
+            } else if (evt.error) {
+              accumulated = `⚠ ${evt.error}`;
+              setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, text: accumulated } : m));
+            }
+          } catch (_) {}
+        }
+      }
+
+      setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, streaming: false } : m));
     } catch (err) {
-      setMessages((prev) => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: 'bot',
-        text: `I couldn't reach the Gateway right now. Try again in a moment. (${err instanceof Error ? err.message : 'Unknown error'})`,
-        ts: new Date(),
-      }]);
+      const errText = err instanceof Error ? err.message : 'Unknown error';
+      setMessages((prev) => prev.map((m) =>
+        m.id === botId ? { ...m, text: `⚠ ${errText}`, streaming: false } : m
+      ));
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading]);
 
   return (
     <div
@@ -130,31 +146,30 @@ export function KissinBooth() {
               <MothershipLogo size={24} style={{ marginRight: 6, marginTop: 2, flexShrink: 0 }} />
             )}
             <div
-              className="rounded-2xl px-3 py-2 text-sm max-w-[80%]"
+              className="rounded-2xl px-3 py-2 text-sm max-w-[80%] leading-relaxed"
               style={{
-                background: msg.role === 'user'
-                  ? 'var(--color-purple)'
-                  : 'var(--input-background)',
+                background: msg.role === 'user' ? 'var(--color-purple)' : 'var(--input-background)',
                 color: msg.role === 'user' ? '#FFFFFF' : 'var(--foreground)',
                 border: msg.role === 'bot' ? '1px solid var(--border)' : 'none',
               }}
             >
-              {msg.text}
+              {msg.streaming && !msg.text ? (
+                <span className="flex items-center gap-1 py-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--color-cyan)', animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--color-cyan)', animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--color-cyan)', animationDelay: '300ms' }} />
+                </span>
+              ) : (
+                <>
+                  {msg.text}
+                  {msg.streaming && (
+                    <span className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse" style={{ background: 'var(--color-cyan)' }} />
+                  )}
+                </>
+              )}
             </div>
           </div>
         ))}
-        {loading && (
-          <div className="flex justify-start items-center gap-2">
-            <MothershipLogo size={24} style={{ marginRight: 6, flexShrink: 0 }} />
-            <div
-              className="rounded-2xl px-3 py-2 flex items-center gap-2"
-              style={{ background: 'var(--input-background)', border: '1px solid var(--border)' }}
-            >
-              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--color-cyan)' }} />
-              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Thinking...</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Quick prompts */}
