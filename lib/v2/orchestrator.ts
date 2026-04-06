@@ -448,7 +448,6 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
 
   const pendingApprovals = summarizePendingApprovals();
   const timeline = await buildTimeline(tasksFeed);
-  const health = computeHealth(tasksFeed, botsFeed, emailFeed.connected);
 
   const liveBotActivity = botsFeed.bots.slice(0, 4).map((bot) => ({
     botName: bot.identity.name,
@@ -463,53 +462,153 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   return {
     userContext: {
       userName: process.env.MOTHERSHIP_OPERATOR_NAME || 'Rudolph',
-      greeting: 'Good afternoon',
+      greeting: getTimeAwareGreeting(),
+      affirmation: getDailyAffirmation(),
     },
     timeline,
     topPriorities,
     liveBotActivity,
-    systemHealth: health,
+    systemHealth: null,
     pendingApprovals,
   };
 }
 
-async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {
-  // Try real Google Calendar events first
-  const calEvents = await fetchTodayCalendarEvents();
+function getTimeAwareGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
-  if (calEvents.length > 0) {
-    return calEvents.map((ev) => ({
+const AFFIRMATIONS = [
+  'You move with intention and grace.',
+  'Your clarity creates momentum for everyone around you.',
+  'Today is built for focus. Trust your rhythm.',
+  'Every system you touch gets sharper.',
+  'The work you do today compounds into something extraordinary.',
+  'You are exactly where you need to be — and ahead of schedule.',
+  'Your attention is your superpower. Spend it wisely today.',
+  'Small consistent actions. That\'s how empires are built.',
+  'The team is stronger because you showed up.',
+  'Progress over perfection. Let\'s get it done.',
+  'You don\'t just manage operations — you orchestrate them.',
+  'Your bots are working. Your systems are running. Now breathe.',
+  'What you build today, your future self will thank you for.',
+  'Discipline is choosing between what you want now and what you want most.',
+  'The details matter. And you notice every single one.',
+];
+
+function getDailyAffirmation(): string {
+  // Deterministic for the day so it doesn't change on every refresh
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  return AFFIRMATIONS[dayOfYear % AFFIRMATIONS.length];
+}
+
+async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {
+  const calEvents = await fetchTodayCalendarEvents();
+  const now = new Date();
+  const items: V2DashboardTimelineItem[] = [];
+
+  // 1. Add calendar events
+  for (const ev of calEvents) {
+    items.push({
       time: ev.startTime,
+      endTime: ev.endTime,
       title: ev.title,
       iconType: ev.status === 'done' ? 'check' : ev.status === 'current' ? 'spark' : 'clock',
       status: ev.status,
-    }));
+      type: 'calendar',
+      meetingUrl: ev.meetingUrl,
+      startDate: ev.startDate,
+      endDate: ev.endDate,
+      isDraggable: false,
+    });
   }
 
-  // Fallback: use today's tasks as a synthetic timeline
-  const now = new Date();
-  const taskItems = tasks.today.slice(0, 6).map((task, index) => {
+  // 2. Add today's high-priority tasks as timeline items
+  const tasksForTimeline = tasks.today
+    .filter((t) => t.status !== 'Done')
+    .slice(0, 6);
+
+  for (const task of tasksForTimeline) {
+    // Place tasks in gaps or after calendar events
     const when = new Date(now);
-    when.setHours(9 + index, 0, 0, 0);
-    const isPast = now > when;
-    const isCurrent = !isPast && index === 0;
-    return {
-      time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      title: task.title,
-      iconType: (isPast ? 'check' : isCurrent ? 'spark' : 'clock') as V2DashboardTimelineItem['iconType'],
-      status: (isPast ? 'done' : isCurrent ? 'current' : 'upcoming') as V2DashboardTimelineItem['status'],
-    };
+    const lastCalEnd = items.length > 0 && items[items.length - 1].endDate
+      ? new Date(items[items.length - 1].endDate!)
+      : null;
+
+    if (lastCalEnd && lastCalEnd > when) {
+      when.setTime(lastCalEnd.getTime());
+    }
+    // Only add task timeline entries if no calendar events
+    // (when calendar is connected, tasks stay in Top Priorities for drag-drop)
+    if (calEvents.length === 0) {
+      const syntheticHour = 9 + items.length;
+      when.setHours(syntheticHour, 0, 0, 0);
+      const isPast = now > when;
+      const isCurrent = !isPast && items.filter((i) => i.status !== 'done').length === 0;
+      items.push({
+        time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        title: task.title,
+        iconType: isPast ? 'check' : isCurrent ? 'spark' : 'clock',
+        status: isPast ? 'done' : isCurrent ? 'current' : 'upcoming',
+        type: 'task',
+        taskId: task.taskId,
+        assignedBot: task.metadata.assignedBot,
+        startDate: when.toISOString(),
+        isDraggable: true,
+      });
+    }
+  }
+
+  // 3. Detect focus blocks (gaps > 30 min between calendar events)
+  if (calEvents.length >= 2) {
+    const sorted = [...calEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const endCurrent = sorted[i].endDate ?? sorted[i].startDate;
+      const startNext = sorted[i + 1].startDate;
+      const gapMs = new Date(startNext).getTime() - new Date(endCurrent).getTime();
+      const gapMin = gapMs / 60000;
+      if (gapMin >= 30) {
+        const focusStart = new Date(endCurrent);
+        const gapHours = Math.floor(gapMin / 60);
+        const gapRemMin = Math.round(gapMin % 60);
+        const durationLabel = gapHours > 0
+          ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
+          : `${gapRemMin}m`;
+        items.push({
+          time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+          title: `Focus Block — ${durationLabel} available`,
+          iconType: 'focus',
+          status: now > new Date(startNext) ? 'done' : now >= focusStart ? 'current' : 'upcoming',
+          type: 'focus-block',
+          startDate: focusStart.toISOString(),
+          endDate: startNext,
+          isDraggable: false,
+        });
+      }
+    }
+  }
+
+  // Sort everything by startDate
+  items.sort((a, b) => {
+    const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+    const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
+    return aTime - bTime;
   });
 
-  if (taskItems.length > 0) return taskItems;
+  if (items.length > 0) return items;
 
-  // Last resort: minimal placeholder showing real current time context
+  // Placeholder when nothing is available
   return [
     {
-      time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      title: 'No calendar events found — connect Google Calendar',
+      time: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      title: 'No events today — drag tasks here or connect Google Calendar',
       iconType: 'alert',
       status: 'current',
+      type: 'calendar',
+      startDate: now.toISOString(),
+      isDraggable: false,
     },
   ];
 }

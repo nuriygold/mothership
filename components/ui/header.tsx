@@ -1,16 +1,126 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface ServiceStatus {
   name: string;
-  color: string; // hex
+  color: string;
+  feed: string;    // what data source is being checked
+  reason: string;  // why it's this color (human-readable)
+  ok: boolean | null;
 }
 
-async function checkGateway() {
-  const res = await fetch('/api/openclaw/health');
-  if (!res.ok) return { ok: false };
+async function checkAllServices() {
+  const res = await fetch('/api/v2/health/services');
+  if (!res.ok) return null;
   return res.json();
+}
+
+function StatusDot({ service }: { service: ServiceStatus }) {
+  const [show, setShow] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const statusLabel = service.ok === null ? 'Checking…' : service.ok ? 'Online' : 'Issue detected';
+
+  return (
+    <div
+      ref={ref}
+      className="relative flex items-center gap-1.5 flex-shrink-0 cursor-default"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <div
+        className="w-2 h-2 rounded-full transition-all"
+        style={{
+          background: service.color,
+          boxShadow: `0 0 6px ${service.color}80`,
+        }}
+      />
+      <span className="text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
+        {service.name}
+      </span>
+
+      {/* Tooltip */}
+      {show && (
+        <div
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-xl px-3 py-2.5 text-xs w-60 pointer-events-none"
+          style={{
+            background: '#0A1628',
+            border: '1px solid rgba(0,217,255,0.2)',
+            color: '#E8EDF5',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          }}
+        >
+          {/* Service name + status */}
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: service.color }} />
+            <span className="font-semibold" style={{ color: service.color }}>{service.name}</span>
+            <span className="ml-auto opacity-60 text-[10px]">{statusLabel}</span>
+          </div>
+
+          {/* What feed is checked */}
+          <div className="mb-1.5">
+            <span className="opacity-40 text-[10px] uppercase tracking-wide">Checking</span>
+            <p className="mt-0.5 opacity-75 leading-snug">{service.feed}</p>
+          </div>
+
+          {/* Reason */}
+          {service.reason && (
+            <div
+              className="mt-2 rounded-lg px-2 py-1.5 text-[11px] leading-snug"
+              style={{
+                background: service.ok ? 'rgba(0,217,255,0.08)' : 'rgba(255,92,92,0.12)',
+                color: service.ok ? '#00D9FF' : '#FF8080',
+              }}
+            >
+              {service.reason}
+            </div>
+          )}
+
+          {/* Arrow */}
+          <div
+            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45"
+            style={{ background: '#0A1628', borderLeft: '1px solid rgba(0,217,255,0.2)', borderTop: '1px solid rgba(0,217,255,0.2)' }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SERVICE_DEFINITIONS: Array<{ key: string; name: string; feed: string }> = [
+  { key: 'gateway',  name: 'Gateway',  feed: 'OpenClaw gateway /health endpoint — core routing layer' },
+  { key: 'ruby',     name: 'Ruby',     feed: 'Task DB query — counts active tasks assigned to Ruby bot' },
+  { key: 'telegram', name: 'Telegram', feed: 'Telegram Bot API — validates bot token via getMe call' },
+  { key: 'github',   name: 'GitHub',   feed: 'GitHub API — checks task-pool repo access & auth token' },
+  { key: 'zoho',     name: 'Zoho',     feed: 'Zoho Mail — verifies IMAP credentials are configured' },
+  { key: 'gmail',    name: 'Gmail',    feed: 'Gmail OAuth2 — attempts token refresh to verify access' },
+];
+
+const FALLBACK_SERVICES: ServiceStatus[] = SERVICE_DEFINITIONS.map((d) => ({
+  name: d.name,
+  feed: d.feed,
+  color: '#FFB800',
+  reason: 'Connecting…',
+  ok: null,
+}));
+
+function buildServices(data: Record<string, { ok: boolean; reason?: string }> | null): ServiceStatus[] {
+  return SERVICE_DEFINITIONS.map(({ key, name, feed }) => {
+    if (!data) return { name, feed, color: '#FFB800', reason: 'Connecting…', ok: null };
+
+    const svc = data[key];
+    const ok = svc?.ok ?? false;
+    const rawReason = svc?.reason ?? '';
+
+    // Yellow = misconfigured (env vars missing), Red = configured but unreachable
+    const isMisconfig = !ok && (rawReason.toLowerCase().includes('not configured') || rawReason.toLowerCase().includes('not set'));
+    const color = ok ? '#00D9FF' : isMisconfig ? '#FFB800' : '#FF5C5C';
+    const reason = ok ? rawReason || 'All checks passed' : rawReason || 'Status unknown';
+
+    return { name, feed, color, reason, ok };
+  });
 }
 
 export function Header() {
@@ -44,24 +154,15 @@ export function Header() {
     document.documentElement.setAttribute('data-theme', next);
   };
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['header-gateway'],
-    queryFn: checkGateway,
-    staleTime: 15000,
-    refetchInterval: 15000,
+  const { data } = useQuery({
+    queryKey: ['header-services'],
+    queryFn: checkAllServices,
+    staleTime: 30000,
+    refetchInterval: 30000,
     refetchIntervalInBackground: true,
   });
 
-  const gatewayColor = isLoading ? '#FFB800' : data?.ok ? '#00D9FF' : '#FF5C5C';
-
-  const services: ServiceStatus[] = [
-    { name: 'Gateway', color: gatewayColor },
-    { name: 'Ruby', color: '#00D9FF' },
-    { name: 'Telegram', color: '#00D9FF' },
-    { name: 'GitHub', color: '#00D9FF' },
-    { name: 'Zoho', color: '#FFB800' },
-    { name: 'Gmail', color: '#00D9FF' },
-  ];
+  const services = buildServices(data);
 
   return (
     <header
@@ -69,20 +170,15 @@ export function Header() {
       style={{
         background: 'var(--sidebar)',
         borderColor: 'var(--sidebar-border)',
+        overflow: 'visible',
+        position: 'relative',
+        zIndex: 40,
       }}
     >
-      {/* Left: status dots */}
+      {/* Left: service status dots with tooltips */}
       <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
         {services.map((s) => (
-          <div key={s.name} className="flex items-center gap-1.5 flex-shrink-0">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ background: s.color, boxShadow: `0 0 6px ${s.color}80` }}
-            />
-            <span className="text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
-              {s.name}
-            </span>
-          </div>
+          <StatusDot key={s.name} service={s} />
         ))}
       </div>
 

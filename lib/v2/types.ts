@@ -18,9 +18,17 @@ export type V2BotStatus = 'active' | 'done' | 'pending' | 'working' | 'idle' | '
 
 export type V2DashboardTimelineItem = {
   time: string;
+  endTime?: string | null;
   title: string;
-  iconType: 'check' | 'clock' | 'alert' | 'spark';
+  iconType: 'check' | 'clock' | 'alert' | 'spark' | 'focus';
   status: 'done' | 'current' | 'upcoming';
+  type: 'calendar' | 'task' | 'focus-block';
+  taskId?: string;
+  meetingUrl?: string | null;
+  startDate?: string; // ISO for sorting + now-line positioning
+  endDate?: string | null;
+  assignedBot?: string;
+  isDraggable?: boolean;
 };
 
 export type V2DashboardPriorityItem = {
@@ -47,11 +55,12 @@ export type V2TodayFeed = {
   userContext: {
     userName: string;
     greeting: string;
+    affirmation: string;
   };
   timeline: V2DashboardTimelineItem[];
   topPriorities: V2DashboardPriorityItem[];
   liveBotActivity: V2DashboardBotActivity[];
-  systemHealth: SystemHealthSnapshot;
+  systemHealth: SystemHealthSnapshot | null;
   pendingApprovals: V2PendingApprovalSummary[];
 };
 
