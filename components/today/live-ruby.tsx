@@ -104,10 +104,10 @@ export function LiveRuby({
     setLoading(true);
 
     try {
-      const res = await fetch('/api/v2/chat/gateway', {
+      const res = await fetch('/api/v2/ruby/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: trimmed, sessionKey: SESSION_KEY, agentId: 'ruby' }),
+        body: JSON.stringify({ text: trimmed, sessionKey: SESSION_KEY }),
       });
 
       if (!res.ok || !res.body) throw new Error(`Ruby ${res.status}`);
