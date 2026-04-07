@@ -476,6 +476,7 @@ export default function TodayPage() {
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [droppedTasks, setDroppedTasks] = useState<V2DashboardTimelineItem[]>([]);
+  const [dismissedPriorityIds, setDismissedPriorityIds] = useState<Set<string>>(new Set());
   const draggedItemRef = useRef<{ id: string; title: string; assignedBot: string; source: string } | null>(null);
   // Track completed task IDs across BOTH server + dropped tasks
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -502,7 +503,8 @@ export default function TodayPage() {
 
   const feed = data;
   const priorities = feed?.topPriorities ?? [];
-  const availablePriorities = priorities;
+  // Remove dragged-to-timeline items; always show up to 10
+  const availablePriorities = priorities.filter((p) => !dismissedPriorityIds.has(p.id)).slice(0, 10);
   const serverTimeline = feed?.timeline ?? [];
 
   // Apply completedIds overlay
@@ -554,6 +556,13 @@ export default function TodayPage() {
     }).catch(() => {});
     void mutate();
   }, [mutate, mergedTimeline]);
+
+  // ── Undo Done ──
+  const handleUndoDone = useCallback((taskId?: string) => {
+    if (!taskId) return;
+    setCompletedIds((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
+    setToastMsg('Task marked as not done');
+  }, []);
 
   // ── Gateway → Pre-fill Kissin' Booth ──
   const handleGateway = useCallback((title: string) => {
@@ -608,6 +617,7 @@ export default function TodayPage() {
       meetingUrl: undefined,
     };
     setDroppedTasks((prev) => [...prev, newEntry]);
+    setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
     setDragOverIdx(null);
     draggedItemRef.current = null;
     setToastMsg(`"${dragged.title}" added to timeline`);
@@ -640,16 +650,16 @@ export default function TodayPage() {
       </div>
     )}
 
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Greeting + Affirmation */}
       <div>
-        <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>{greeting}</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>{greeting}</h1>
         <p className="text-sm italic mt-1" style={{ color: 'var(--muted-foreground)' }}>
           {affirmation || 'You move with intention and grace.'}
         </p>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[1fr_1fr_1fr]">
         {/* ── Left: Today's Timeline ── */}
         <div className="space-y-4">
           <Card>
@@ -706,8 +716,15 @@ export default function TodayPage() {
                             {entry.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{entry.time} – {entry.endTime}</span>}
                           </div>
                         </div>
-                        {isDone && <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)', opacity: 0.7 }} />}
-                        {isCurrent && !isDone && <Zap className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />}
+                        {isDone && (
+                          <button onClick={() => handleUndoDone(entry.taskId)}
+                            className="rounded-lg px-2 py-1 text-[10px] font-medium hover:opacity-80 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
+                            title="Mark as not done">
+                            Undo
+                          </button>
+                        )}
+                        {!isDone && isCurrent && <Zap className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />}
                       </div>
 
                       {/* ── Action buttons row ── */}
