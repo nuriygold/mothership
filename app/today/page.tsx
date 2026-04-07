@@ -11,10 +11,13 @@ import {
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { KissinBooth } from '@/components/today/kissin-booth';
+import { LiveRuby } from '@/components/today/live-ruby';
 import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+type MergedItem = (V2DashboardTimelineItem & { _calEvent?: false }) | (Partial<CalendarEvent> & { _calEvent: true; id: string; title: string; startDate: string; startTime: string; endTime: string | null; status: 'done' | 'current' | 'upcoming' });
 
 // Bot → Telegram bot key mapping
 const BOT_TELEGRAM_KEY: Record<string, string> = {
@@ -954,9 +957,9 @@ export default function TodayPage() {
           </Card>
         </div>
 
-        {/* ── Right: Kissin' Booth + Quick Actions ── */}
+        {/* ── Right: Live Ruby + Quick Actions ── */}
         <div className="space-y-4">
-          <KissinBooth prefill={gatewayPrefill} onPrefillConsumed={() => setGatewayPrefill('')} />
+          <LiveRuby prefill={gatewayPrefill} onPrefillConsumed={() => setGatewayPrefill('')} />
 
           {/* Quick Actions */}
           <div>
