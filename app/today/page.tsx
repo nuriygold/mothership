@@ -7,7 +7,7 @@ import {
   Calendar, Star, CheckCircle2, Clock, Zap, Video,
   GripVertical, Target, Sparkles, Trophy, Plus,
   ListChecks, MessageSquare, X, Award, ChevronDown,
-  Send, UserPlus, Droplets, Footprints, Dumbbell, Heart, BookOpen,
+  Send, UserPlus, Droplets, Footprints, Dumbbell, Heart, BookOpen, RotateCcw,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { KissinBooth } from '@/components/today/kissin-booth';
@@ -15,6 +15,8 @@ import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+type MergedItem = (V2DashboardTimelineItem & { _calEvent?: false }) | (Partial<CalendarEvent> & { _calEvent: true; id: string; title: string; startDate: string; startTime: string; endTime: string | null; status: 'done' | 'current' | 'upcoming' });
 
 // Bot → Telegram bot key mapping
 const BOT_TELEGRAM_KEY: Record<string, string> = {
