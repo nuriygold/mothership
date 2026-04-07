@@ -493,10 +493,12 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
 }
 
 function getTimeAwareGreeting(): string {
-  const hour = new Date().getHours();
+  const tz = process.env.APP_TIMEZONE || 'America/New_York';
+  const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz }), 10);
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 21) return 'Good evening';
+  return 'Good night';
 }
 
 const AFFIRMATIONS = [
@@ -729,3 +731,4 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
     await updateTask({ id: taskId, status: TaskStatus.IN_PROGRESS });
   }
 }
+
