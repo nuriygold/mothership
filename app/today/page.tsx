@@ -515,6 +515,8 @@ export default function TodayPage() {
   const handleDropEnd = useCallback(() => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
+    // Far-future startDate ensures sort always places this after everything else
+    const farFuture = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const newEntry: V2DashboardTimelineItem = {
       time: 'Later',
       title: dragged.title,
@@ -523,7 +525,7 @@ export default function TodayPage() {
       iconType: 'clock',
       assignedBot: dragged.assignedBot,
       taskId: dragged.id,
-      startDate: undefined,
+      startDate: farFuture,
       endTime: undefined,
       meetingUrl: undefined,
     };
@@ -577,7 +579,7 @@ export default function TodayPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[1fr_1fr_1fr]">
+      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[1fr_1fr]">
         {/* ── Left: Today's Timeline ── */}
         <div className="space-y-4">
           <Card>
@@ -823,59 +825,6 @@ export default function TodayPage() {
           </Card>
         </div>
 
-        {/* ── Center: removed standalone Google Calendar panel (now in timeline) ── */}
-        {/* Keep center column for future widgets */}
-        <div className="space-y-4">
-          {/* Google Calendar is now merged into Today's Timeline above */}
-          <Card>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" style={{ color: 'var(--color-sky-text)' }} />
-              <CardTitle>Google Calendar</CardTitle>
-            </div>
-            <div className="mt-3 space-y-2">
-              {!(calData?.configured) && (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Add <code className="rounded bg-[var(--muted)] px-1 text-xs">GOOGLE_CLIENT_ID</code> to connect your calendar.
-                </p>
-              )}
-              {calData?.configured && (calData?.events ?? []).length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No events on your calendar today.</p>
-              )}
-              {(calData?.events ?? []).map((ev) => {
-                const isCurrent = ev.status === 'current';
-                const isDone = ev.status === 'done';
-                return (
-                  <div key={ev.id} className="flex items-center justify-between rounded-xl p-3 group"
-                    style={{
-                      border: isCurrent ? '1.5px solid var(--color-sky-text)' : '1px solid var(--border)',
-                      background: isCurrent ? 'var(--color-sky)' : 'var(--input-background)',
-                      opacity: isDone ? 0.5 : 1,
-                    }}>
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-sm font-semibold w-20 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }}>{ev.startTime}</span>
-                      <div className="min-w-0">
-                        <span className="text-sm block truncate" style={{ color: 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none' }}>{ev.title}</span>
-                        {ev.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{ev.startTime} – {ev.endTime}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {isCurrent && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>Now</span>}
-                      {ev.meetingUrl && !isDone && (
-                        <a href={ev.meetingUrl} target="_blank" rel="noopener noreferrer"
-                          className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1"
-                          style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
-                          onClick={(e) => e.stopPropagation()}>
-                          <Video className="w-3 h-3" /> Join
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-
         {/* ── Right: Kissin' Booth + Quick Actions ── */}
         <div className="space-y-4">
           <KissinBooth prefill={gatewayPrefill} onPrefillConsumed={() => setGatewayPrefill('')} />
@@ -943,3 +892,4 @@ export default function TodayPage() {
     </>
   );
 }
+
