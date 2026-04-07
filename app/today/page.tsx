@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { KissinBooth } from '@/components/today/kissin-booth';
+import { LiveRuby } from '@/components/today/live-ruby';
 import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
@@ -881,9 +882,9 @@ export default function TodayPage() {
           </Card>
         </div>
 
-        {/* ── Right: Kissin' Booth + Quick Actions ── */}
+        {/* ── Right: Live Ruby + Quick Actions ── */}
         <div className="space-y-4">
-          <KissinBooth prefill={gatewayPrefill} onPrefillConsumed={() => setGatewayPrefill('')} />
+          <LiveRuby prefill={gatewayPrefill} onPrefillConsumed={() => setGatewayPrefill('')} />
 
           {/* Quick Actions */}
           <div>
