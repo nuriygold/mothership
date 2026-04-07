@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Mic } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
 type Message = {
@@ -15,22 +15,68 @@ type Message = {
 const QUICK_PROMPTS = [
   'Summarize blockers',
   'Draft follow-up to top email',
-  'Adrian finance queue status',
+  'Finance queue status',
+  'selfcare',
+  'openclaw status',
+  'openclaw restart',
+  'openclaw doctor',
+  'openclaw models status',
 ];
 
-// Persistent session key for conversation continuity
 const SESSION_KEY = `booth-${Math.random().toString(36).slice(2)}`;
 
-export function KissinBooth() {
+// Butterfly animation keyframes injected once
+const BUTTERFLY_STYLE = `
+@keyframes butterfly-fly {
+  0%   { transform: translate(0,0) scale(1) rotate(0deg); opacity: 1; }
+  60%  { transform: translate(60px,-60px) scale(1.4) rotate(20deg); opacity: 0.8; }
+  100% { transform: translate(120px,-120px) scale(0) rotate(45deg); opacity: 0; }
+}
+@keyframes send-exit {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(80%,-80%) scale(0); opacity: 0; }
+}
+.btn-butterfly-fly { animation: butterfly-fly 0.65s ease-out forwards; }
+.btn-send-exit     { animation: send-exit 0.3s ease-in forwards; }
+`;
+
+export function KissinBooth({
+  prefill,
+  onPrefillConsumed,
+}: {
+  prefill?: string;
+  onPrefillConsumed?: () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome', role: 'bot', text: "Hey love, what can I help you with today?", ts: new Date() },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [butterfly, setButterfly] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  // Gateway health check
+  // Inject keyframes once
+  useEffect(() => {
+    if (document.getElementById('kb-butterfly-style')) return;
+    const s = document.createElement('style');
+    s.id = 'kb-butterfly-style';
+    s.textContent = BUTTERFLY_STYLE;
+    document.head.appendChild(s);
+  }, []);
+
+  // Consume prefill from parent (e.g. "Tell me about: X" from timeline Gateway button)
+  useEffect(() => {
+    if (prefill && prefill.trim()) {
+      setInput(prefill);
+      onPrefillConsumed?.();
+    }
+  }, [prefill, onPrefillConsumed]);
+
   useEffect(() => {
     fetch('/api/openclaw/health')
       .then((r) => r.json())
@@ -38,7 +84,6 @@ export function KissinBooth() {
       .catch(() => setConnected(false));
   }, []);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -48,6 +93,10 @@ export function KissinBooth() {
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+
+    // Butterfly animation
+    setButterfly(true);
+    setTimeout(() => setButterfly(false), 700);
 
     const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', text: trimmed, ts: new Date() };
     const botId = `b-${Date.now()}`;
@@ -104,6 +153,70 @@ export function KissinBooth() {
       setLoading(false);
     }
   }, [loading]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch (_) {}
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+
+    recorder.onstop = async () => {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      if (blob.size < 1000) {
+        setTranscribing(false);
+        return;
+      }
+      try {
+        const res = await fetch('/api/voice/stt', {
+          method: 'POST',
+          headers: { 'Content-Type': recorder.mimeType || 'audio/webm' },
+          body: blob,
+        });
+        const data = await res.json();
+        if (data.text?.trim()) {
+          await send(data.text.trim());
+        }
+      } catch (_) {
+      } finally {
+        setTranscribing(false);
+      }
+    };
+
+    recorder.stop();
+    setRecording(false);
+    setTranscribing(true);
+  }, [send]);
+
+  const handleMicPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    startRecording();
+  }, [startRecording]);
+
+  const handleMicPointerUp = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    stopRecording();
+  }, [stopRecording]);
+
+  const isBusy = loading || transcribing;
 
   return (
     <div
@@ -170,6 +283,18 @@ export function KissinBooth() {
             </div>
           </div>
         ))}
+
+        {transcribing && (
+          <div className="flex justify-start">
+            <MothershipLogo size={24} style={{ marginRight: 6, marginTop: 2, flexShrink: 0 }} />
+            <div
+              className="rounded-2xl px-3 py-2 text-[11px]"
+              style={{ background: 'var(--input-background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
+            >
+              Transcribing…
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quick prompts */}
@@ -178,7 +303,7 @@ export function KissinBooth() {
           <button
             key={p}
             onClick={() => send(p)}
-            disabled={loading}
+            disabled={isBusy}
             className="rounded-full px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{
               background: 'var(--muted)',
@@ -197,22 +322,53 @@ export function KissinBooth() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send(input)}
-          placeholder="Ask the Gateway anything..."
-          disabled={loading}
+          placeholder={recording ? 'Listening…' : transcribing ? 'Transcribing…' : 'Ask the Gateway anything…'}
+          disabled={isBusy}
           className="flex-1 rounded-2xl px-3 py-2 text-sm outline-none transition-all"
           style={{
             background: 'var(--input-background)',
-            border: '1px solid var(--border)',
+            border: `1px solid ${recording ? 'var(--color-cyan)' : 'var(--border)'}`,
             color: 'var(--foreground)',
           }}
         />
+
+        {/* Push-to-talk mic */}
+        <button
+          onPointerDown={handleMicPointerDown}
+          onPointerUp={handleMicPointerUp}
+          onPointerLeave={handleMicPointerUp}
+          disabled={isBusy && !recording}
+          className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 transition-all disabled:opacity-40 select-none touch-none"
+          style={{
+            background: recording ? 'var(--color-cyan)' : 'var(--muted)',
+            boxShadow: recording ? '0 0 12px rgba(0,217,255,0.5)' : 'none',
+          }}
+          title="Hold to speak"
+        >
+          <Mic
+            className="w-4 h-4"
+            style={{ color: recording ? '#0A0E1A' : 'var(--muted-foreground)' }}
+          />
+        </button>
+
+        {/* Send button with butterfly animation */}
         <button
           onClick={() => send(input)}
-          disabled={!input.trim() || loading}
-          className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+          disabled={!input.trim() || isBusy}
+          className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 disabled:opacity-40 overflow-hidden relative"
           style={{ background: 'var(--color-purple)' }}
         >
-          <Send className="w-4 h-4 text-white" />
+          {/* Send icon — exits on butterfly */}
+          <Send
+            className={`w-4 h-4 text-white absolute ${butterfly ? 'btn-send-exit' : ''}`}
+            style={butterfly ? {} : { transition: 'none' }}
+          />
+          {/* Butterfly — appears and flies away */}
+          {butterfly && (
+            <span className="absolute text-base btn-butterfly-fly" style={{ lineHeight: 1 }}>
+              🦋
+            </span>
+          )}
         </button>
       </div>
     </div>

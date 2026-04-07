@@ -13,7 +13,7 @@ export interface CalendarEvent {
   location: string | null;
 }
 
-function isCalendarConfigured(): boolean {
+export function isCalendarConfigured(): boolean {
   return !!(
     process.env.GOOGLE_CLIENT_ID &&
     process.env.GOOGLE_CLIENT_SECRET &&
@@ -34,12 +34,18 @@ function computeStatus(startIso: string, endIso: string | null, now: Date): Cale
 }
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const tz = process.env.APP_TIMEZONE || 'America/New_York';
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
 }
 
-export async function fetchTodayCalendarEvents(): Promise<CalendarEvent[]> {
+export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEvent[]; error?: string }> {
   if (!isCalendarConfigured()) {
-    return [];
+    const missing = [
+      !process.env.GOOGLE_CLIENT_ID && 'GOOGLE_CLIENT_ID',
+      !process.env.GOOGLE_CLIENT_SECRET && 'GOOGLE_CLIENT_SECRET',
+      !process.env.GOOGLE_REFRESH_TOKEN && 'GOOGLE_REFRESH_TOKEN',
+    ].filter(Boolean);
+    return { events: [], error: `Missing env vars: ${missing.join(", ")}` };
   }
 
   try {
@@ -52,12 +58,12 @@ export async function fetchTodayCalendarEvents(): Promise<CalendarEvent[]> {
     const cal = google.calendar({ version: 'v3', auth: oauth });
     const calendarId = getCalendarId();
     const now = new Date();
+    const tz = process.env.APP_TIMEZONE || 'America/New_York';
 
-    // Fetch events from start of today through end of today
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
+    // Fetch events from start of today through end of today (timezone-aware)
+    const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const todayStart = new Date(localDateStr + 'T00:00:00');
+    const todayEnd = new Date(localDateStr + 'T23:59:59');
 
     const res = await cal.events.list({
       calendarId,
@@ -70,7 +76,7 @@ export async function fetchTodayCalendarEvents(): Promise<CalendarEvent[]> {
 
     const items = res.data.items ?? [];
 
-    return items
+    const events = items
       .filter((ev) => !!ev.summary) // skip untitled events
       .map((ev) => {
         const isAllDay = !ev.start?.dateTime;
@@ -95,15 +101,17 @@ export async function fetchTodayCalendarEvents(): Promise<CalendarEvent[]> {
           location: ev.location ?? null,
         };
       });
+    return { events };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error(
       JSON.stringify({
         service: 'calendar',
         event: 'fetch_failed',
-        message: err instanceof Error ? err.message : String(err),
+        message,
         timestamp: new Date().toISOString(),
       })
     );
-    return [];
+    return { events: [], error: message };
   }
 }

@@ -33,10 +33,12 @@ export type V2DashboardTimelineItem = {
 
 export type V2DashboardPriorityItem = {
   id: string;
+  taskId?: string;
   title: string;
   source: string;
   actionWebhook: string;
   assignedBot: string;
+  dueAt?: string | null;
 };
 
 export type V2DashboardBotActivity = {

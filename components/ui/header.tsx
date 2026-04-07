@@ -20,15 +20,35 @@ async function checkAllServices() {
 function StatusDot({ service }: { service: ServiceStatus }) {
   const [show, setShow] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHide = () => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+  };
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimer.current = setTimeout(() => setShow(false), 150);
+  };
 
   const statusLabel = service.ok === null ? 'Checking…' : service.ok ? 'Online' : 'Issue detected';
+
+  // Close on outside click (for touch devices where hover doesn't exist)
+  useEffect(() => {
+    if (!show) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [show]);
 
   return (
     <div
       ref={ref}
       className="relative flex items-center gap-1.5 flex-shrink-0 cursor-default"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={() => { cancelHide(); setShow(true); }}
+      onMouseLeave={scheduleHide}
+      onClick={() => setShow((s) => !s)}
     >
       <div
         className="w-2 h-2 rounded-full transition-all"
@@ -41,15 +61,19 @@ function StatusDot({ service }: { service: ServiceStatus }) {
         {service.name}
       </span>
 
-      {/* Tooltip */}
+      {/* Tooltip — fixed so it never clips behind header */}
       {show && (
         <div
-          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 rounded-xl px-3 py-2.5 text-xs w-60 pointer-events-none"
+          className="fixed z-[9999] rounded-xl px-3 py-2.5 text-xs w-64"
+          onMouseEnter={cancelHide}
+          onMouseLeave={scheduleHide}
           style={{
+            top: '48px',
+            left: ref.current ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 270) : 0,
             background: '#0A1628',
             border: '1px solid rgba(0,217,255,0.2)',
             color: '#E8EDF5',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}
         >
           {/* Service name + status */}
@@ -78,11 +102,19 @@ function StatusDot({ service }: { service: ServiceStatus }) {
             </div>
           )}
 
-          {/* Arrow */}
-          <div
-            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45"
-            style={{ background: '#0A1628', borderLeft: '1px solid rgba(0,217,255,0.2)', borderTop: '1px solid rgba(0,217,255,0.2)' }}
-          />
+          {/* Fix button for unhealthy services */}
+          {!service.ok && service.ok !== null && (
+            <a
+              href="https://vercel.com/nuriys-projects/mothership/settings/environment-variables"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 flex items-center justify-center rounded-lg px-2 py-1.5 text-[11px] font-semibold hover:opacity-80 transition-opacity"
+              style={{ background: 'rgba(255,92,92,0.2)', color: '#FF8080', display: 'flex' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Fix in Vercel →
+            </a>
+          )}
         </div>
       )}
     </div>
@@ -190,7 +222,7 @@ export function Header() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border px-2 py-0.5 text-[10px] transition-opacity hover:opacity-80"
+          className="rounded-full border px-3 py-1.5 text-[10px] transition-opacity hover:opacity-80"
           style={{
             borderColor: 'var(--sidebar-border)',
             color: 'var(--sidebar-foreground)',

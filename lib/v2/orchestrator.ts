@@ -426,9 +426,26 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
     getEmailSummary(),
   ]);
 
-  const topPriorities: V2DashboardPriorityItem[] = tasksFeed.today
-    .filter((item) => item.metadata.priority === 'critical' || item.metadata.priority === 'high' || item.status === 'Blocked')
-    .slice(0, 5)
+  // Sort tasks: overdue first (past dueAt), then by dueAt ascending, then undated
+  const allPendingTasks = [...tasksFeed.active, ...tasksFeed.today].filter((t, i, arr) => t.status !== 'Done' && arr.findIndex((x) => x.taskId === t.taskId) === i);
+  const sortedTasks = [...allPendingTasks].sort((a, b) => {
+    const now = Date.now();
+    const aTime = a.metadata.timeframe && a.metadata.timeframe !== 'Today'
+      ? new Date(a.metadata.timeframe).getTime() : null;
+    const bTime = b.metadata.timeframe && b.metadata.timeframe !== 'Today'
+      ? new Date(b.metadata.timeframe).getTime() : null;
+    const aOverdue = aTime !== null && aTime < now;
+    const bOverdue = bTime !== null && bTime < now;
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    if (aTime !== null && bTime !== null) return aTime - bTime;
+    if (aTime !== null) return -1;
+    if (bTime !== null) return 1;
+    return 0;
+  });
+
+  const topPriorities: V2DashboardPriorityItem[] = sortedTasks
+    .slice(0, 10)
     .map((item) => {
       const action = upsertAction({
         dedupeKey: `task:${item.taskId}`,
@@ -439,10 +456,12 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
       });
       return {
         id: action.id,
+        taskId: item.taskId,
         title: item.title,
         source: `From ${item.metadata.department}`,
         actionWebhook: `/api/v2/actions/${action.id}/approve`,
         assignedBot: item.metadata.assignedBot,
+        dueAt: item.metadata.timeframe !== 'Today' ? item.metadata.timeframe : null,
       };
     });
 
@@ -474,10 +493,12 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
 }
 
 function getTimeAwareGreeting(): string {
-  const hour = new Date().getHours();
+  const tz = process.env.APP_TIMEZONE || 'America/New_York';
+  const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz }), 10);
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 21) return 'Good evening';
+  return 'Good night';
 }
 
 const AFFIRMATIONS = [
@@ -505,7 +526,7 @@ function getDailyAffirmation(): string {
 }
 
 async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {
-  const calEvents = await fetchTodayCalendarEvents();
+  const { events: calEvents } = await fetchTodayCalendarEvents();
   const now = new Date();
   const items: V2DashboardTimelineItem[] = [];
 
@@ -544,11 +565,14 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     // (when calendar is connected, tasks stay in Top Priorities for drag-drop)
     if (calEvents.length === 0) {
       const syntheticHour = 9 + items.length;
-      when.setHours(syntheticHour, 0, 0, 0);
+      const tzLabel = process.env.APP_TIMEZONE || 'America/New_York';
+      const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tzLabel });
+      const syntheticLocal = new Date(`${localDateStr}T${String(syntheticHour).padStart(2, '0')}:00:00`);
+      when.setTime(syntheticLocal.getTime());
       const isPast = now > when;
       const isCurrent = !isPast && items.filter((i) => i.status !== 'done').length === 0;
       items.push({
-        time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        time: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel }),
         title: task.title,
         iconType: isPast ? 'check' : isCurrent ? 'spark' : 'clock',
         status: isPast ? 'done' : isCurrent ? 'current' : 'upcoming',
@@ -561,9 +585,15 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     }
   }
 
-  // 3. Detect focus blocks (gaps > 30 min between calendar events)
-  if (calEvents.length >= 2) {
+  // 3. Detect focus blocks (gaps > 30 min between calendar events, or after a single event through end of day)
+  if (calEvents.length >= 1) {
+    const tzLabel2 = process.env.APP_TIMEZONE || 'America/New_York';
+    const localDateStr2 = now.toLocaleDateString('en-CA', { timeZone: tzLabel2 });
+    const endOfDay = new Date(`${localDateStr2}T23:59:59`);
+
     const sorted = [...calEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    // Check gaps between consecutive events
     for (let i = 0; i < sorted.length - 1; i++) {
       const endCurrent = sorted[i].endDate ?? sorted[i].startDate;
       const startNext = sorted[i + 1].startDate;
@@ -577,7 +607,7 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
           ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
           : `${gapRemMin}m`;
         items.push({
-          time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+          time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel2 }),
           title: `Focus Block — ${durationLabel} available`,
           iconType: 'focus',
           status: now > new Date(startNext) ? 'done' : now >= focusStart ? 'current' : 'upcoming',
@@ -587,6 +617,30 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
           isDraggable: false,
         });
       }
+    }
+
+    // Check gap after the last event through end of day
+    const lastEvent = sorted[sorted.length - 1];
+    const lastEnd = lastEvent.endDate ?? lastEvent.startDate;
+    const gapAfterMs = endOfDay.getTime() - new Date(lastEnd).getTime();
+    const gapAfterMin = gapAfterMs / 60000;
+    if (gapAfterMin >= 30) {
+      const focusStart = new Date(lastEnd);
+      const gapHours = Math.floor(gapAfterMin / 60);
+      const gapRemMin = Math.round(gapAfterMin % 60);
+      const durationLabel = gapHours > 0
+        ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
+        : `${gapRemMin}m`;
+      items.push({
+        time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel2 }),
+        title: `Focus Block — ${durationLabel} available`,
+        iconType: 'focus',
+        status: now > endOfDay ? 'done' : now >= focusStart ? 'current' : 'upcoming',
+        type: 'focus-block',
+        startDate: focusStart.toISOString(),
+        endDate: endOfDay.toISOString(),
+        isDraggable: false,
+      });
     }
   }
 
@@ -677,3 +731,4 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
     await updateTask({ id: taskId, status: TaskStatus.IN_PROGRESS });
   }
 }
+
