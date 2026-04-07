@@ -40,6 +40,7 @@ const actionStore = new Map<string, PredictiveActionState>();
 const dedupeStore = new Map<string, string>();
 const pendingRubyDrafts = new Set<string>();
 const rubyDraftStore = new Map<string, V2EmailDraft>();
+const sentDrafts = new Set<string>();
 
 const BOT_PROFILES: Array<{
   key: BotRouteKey;
@@ -161,6 +162,7 @@ function deterministicTemplateDrafts(emailId: string, subject: string): V2EmailD
 
 async function generateRubyDraft(emailId: string, subject: string, preview: string) {
   if (pendingRubyDrafts.has(emailId)) return;
+  if (sentDrafts.has(emailId)) return;
   pendingRubyDrafts.add(emailId);
 
   try {
@@ -732,3 +734,16 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Draft store accessors — used by the ruby-custom send route
+// ---------------------------------------------------------------------------
+export function getRubyDraft(emailId: string): V2EmailDraft | undefined {
+  return rubyDraftStore.get(emailId);
+}
+
+export function markDraftSent(emailId: string): void {
+  sentDrafts.add(emailId);
+  rubyDraftStore.delete(emailId);
+  pendingRubyDrafts.delete(emailId);
+}
