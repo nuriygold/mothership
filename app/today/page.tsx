@@ -10,10 +10,22 @@ import {
   Send, UserPlus, Droplets, Footprints, Dumbbell, Heart, BookOpen, RotateCcw,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
-import { KissinBooth } from '@/components/today/kissin-booth';
 import { LiveRuby } from '@/components/today/live-ruby';
 import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
+
+type MergedItem =
+  | (V2DashboardTimelineItem & { _calEvent?: false })
+  | (Partial<CalendarEvent> & {
+      _calEvent: true;
+      id: string;
+      title: string;
+      startDate: string;
+      startTime: string;
+      endTime: string | null;
+      status: 'done' | 'current' | 'upcoming';
+    });
+
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
