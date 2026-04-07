@@ -15,7 +15,12 @@ type Message = {
 const QUICK_PROMPTS = [
   'Summarize blockers',
   'Draft follow-up to top email',
-  'Adrian finance queue status',
+  'Finance queue status',
+  'selfcare',
+  'openclaw status',
+  'openclaw restart',
+  'openclaw doctor',
+  'openclaw models status',
 ];
 
 const SESSION_KEY = `booth-${Math.random().toString(36).slice(2)}`;
@@ -29,6 +34,7 @@ export function KissinBooth() {
   const [connected, setConnected] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [butterfly, setButterfly] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -49,6 +55,10 @@ export function KissinBooth() {
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+
+    // Butterfly animation
+    setButterfly(true);
+    setTimeout(() => setButterfly(false), 700);
 
     const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', text: trimmed, ts: new Date() };
     const botId = `b-${Date.now()}`;
@@ -310,14 +320,30 @@ export function KissinBooth() {
           />
         </button>
 
-        {/* Send button */}
+        {/* Send button with butterfly animation */}
         <button
           onClick={() => send(input)}
           disabled={!input.trim() || isBusy}
-          className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+          className="w-9 h-9 flex items-center justify-center rounded-2xl flex-shrink-0 transition-all hover:opacity-80 disabled:opacity-40 overflow-hidden relative"
           style={{ background: 'var(--color-purple)' }}
         >
-          <Send className="w-4 h-4 text-white" />
+          <span
+            className="absolute inset-0 flex items-center justify-center transition-all duration-700"
+            style={butterfly ? {
+              transform: 'translate(120%, -120%) rotate(45deg) scale(0)',
+              opacity: 0,
+            } : {
+              transform: 'translate(0,0) rotate(0deg) scale(1)',
+              opacity: 1,
+            }}
+          >
+            <Send className="w-4 h-4 text-white" />
+          </span>
+          {butterfly && (
+            <span className="absolute inset-0 flex items-center justify-center animate-ping" style={{ animationDuration: '0.6s', animationIterationCount: 1 }}>
+              🦋
+            </span>
+          )}
         </button>
       </div>
     </div>
