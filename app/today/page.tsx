@@ -441,14 +441,55 @@ function WellnessAnchors() {
   );
 }
 
+// ── Today-keyed localStorage helpers ─────────────────────────────────────────
+function todayKey(suffix: string) {
+  return `today-${new Date().toDateString()}-${suffix}`;
+}
+function loadTodayJSON<T>(suffix: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const s = localStorage.getItem(todayKey(suffix));
+    return s ? JSON.parse(s) as T : fallback;
+  } catch { return fallback; }
+}
+function saveTodayJSON(suffix: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(todayKey(suffix), JSON.stringify(value)); } catch { /**/ }
+}
+
 export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [dragOverEnd, setDragOverEnd] = useState(false);
-  const [droppedTasks, setDroppedTasks] = useState<V2DashboardTimelineItem[]>([]);
-  const [dismissedPriorityIds, setDismissedPriorityIds] = useState<Set<string>>(new Set());
+
+  // Persisted across refreshes — keyed to today's date, auto-clears tomorrow
+  const [droppedTasks, setDroppedTasksRaw] = useState<V2DashboardTimelineItem[]>([]);
+  const [dismissedPriorityIds, setDismissedPriorityIdsRaw] = useState<Set<string>>(new Set());
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    setDroppedTasksRaw(loadTodayJSON<V2DashboardTimelineItem[]>('droppedTasks', []));
+    setDismissedPriorityIdsRaw(new Set(loadTodayJSON<string[]>('dismissedIds', [])));
+  }, []);
+
+  // Wrapped setters that also persist
+  const setDroppedTasks = useCallback((updater: ((prev: V2DashboardTimelineItem[]) => V2DashboardTimelineItem[]) | V2DashboardTimelineItem[]) => {
+    setDroppedTasksRaw((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      saveTodayJSON('droppedTasks', next);
+      return next;
+    });
+  }, []);
+  const setDismissedPriorityIds = useCallback((updater: ((prev: Set<string>) => Set<string>) | Set<string>) => {
+    setDismissedPriorityIdsRaw((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      saveTodayJSON('dismissedIds', [...next]);
+      return next;
+    });
+  }, []);
+
   const draggedItemRef = useRef<{ id: string; title: string; assignedBot: string; source: string } | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
@@ -1024,5 +1065,6 @@ export default function TodayPage() {
     </>
   );
 }
+
 
 
