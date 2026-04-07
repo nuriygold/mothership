@@ -7,7 +7,7 @@ import {
   Calendar, Star, CheckCircle2, Clock, Zap, Video,
   GripVertical, Target, Sparkles, Trophy, Plus,
   ListChecks, MessageSquare, X, Award, ChevronDown,
-  Send, UserPlus, RotateCcw,
+  Send, UserPlus, Droplets, Footprints, Dumbbell, Heart, BookOpen,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { KissinBooth } from '@/components/today/kissin-booth';
@@ -299,18 +299,69 @@ function AssignToDropdown({ currentBot, taskTitle, onAssign }: { currentBot?: st
   );
 }
 
-// ── Merged timeline item type ─────────────────────────────────────────────────
-type MergedItem = (V2DashboardTimelineItem & { _calEvent?: false }) | {
-  _calEvent: true;
-  id: string;
-  title: string;
-  startTime: string;
-  endTime: string | null;
-  startDate: string;
-  meetingUrl: string | null;
-  location: string | null;
-  status: 'done' | 'current' | 'upcoming';
-};
+// ── Wellness Anchors ──────────────────────────────────────────────────────────
+interface WellnessState {
+  water: number;    // 0–8 glasses
+  steps: number;    // 0–10 (thousands of steps)
+  workout: boolean;
+  prayer: boolean;
+  journal: boolean;
+}
+
+const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
+
+function wellnessKey() { return `wellness-${new Date().toDateString()}`; }
+
+function loadWellness(): WellnessState {
+  if (typeof window === 'undefined') return WELLNESS_DEFAULT;
+  try { const s = localStorage.getItem(wellnessKey()); return s ? { ...WELLNESS_DEFAULT, ...JSON.parse(s) } : WELLNESS_DEFAULT; } catch { return WELLNESS_DEFAULT; }
+}
+
+function saveWellness(s: WellnessState) {
+  try { localStorage.setItem(wellnessKey(), JSON.stringify(s)); } catch { /**/ }
+}
+
+function WellnessAnchors() {
+  const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
+  useEffect(() => { setW(loadWellness()); }, []);
+
+  function update(patch: Partial<WellnessState>) {
+    setW((prev) => { const next = { ...prev, ...patch }; saveWellness(next); return next; });
+  }
+
+  const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal].filter(Boolean).length;
+
+  const anchors = [
+    { key: 'water',   label: 'Water',   sub: `${w.water}/8`,       icon: Droplets,  active: w.water >= 8,  bg: 'var(--color-sky)',      text: 'var(--color-sky-text)',      onTap: () => update({ water: w.water >= 8 ? 0 : w.water + 1 }) },
+    { key: 'steps',   label: 'Steps',   sub: `${w.steps}k`,        icon: Footprints,active: w.steps >= 10, bg: 'var(--color-mint)',     text: 'var(--color-mint-text)',     onTap: () => update({ steps: w.steps >= 10 ? 0 : w.steps + 1 }) },
+    { key: 'workout', label: 'Move',    sub: w.workout ? '✓' :'–', icon: Dumbbell,  active: w.workout,     bg: 'var(--color-peach)',    text: 'var(--color-peach-text)',    onTap: () => update({ workout: !w.workout }) },
+    { key: 'prayer',  label: 'Prayer',  sub: w.prayer  ? '✓' :'–', icon: Heart,     active: w.prayer,      bg: 'var(--color-lavender)', text: 'var(--color-lavender-text)', onTap: () => update({ prayer: !w.prayer }) },
+    { key: 'journal', label: 'Journal', sub: w.journal ? '✓' :'–', icon: BookOpen,  active: w.journal,     bg: 'var(--color-lemon)',    text: 'var(--color-lemon-text)',    onTap: () => update({ journal: !w.journal }) },
+  ];
+
+  return (
+    <div className="rounded-3xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>Daily Anchors</p>
+        <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{done}/5</span>
+      </div>
+      <div className="grid grid-cols-5 gap-2">
+        {anchors.map((a) => {
+          const Icon = a.icon;
+          return (
+            <button key={a.key} onClick={a.onTap}
+              className="flex flex-col items-center gap-1.5 rounded-2xl py-3 px-1 transition-all hover:scale-105 active:scale-95"
+              style={{ background: a.active ? a.bg : 'var(--muted)', border: `1.5px solid ${a.active ? a.text : 'transparent'}` }}>
+              <Icon className="w-4 h-4" style={{ color: a.active ? a.text : 'var(--muted-foreground)' }} />
+              <span className="text-[10px] font-semibold" style={{ color: a.active ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
+              <span className="text-[9px]" style={{ color: a.active ? a.text : 'var(--muted-foreground)', opacity: 0.75 }}>{a.sub}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
@@ -579,7 +630,10 @@ export default function TodayPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[1fr_1fr]">
+      {/* ── Daily Anchors ── */}
+      <WellnessAnchors />
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
         {/* ── Left: Today's Timeline ── */}
         <div className="space-y-4">
           <Card>
