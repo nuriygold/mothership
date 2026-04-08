@@ -15,7 +15,6 @@ import { TrophyModal } from '@/components/today/trophy-modal';
 import { NowLine } from '@/components/today/now-line';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
-import { TakeActionModal } from '@/components/today/take-action-modal';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
