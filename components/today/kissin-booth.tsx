@@ -118,9 +118,9 @@ export function KissinBooth({
       let buf = '';
       let accumulated = '';
 
-      while (true) {
+      stream: while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) break stream;
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop() ?? '';
@@ -128,7 +128,7 @@ export function KissinBooth({
           const t = line.trim();
           if (!t.startsWith('data:')) continue;
           const ds = t.slice(5).trim();
-          if (ds === '[DONE]') break;
+          if (ds === '[DONE]') break stream;
           try {
             const evt = JSON.parse(ds);
             if (evt.delta) {
