@@ -14,3 +14,4 @@ coverage/
 tsconfig.tsbuildinfo
 tsconfig.tsbuildinfo
 fix-*.js
+.oura-tokens.json

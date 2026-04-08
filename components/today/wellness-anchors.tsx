@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Droplets, Footprints, Dumbbell, Heart, BookOpen } from 'lucide-react';
+import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import type { OuraTodayData } from '@/lib/oura';
 
 interface WellnessState {
   water: number;    // 0–8 glasses
@@ -12,6 +14,10 @@ interface WellnessState {
 }
 
 const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
+
+function todayDate() {
+  return new Date().toISOString().split('T')[0]; // "2026-04-08"
+}
 
 function wellnessKey() { return `wellness-${new Date().toDateString()}`; }
 
@@ -27,18 +33,65 @@ function saveWellness(s: WellnessState) {
   try { localStorage.setItem(wellnessKey(), JSON.stringify(s)); } catch { /**/ }
 }
 
+async function fetchFromSupabase(): Promise<WellnessState | null> {
+  const { data, error } = await supabase
+    .from('wellness_logs')
+    .select('water, steps, workout, prayer, journal')
+    .eq('date', todayDate())
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    water: data.water,
+    steps: data.steps,
+    workout: data.workout,
+    prayer: data.prayer,
+    journal: data.journal,
+  };
+}
+
+async function syncToSupabase(state: WellnessState) {
+  await supabase.from('wellness_logs').upsert(
+    { date: todayDate(), ...state, updated_at: new Date().toISOString() },
+    { onConflict: 'date' }
+  );
+}
+
 export function WellnessAnchors() {
   const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [celebrate, setCelebrate] = useState(false);
+  const [oura, setOura] = useState<OuraTodayData | null>(null);
   const celebrateTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => { setW(loadWellness()); }, []);
+  useEffect(() => {
+    // 1. Load localStorage immediately for instant render
+    const local = loadWellness();
+    setW(local);
+
+    // 2. Fetch Supabase + Oura in parallel
+    Promise.all([
+      fetchFromSupabase(),
+      fetch('/api/oura/today').then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
+    ]).then(([remote, ouraData]) => {
+      setOura(ouraData);
+      const base = remote ?? local;
+      // Oura wins for steps and workout when connected
+      const merged: WellnessState = {
+        ...base,
+        ...(ouraData?.connected ? { steps: ouraData.steps, workout: ouraData.workout } : {}),
+      };
+      setW(merged);
+      saveWellness(merged);
+      if (ouraData?.connected) void syncToSupabase(merged);
+    });
+  }, []);
+
   useEffect(() => () => clearTimeout(celebrateTimer.current), []);
 
   function update(patch: Partial<WellnessState>) {
     setW((prev) => {
       const next = { ...prev, ...patch };
       saveWellness(next);
+      void syncToSupabase(next); // fire-and-forget — localStorage already updated
       const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal;
       if (allDone) {
         setCelebrate(true);
@@ -72,13 +125,23 @@ export function WellnessAnchors() {
     {
       key: 'steps', label: 'Steps', icon: Footprints,
       active: w.steps >= 10, bg: 'var(--color-mint)', text: 'var(--color-mint-text)',
-      sub: <span className="text-[9px]">{w.steps}k / 10k</span>,
+      sub: (
+        <span className="text-[9px] flex items-center gap-0.5">
+          {oura?.connected && <Zap className="w-2 h-2 opacity-60" />}
+          {w.steps}k / 10k
+        </span>
+      ),
       onTap: () => update({ steps: w.steps >= 10 ? 0 : w.steps + 1 }),
     },
     {
       key: 'workout', label: 'Move', icon: Dumbbell,
       active: w.workout, bg: 'var(--color-peach)', text: 'var(--color-peach-text)',
-      sub: <span className="text-[9px]">{w.workout ? 'Done ✓' : 'Tap to log'}</span>,
+      sub: (
+        <span className="text-[9px] flex items-center gap-0.5">
+          {oura?.connected && <Zap className="w-2 h-2 opacity-60" />}
+          {w.workout ? 'Done ✓' : 'Tap to log'}
+        </span>
+      ),
       onTap: () => update({ workout: !w.workout }),
     },
     {
@@ -98,7 +161,7 @@ export function WellnessAnchors() {
   return (
     <div className="rounded-3xl border p-4 transition-all"
       style={{
-        background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : 'var(--card)',
+        background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : '#EDE8DC',
         borderColor: celebrate ? '#F59E0B' : 'var(--border)',
       }}>
       <div className="flex items-center justify-between mb-3">
