@@ -1,12 +1,12 @@
 'use client';
 
-import { type CSSProperties, type ElementType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  Calendar, Star, CheckCircle2, Clock, Zap, Video,
+  Calendar, Star, CheckCircle2, Zap, Video,
   GripVertical, Trophy, Plus,
-  ListChecks, MessageSquare, X, Sparkles,
+  ListChecks, MessageSquare,
   Send,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { TrophyModal } from '@/components/today/trophy-modal';
 import { NowLine } from '@/components/today/now-line';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
+import { TakeActionModal } from '@/components/today/take-action-modal';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
