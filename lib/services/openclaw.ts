@@ -111,6 +111,11 @@ export async function checkGateway(): Promise<{ ok: boolean; reason: string }> {
     }
     return { ok: true, reason: 'Gateway reachable' };
   } catch (error) {
-    return { ok: false, reason: String(error) };
+    const msg = error instanceof Error ? error.message : String(error);
+    const isTimeout = error instanceof Error && error.name === 'TimeoutError';
+    const reason = isTimeout
+      ? `Gateway timed out after 10s (${gateway})`
+      : `Gateway unreachable: ${msg} (${gateway})`;
+    return { ok: false, reason };
   }
 }
