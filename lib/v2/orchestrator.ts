@@ -225,12 +225,18 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
       typeof task.sourceChannel === 'string' && task.sourceChannel.includes('task_pool')
         ? 'GitHub'
         : 'Internal';
+    const tz = process.env.APP_TIMEZONE || 'America/New_York';
+    const dueAtISO = task.dueAt ? new Date(task.dueAt).toISOString() : null;
+    const timeframe = dueAtISO
+      ? new Date(dueAtISO).toLocaleDateString('en-US', { timeZone: tz, month: 'numeric', day: 'numeric', year: 'numeric' })
+      : 'Today';
     return {
       taskId: String(task.id),
       status: mapTaskStatus(task.status as TaskStatus),
       title: task.title,
       metadata: {
-        timeframe: task.dueAt ? new Date(task.dueAt).toLocaleDateString() : 'Today',
+        timeframe,
+        dueAtISO,
         department: task.workflow?.name || 'Operations',
         assignedBot: botNameForRoute(route),
         priority: mapTaskPriority((task.priority as TaskPriority) || TaskPriority.MEDIUM),
@@ -442,10 +448,8 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   const allPendingTasks = [...tasksFeed.active, ...tasksFeed.today].filter((t, i, arr) => t.status !== 'Done' && arr.findIndex((x) => x.taskId === t.taskId) === i);
   const sortedTasks = [...allPendingTasks].sort((a, b) => {
     const now = Date.now();
-    const aTime = a.metadata.timeframe && a.metadata.timeframe !== 'Today'
-      ? new Date(a.metadata.timeframe).getTime() : null;
-    const bTime = b.metadata.timeframe && b.metadata.timeframe !== 'Today'
-      ? new Date(b.metadata.timeframe).getTime() : null;
+    const aTime = a.metadata.dueAtISO ? new Date(a.metadata.dueAtISO).getTime() : null;
+    const bTime = b.metadata.dueAtISO ? new Date(b.metadata.dueAtISO).getTime() : null;
     const aOverdue = aTime !== null && aTime < now;
     const bOverdue = bTime !== null && bTime < now;
     if (aOverdue && !bOverdue) return -1;
@@ -473,7 +477,7 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
         source: `From ${item.metadata.department}`,
         actionWebhook: `/api/v2/actions/${action.id}/approve`,
         assignedBot: item.metadata.assignedBot,
-        dueAt: item.metadata.timeframe !== 'Today' ? item.metadata.timeframe : null,
+        dueAt: item.metadata.dueAtISO ?? null,
       };
     });
 

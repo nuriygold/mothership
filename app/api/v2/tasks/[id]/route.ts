@@ -1,5 +1,6 @@
 import { ensureV2Authorized } from '@/lib/v2/auth';
 import { mutateTaskFromAction } from '@/lib/v2/orchestrator';
+import { updateTask } from '@/lib/services/tasks';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,13 @@ export async function PATCH(
     }
 
     if (body.action === 'assign') {
-      console.log('Assign task', params.id, 'to', body.ownerLogin);
+      if (!body.ownerLogin) {
+        return Response.json(
+          { error: { code: 'VALIDATION_ERROR', message: 'ownerLogin is required for assign' } },
+          { status: 400 }
+        );
+      }
+      await updateTask({ id: params.id, ownerLogin: body.ownerLogin });
       return Response.json({ ok: true, assigned: body.ownerLogin });
     }
 
