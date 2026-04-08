@@ -100,6 +100,8 @@ export type V2BotProfile = {
   identity: {
     name: string;
     role: string;
+    colorKey: 'mint' | 'pink' | 'sky' | 'lemon' | 'lavender';
+    iconKey: 'trending-up' | 'mail' | 'search' | 'file-text';
   };
   liveState: {
     currentTask: string;
