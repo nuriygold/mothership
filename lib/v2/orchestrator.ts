@@ -49,11 +49,15 @@ const BOT_PROFILES: Array<{
   workingStyle: string;
   personality: string;
   strengths: string[];
+  colorKey: 'mint' | 'pink' | 'sky' | 'lemon' | 'lavender';
+  iconKey: 'trending-up' | 'mail' | 'search' | 'file-text';
 }> = [
   {
     key: 'adrian',
     name: 'Adrian',
     role: 'Financial Operations',
+    colorKey: 'mint',
+    iconKey: 'trending-up',
     workingStyle: 'Methodical and reconciliation-first',
     personality: 'Calm, detail-first operator',
     strengths: ['Financial analysis', 'Data reconciliation', 'Exception flagging'],
@@ -62,6 +66,8 @@ const BOT_PROFILES: Array<{
     key: 'ruby',
     name: 'Ruby',
     role: 'Comms & Writing',
+    colorKey: 'pink',
+    iconKey: 'mail',
     workingStyle: 'Fast iteration with tone-aware variants',
     personality: 'Warm, direct, and pragmatic',
     strengths: ['Email drafting', 'Message sequencing', 'Narrative clarity'],
@@ -70,6 +76,8 @@ const BOT_PROFILES: Array<{
     key: 'emerald',
     name: 'Emerald',
     role: 'Research & Synthesis',
+    colorKey: 'sky',
+    iconKey: 'search',
     workingStyle: 'Evidence-first synthesis',
     personality: 'Curious and structured',
     strengths: ['Research synthesis', 'Briefing', 'Comparative analysis'],
@@ -78,6 +86,8 @@ const BOT_PROFILES: Array<{
     key: 'adobe',
     name: 'Adobe Pettaway',
     role: 'Document Intelligence',
+    colorKey: 'lemon',
+    iconKey: 'file-text',
     workingStyle: 'Extraction and schema validation',
     personality: 'Precise and literal',
     strengths: ['Document parsing', 'Entity extraction', 'Validation checks'],
@@ -270,7 +280,7 @@ export async function getV2BotsFeed(): Promise<V2BotsFeed> {
       }));
 
     return {
-      identity: { name: profile.name, role: profile.role },
+      identity: { name: profile.name, role: profile.role, colorKey: profile.colorKey, iconKey: profile.iconKey },
       liveState: {
         currentTask: current?.title ?? 'Awaiting assignment',
         status: current ? (current.status === TaskStatus.BLOCKED ? 'blocked' : 'working') : 'idle',
