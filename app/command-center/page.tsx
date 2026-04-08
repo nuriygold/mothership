@@ -49,7 +49,7 @@ async function checkGateway() {
   const res = await fetch('/api/openclaw/health');
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.message ?? 'Gateway unreachable');
+    throw new Error(body?.reason ?? 'Gateway unreachable');
   }
   return res.json();
 }

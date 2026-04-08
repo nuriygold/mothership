@@ -1,3 +1,5 @@
+import { agentForKey } from '@/lib/services/openclaw';
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -12,9 +14,7 @@ export async function POST(req: Request) {
 
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
-  const agentId = process.env.OPENCLAW_AGENT_RUBY;
   const model = process.env.OPENCLAW_MODEL || 'openclaw/ruby';
-  const defaultAgent = process.env.OPENCLAW_DEFAULT_AGENT || 'main';
 
   if (!gateway || !token) {
     const fallback = 'Ruby is not configured. Set OPENCLAW_GATEWAY and OPENCLAW_TOKEN.';
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  const resolvedAgent = agentId || defaultAgent;
+  const resolvedAgent = agentForKey('ruby');
 
   let upstreamRes: Response;
   try {
@@ -37,6 +37,7 @@ export async function POST(req: Request) {
         ...(sessionKey ? { 'x-openclaw-session-key': sessionKey } : {}),
       },
       body: JSON.stringify({ stream: true, model, input: text }),
+      signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

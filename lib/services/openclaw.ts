@@ -4,7 +4,7 @@ type DispatchInput = {
   sessionKey?: string | null;
 };
 
-function agentForKey(key?: string) {
+export function agentForKey(key?: string) {
   if (!key) return process.env.OPENCLAW_DEFAULT_AGENT || 'main';
   if (key === 'ruby') return process.env.OPENCLAW_AGENT_RUBY || 'ruby';
   if (key === 'emerald') return process.env.OPENCLAW_AGENT_EMERALD || 'emerald';
@@ -37,6 +37,7 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
       ...(input.sessionKey ? { 'x-openclaw-session-key': input.sessionKey } : {}),
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!res.ok || !res.body) {
@@ -50,33 +51,37 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
   let done = false;
   let error: string | null = null;
 
-  while (!done) {
-    const { value, done: readerDone } = await reader.read();
-    if (readerDone) break;
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      if (!line.startsWith('data:')) continue;
-      const dataStr = line.slice(5).trim();
-      if (dataStr === '[DONE]') {
-        done = true;
-        break;
-      }
-      try {
-        const evt = JSON.parse(dataStr);
-        const payload = evt?.data ?? evt;
-        if (payload?.event === 'response.output_text.delta') {
-          output += payload?.data ?? '';
-        } else if (payload?.event === 'response.error') {
-          error = payload?.data ?? 'Unknown error';
-        } else if (payload?.event === 'response.completed') {
+  try {
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      if (readerDone) break;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const dataStr = line.slice(5).trim();
+        if (dataStr === '[DONE]') {
           done = true;
           break;
         }
-      } catch (_e) {
-        // ignore parse errors on noise lines
+        try {
+          const evt = JSON.parse(dataStr);
+          const payload = evt?.data ?? evt;
+          if (payload?.event === 'response.output_text.delta') {
+            output += payload?.data ?? '';
+          } else if (payload?.event === 'response.error') {
+            error = payload?.data ?? 'Unknown error';
+          } else if (payload?.event === 'response.completed') {
+            done = true;
+            break;
+          }
+        } catch (_e) {
+          // ignore parse errors on noise lines
+        }
       }
     }
+  } finally {
+    reader.releaseLock();
   }
 
   if (error) {
@@ -89,22 +94,23 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
   };
 }
 
-export async function checkGateway() {
+export async function checkGateway(): Promise<{ ok: boolean; reason: string }> {
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
   if (!gateway || !token) {
-    return { ok: false, message: 'Missing OPENCLAW_GATEWAY or OPENCLAW_TOKEN' };
+    return { ok: false, reason: 'Missing OPENCLAW_GATEWAY or OPENCLAW_TOKEN' };
   }
   try {
     const res = await fetch(`${gateway.replace(/\/$/, '')}/health`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
-      return { ok: false, message: `Gateway responded ${res.status}` };
+      return { ok: false, reason: `Gateway responded ${res.status}` };
     }
-    return { ok: true, message: 'Gateway reachable' };
+    return { ok: true, reason: 'Gateway reachable' };
   } catch (error) {
-    return { ok: false, message: String(error) };
+    return { ok: false, reason: String(error) };
   }
 }
