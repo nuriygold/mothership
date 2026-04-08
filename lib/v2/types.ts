@@ -72,6 +72,7 @@ export type V2TaskItem = {
   title: string;
   metadata: {
     timeframe: string;
+    dueAtISO: string | null; // raw ISO for sorting; null when no due date
     department: string;
     assignedBot: string;
     priority: 'low' | 'medium' | 'high' | 'critical';

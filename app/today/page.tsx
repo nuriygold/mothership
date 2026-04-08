@@ -15,6 +15,7 @@ import { TrophyModal } from '@/components/today/trophy-modal';
 import { NowLine } from '@/components/today/now-line';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
+import { TakeActionModal } from '@/components/today/take-action-modal';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER } from '@/lib/constants/today';
 import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
@@ -82,7 +83,7 @@ export default function TodayPage() {
     });
   }, []);
 
-  const draggedItemRef = useRef<{ id: string; title: string; assignedBot: string; source: string } | null>(null);
+  const draggedItemRef = useRef<{ id: string; taskId?: string; title: string; assignedBot: string; source: string } | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
   const [showTrophy, setShowTrophy] = useState(false);
@@ -224,8 +225,13 @@ export default function TodayPage() {
       if (idx === -1) return prev;
       return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
     });
+    fetch(`/api/v2/tasks/${taskId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'defer' }),
+    }).catch(() => {});
+    void mutate();
     setToastMsg('Task moved back to timeline');
-  }, [mergedTimeline]);
+  }, [mergedTimeline, mutate]);
 
   // ── Gateway → Pre-fill Kissin' Booth ──
   const handleGateway = useCallback((title: string) => {
@@ -248,19 +254,24 @@ export default function TodayPage() {
   // ── Assign To ──
   const handleAssign = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
     const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
-    try {
-      await fetch('/api/telegram/send', {
+    // Persist the assignment and notify the bot via Telegram in parallel
+    await Promise.allSettled([
+      fetch(`/api/v2/tasks/${taskId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'assign', ownerLogin: newBot }),
+      }),
+      fetch('/api/telegram/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: `📌 New assignment: ${taskTitle}\nPlease pick this up.`, botKey }),
-      });
-      setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
-    } catch { setToastMsg('Assignment failed'); }
+      }),
+    ]);
+    setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
     void mutate();
   }, [mutate]);
 
   // ── Drag & Drop ──
   const handleDragStart = useCallback((item: typeof priorities[0]) => {
-    draggedItemRef.current = { id: item.id, title: item.title, assignedBot: item.assignedBot, source: item.source };
+    draggedItemRef.current = { id: item.id, taskId: item.taskId, title: item.title, assignedBot: item.assignedBot, source: item.source };
   }, []);
 
   const handleDrop = useCallback((dropIdx: number) => {
@@ -276,7 +287,7 @@ export default function TodayPage() {
       status: 'upcoming',
       iconType: 'clock',
       assignedBot: dragged.assignedBot,
-      taskId: dragged.id,
+      taskId: dragged.taskId,
       startDate: refStartDate ?? undefined,
       endTime: undefined,
       meetingUrl: undefined,
@@ -301,7 +312,7 @@ export default function TodayPage() {
       status: 'upcoming',
       iconType: 'clock',
       assignedBot: dragged.assignedBot,
-      taskId: dragged.id,
+      taskId: dragged.taskId,
       startDate: farFuture,
       endTime: undefined,
       meetingUrl: undefined,
