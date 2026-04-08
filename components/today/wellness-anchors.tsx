@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Droplets, Footprints, Dumbbell, Heart, BookOpen } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface WellnessState {
   water: number;    // 0–8 glasses
@@ -12,6 +13,10 @@ interface WellnessState {
 }
 
 const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
+
+function todayDate() {
+  return new Date().toISOString().split('T')[0]; // "2026-04-08"
+}
 
 function wellnessKey() { return `wellness-${new Date().toDateString()}`; }
 
@@ -27,18 +32,55 @@ function saveWellness(s: WellnessState) {
   try { localStorage.setItem(wellnessKey(), JSON.stringify(s)); } catch { /**/ }
 }
 
+async function fetchFromSupabase(): Promise<WellnessState | null> {
+  const { data, error } = await supabase
+    .from('wellness_logs')
+    .select('water, steps, workout, prayer, journal')
+    .eq('date', todayDate())
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    water: data.water,
+    steps: data.steps,
+    workout: data.workout,
+    prayer: data.prayer,
+    journal: data.journal,
+  };
+}
+
+async function syncToSupabase(state: WellnessState) {
+  await supabase.from('wellness_logs').upsert(
+    { date: todayDate(), ...state, updated_at: new Date().toISOString() },
+    { onConflict: 'date' }
+  );
+}
+
 export function WellnessAnchors() {
   const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [celebrate, setCelebrate] = useState(false);
   const celebrateTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => { setW(loadWellness()); }, []);
+  useEffect(() => {
+    // Load localStorage immediately for instant render
+    const local = loadWellness();
+    setW(local);
+
+    // Then fetch from Supabase — overrides local if server has more recent data
+    fetchFromSupabase().then((remote) => {
+      if (remote) {
+        setW(remote);
+        saveWellness(remote); // keep localStorage in sync
+      }
+    });
+  }, []);
+
   useEffect(() => () => clearTimeout(celebrateTimer.current), []);
 
   function update(patch: Partial<WellnessState>) {
     setW((prev) => {
       const next = { ...prev, ...patch };
       saveWellness(next);
+      void syncToSupabase(next); // fire-and-forget — localStorage already updated
       const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal;
       if (allDone) {
         setCelebrate(true);
