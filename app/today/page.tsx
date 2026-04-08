@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ElementType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
@@ -88,6 +88,7 @@ export default function TodayPage() {
   const [showTrophy, setShowTrophy] = useState(false);
   const [gatewayPrefill, setGatewayPrefill] = useState('');
   const [toastMsg, setToastMsg] = useState('');
+  const [actionModalItem, setActionModalItem] = useState<V2DashboardPriorityItem | null>(null);
   const nowRef = useRef<HTMLDivElement>(null);
 
   // EventSource with retry (up to 3 attempts: 2s, 4s, 8s backoff)
@@ -313,19 +314,9 @@ export default function TodayPage() {
   }, []);
 
   // ── Take Action ──
-  const handleTakeAction = useCallback(async (item: typeof priorities[0]) => {
-    try {
-      const res = await fetch(item.actionWebhook, { method: 'POST' });
-      if (res.ok) {
-        setToastMsg(`Action taken: "${item.title}"`);
-      } else {
-        setToastMsg(`Action failed for "${item.title}"`);
-      }
-    } catch {
-      setToastMsg(`Could not reach server for "${item.title}"`);
-    }
-    void mutate();
-  }, [mutate]);
+  const handleTakeAction = useCallback((item: V2DashboardPriorityItem) => {
+    setActionModalItem(item);
+  }, []);
 
   return (
     <>
@@ -335,6 +326,16 @@ export default function TodayPage() {
         localCompletions={completedTitles}
         completedIds={completedIds}
         onUndoTask={handleUndoDone}
+      />
+    )}
+
+    {actionModalItem && (
+      <TakeActionModal
+        item={actionModalItem}
+        onClose={() => setActionModalItem(null)}
+        onDone={() => { void mutate(); }}
+        onComplete={(taskId) => { void handleComplete(taskId); }}
+        onGateway={(title) => { setGatewayPrefill(title); setActionModalItem(null); }}
       />
     )}
 
