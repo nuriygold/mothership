@@ -161,7 +161,7 @@ export function WellnessAnchors() {
   return (
     <div className="rounded-3xl border p-4 transition-all"
       style={{
-        background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : 'var(--card)',
+        background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : '#EDE8DC',
         borderColor: celebrate ? '#F59E0B' : 'var(--border)',
       }}>
       <div className="flex items-center justify-between mb-3">
