@@ -1,6 +1,6 @@
 'use client';
 
-import { type ElementType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ElementType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
@@ -292,7 +292,7 @@ function TakeActionModal({
 
   const actions: Array<{
     key: string;
-    icon: ElementType<{ className?: string; style?: Record<string, string> }>;
+    icon: ElementType<{ className?: string; style?: CSSProperties }>;
     label: string;
     desc: string;
     color: string;
