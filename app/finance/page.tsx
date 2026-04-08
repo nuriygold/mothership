@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { RefreshCw, AlertCircle, CreditCard, Upload } from 'lucide-react';
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown } from 'lucide-react';
 import type { V2FinanceOverviewFeed, V2FinancePlan } from '@/lib/v2/types';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -17,21 +17,43 @@ const PLAN_TYPE_LABELS: Record<string, string> = {
   CUSTOM: 'Plan',
 };
 
+type QuickAction =
+  | { label: string; live: true; onClick: () => void | Promise<void> }
+  | { label: string; live: false };
+
 function TrendBadge({ trend }: { trend: string }) {
   const isPositive = trend.startsWith('+');
   const isNegative = trend.startsWith('-');
   return (
     <span
       className="text-xs font-semibold"
-      style={{ color: isPositive ? '#0A6B5A' : isNegative ? '#E53E3E' : 'var(--muted-foreground)' }}
+      style={{ color: isPositive ? '#6EE7B7' : isNegative ? '#F87171' : 'rgba(232,237,245,0.6)' }}
     >
       {isPositive ? '↗' : isNegative ? '↘' : '→'} {trend}
     </span>
   );
 }
 
+function exportTransactionsCSV(transactions: V2FinanceOverviewFeed['transactions']) {
+  const rows = [['Date', 'Description', 'Category', 'Amount', 'Handled By']];
+  for (const tx of transactions) {
+    rows.push([tx.date, tx.description, tx.category, String(tx.amount), tx.handledByBot]);
+  }
+  const csv = rows
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `vault-statement-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
-  const completedMilestones = plan.milestones.filter((m) => m.completedAt).length;
   const targetDate = plan.targetDate
     ? new Date(plan.targetDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : null;
@@ -39,26 +61,28 @@ function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
   return (
     <div
       className="rounded-2xl p-4 space-y-3"
-      style={{ background: 'var(--input-background)', border: '1px solid var(--border)' }}
+      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{plan.title}</p>
-          {plan.goal && <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{plan.goal}</p>}
+          <p className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>{plan.title}</p>
+          {plan.goal && (
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(232,237,245,0.60)' }}>{plan.goal}</p>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span
             className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
             style={{
-              background: plan.status === 'ACTIVE' ? 'var(--color-mint)' : 'var(--muted)',
-              color: plan.status === 'ACTIVE' ? 'var(--color-mint-text)' : 'var(--muted-foreground)',
+              background: plan.status === 'ACTIVE' ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.08)',
+              color: plan.status === 'ACTIVE' ? '#6EE7B7' : 'rgba(232,237,245,0.55)',
             }}
           >
             {plan.status.charAt(0) + plan.status.slice(1).toLowerCase()}
           </span>
           <span
             className="rounded-full px-2 py-0.5 text-[10px]"
-            style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
+            style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.55)' }}
           >
             {PLAN_TYPE_LABELS[plan.type] ?? plan.type}
           </span>
@@ -67,18 +91,23 @@ function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
 
       {plan.currentValue != null && plan.targetValue != null && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          <div className="flex items-center justify-between text-xs" style={{ color: 'rgba(232,237,245,0.60)' }}>
             <span>
-              {plan.currentValue.toLocaleString()}{plan.unit ? ` ${plan.unit}` : ''} of {plan.targetValue.toLocaleString()}{plan.unit ? ` ${plan.unit}` : ''}
+              {plan.currentValue.toLocaleString()}{plan.unit ? ` ${plan.unit}` : ''} of{' '}
+              {plan.targetValue.toLocaleString()}{plan.unit ? ` ${plan.unit}` : ''}
             </span>
             {plan.progressPercent != null && (
-              <span style={{ color: 'var(--color-cyan)', fontWeight: 600 }}>{plan.progressPercent}%</span>
+              <span style={{ color: '#C9A84C', fontWeight: 600 }}>{plan.progressPercent}%</span>
             )}
           </div>
-          <div className="h-1.5 rounded-full" style={{ background: 'rgba(100,130,200,0.15)' }}>
+          <div className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.10)' }}>
             <div
-              className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500"
-              style={{ width: `${plan.progressPercent ?? 0}%` }}
+              className="h-1.5 rounded-full"
+              style={{
+                width: `${plan.progressPercent ?? 0}%`,
+                background: 'linear-gradient(to right, #C9A84C, #8B5A8A)',
+                boxShadow: '0 0 6px rgba(201,168,76,0.3)',
+              }}
             />
           </div>
         </div>
@@ -87,16 +116,24 @@ function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
       {plan.milestones.length > 0 && (
         <div className="space-y-1">
           {plan.milestones.map((m, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
+            <div key={`${plan.id}-m-${i}`} className="flex items-center gap-2 text-xs">
               <div
                 className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                style={{ background: m.completedAt ? 'var(--color-cyan)' : 'var(--border)' }}
+                style={{
+                  background: m.completedAt ? '#C9A84C' : 'transparent',
+                  border: m.completedAt ? 'none' : '1px solid rgba(232,237,245,0.25)',
+                }}
               />
-              <span style={{ color: m.completedAt ? 'var(--muted-foreground)' : 'var(--foreground)', textDecoration: m.completedAt ? 'line-through' : 'none' }}>
+              <span
+                style={{
+                  color: m.completedAt ? 'rgba(232,237,245,0.50)' : '#E8EDF5',
+                  textDecoration: m.completedAt ? 'line-through' : 'none',
+                }}
+              >
                 {m.label}
               </span>
               {m.targetValue != null && (
-                <span className="ml-auto" style={{ color: 'var(--muted-foreground)' }}>
+                <span className="ml-auto" style={{ color: 'rgba(232,237,245,0.60)' }}>
                   {m.targetValue.toLocaleString()}{plan.unit ? ` ${plan.unit}` : ''}
                 </span>
               )}
@@ -105,7 +142,7 @@ function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+      <div className="flex items-center justify-between text-[11px]" style={{ color: 'rgba(232,237,245,0.45)' }}>
         <span>Managed by {plan.managedByBot}</span>
         {targetDate && <span>Target: {targetDate}</span>}
       </div>
@@ -114,50 +151,95 @@ function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
 }
 
 export default function FinancePage() {
-  const { data, mutate, isLoading } = useSWR<V2FinanceOverviewFeed>('/api/v2/finance/overview', fetcher, { refreshInterval: 30000 });
+  const { data } = useSWR<V2FinanceOverviewFeed>('/api/v2/finance/overview', fetcher, {
+    refreshInterval: 30000,
+  });
 
+  const [adrianStatus, setAdrianStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [showAllPayables, setShowAllPayables] = useState(false);
+  const [exportedFlash, setExportedFlash] = useState(false);
+
+  const payables = data?.payables ?? [];
+  const transactions = data?.transactions ?? [];
   const activePlans = (data?.plans ?? []).filter((p) => p.status === 'ACTIVE');
   const otherPlans = (data?.plans ?? []).filter((p) => p.status !== 'ACTIVE');
   const allPlans = [...activePlans, ...otherPlans];
 
-  // Derive alerts from data
   const alerts = useMemo(() => {
     const list: { text: string; color: string; textColor: string }[] = [];
-    const overdue = (data?.payables ?? []).filter((p) => p.status === 'overdue');
-    if (overdue.length > 0) {
-      list.push({ text: `${overdue[0].vendor} payment requires manual approval`, color: 'var(--color-pink)', textColor: 'var(--color-pink-text)' });
+    const overduePayables = (data?.payables ?? []).filter((p) => p.status === 'overdue');
+    if (overduePayables.length > 0) {
+      list.push({
+        text: `${overduePayables[0].vendor} payment requires manual approval`,
+        color: 'var(--color-pink)',
+        textColor: 'var(--color-pink-text)',
+      });
     }
-    const pending = (data?.payables ?? []).filter((p) => p.status === 'pending');
-    if (pending.length > 0) {
-      list.push({ text: `${pending.length} invoice${pending.length > 1 ? 's' : ''} processed by Adrian need review`, color: 'var(--color-peach)', textColor: 'var(--color-peach-text)' });
+    const pendingPayables = (data?.payables ?? []).filter((p) => p.status === 'pending');
+    if (pendingPayables.length > 0) {
+      list.push({
+        text: `${pendingPayables.length} invoice${pendingPayables.length > 1 ? 's' : ''} processed by Adrian need review`,
+        color: 'var(--color-peach)',
+        textColor: 'var(--color-peach-text)',
+      });
     }
-    if (activePlans.length > 0) {
-      const plan = activePlans[0];
-      if (plan.progressPercent != null) {
-        list.push({ text: `${plan.title}: ${plan.progressPercent}% toward target`, color: 'var(--color-mint)', textColor: 'var(--color-mint-text)' });
-      }
+    const firstActive = (data?.plans ?? []).find((p) => p.status === 'ACTIVE');
+    if (firstActive?.progressPercent != null) {
+      list.push({
+        text: `${firstActive.title}: ${firstActive.progressPercent}% toward target`,
+        color: 'var(--color-mint)',
+        textColor: 'var(--color-mint-text)',
+      });
     }
     if (list.length === 0) {
-      list.push({ text: 'All systems nominal — no pending actions', color: 'var(--color-mint)', textColor: 'var(--color-mint-text)' });
+      list.push({
+        text: 'All systems nominal — no pending actions',
+        color: 'var(--color-mint)',
+        textColor: 'var(--color-mint-text)',
+      });
     }
     return list;
-  }, [data, activePlans]);
+  }, [data]);
 
-  // April summary from transactions
-  const aprilSummary = useMemo(() => {
+  const monthlySummary = useMemo(() => {
     const txs = data?.transactions ?? [];
     const income = txs.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
     const expenses = txs.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-    const total = data?.accounts.reduce((s, a) => s + a.balance, 0) ?? 0;
-    return { income: income || 8500, expenses: expenses || 4200, total: total || 0 };
+    return { income, expenses };
   }, [data]);
 
-  const quickActions = [
-    'Record Transaction',
-    'Create Invoice',
-    'Request Report from Adrian',
-    'Set Budget Alert',
-    'Export Statement',
+  function handleExport() {
+    exportTransactionsCSV(transactions);
+    setExportedFlash(true);
+    setTimeout(() => setExportedFlash(false), 2000);
+  }
+
+  const vaultActions: QuickAction[] = [
+    { label: 'Record Transaction', live: false },
+    { label: 'Create Invoice', live: false },
+    {
+      label: 'Request Report from Adrian',
+      live: true,
+      onClick: async () => {
+        setAdrianStatus('sending');
+        try {
+          const res = await fetch('/api/telegram/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: 'Adrian, please generate a finance summary report: current account balances, top payables, and credit score progress.',
+              botKey: 'bot1',
+            }),
+          });
+          setAdrianStatus(res.ok ? 'sent' : 'error');
+        } catch {
+          setAdrianStatus('error');
+        }
+        setTimeout(() => setAdrianStatus('idle'), 3000);
+      },
+    },
+    { label: 'Set Budget Alert', live: false },
+    { label: 'Export Statement', live: true, onClick: handleExport },
   ];
 
   return (
@@ -165,71 +247,104 @@ export default function FinancePage() {
       {/* Heading */}
       <div>
         <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Finance</h1>
-        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Money operations &amp; controls</p>
+        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+          Financial intelligence under Emerald&apos;s stewardship
+        </p>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         {/* Left column */}
         <div className="space-y-5">
 
-          {/* Account Balances — mint pastel */}
-          <div className="rounded-3xl p-5" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.06)' }}>
+          {/* Holdings */}
+          <div
+            className="rounded-3xl p-5"
+            style={{ background: 'rgba(6,32,20,0.93)', border: '1px solid rgba(0,180,100,0.15)' }}
+          >
             <div className="flex items-center gap-2 mb-4">
-              <RefreshCw className="w-4 h-4" style={{ color: 'var(--color-mint-text)' }} />
-              <h2 className="text-base font-semibold" style={{ color: 'var(--color-mint-text)' }}>Account Balances</h2>
+              <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
+              <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(data?.accounts ?? [
-                { type: 'Operating Account', balance: 47823.42, trendPercentage: '+2.3%' },
-                { type: 'Savings', balance: 125000, trendPercentage: '+0.8%' },
-                { type: 'Credit Card', balance: 3241.17, trendPercentage: '-1.2%' },
-              ]).map((account) => (
-                <div
-                  key={account.type}
-                  className="rounded-2xl p-4"
-                  style={{ background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.8)' }}
+            {data?.accounts && data.accounts.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                {data.accounts.map((account) => (
+                  <div
+                    key={account.type}
+                    className="rounded-2xl p-4"
+                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+                  >
+                    <p className="text-xs mb-1" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.type}</p>
+                    <p className="text-xl font-bold" style={{ color: '#E8EDF5' }}>
+                      ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <TrendBadge trend={account.trendPercentage} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
+                <Lock className="w-7 h-7" style={{ color: 'rgba(232,237,245,0.25)' }} />
+                <p className="text-sm font-medium" style={{ color: '#E8EDF5', opacity: 0.6 }}>
+                  No balance data on record
+                </p>
+                <p
+                  className="text-xs text-center"
+                  style={{ color: 'rgba(232,237,245,0.4)', maxWidth: 220 }}
                 >
-                  <p className="text-xs mb-1" style={{ color: 'var(--color-mint-text)', opacity: 0.75 }}>{account.type}</p>
-                  <p className="text-xl font-bold" style={{ color: '#0F1B35' }}>
-                    ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                  <TrendBadge trend={account.trendPercentage} />
-                </div>
-              ))}
-            </div>
+                  Live account balances have not been reported to The Vault yet.
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Upcoming Bills — peach pastel */}
-          <div className="rounded-3xl p-5" style={{ background: 'var(--color-peach)', border: '1px solid rgba(0,0,0,0.06)' }}>
+          {/* Obligations */}
+          <div
+            className="rounded-3xl p-5"
+            style={{ background: 'rgba(26,10,26,0.93)', border: '1px solid rgba(180,60,160,0.15)' }}
+          >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4" style={{ color: 'var(--color-peach-text)' }} />
-                <h2 className="text-base font-semibold" style={{ color: 'var(--color-peach-text)' }}>Upcoming Bills &amp; Payments</h2>
+                <CreditCard className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
+                <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Obligations</h2>
               </div>
-              <button
-                className="text-xs font-medium rounded-full px-3 py-1"
-                style={{ background: 'rgba(255,255,255,0.6)', color: 'var(--color-peach-text)', border: '1px solid rgba(255,255,255,0.8)' }}
-              >
-                View All
-              </button>
+              {payables.length > 3 && (
+                <button
+                  onClick={() => setShowAllPayables(!showAllPayables)}
+                  className="flex items-center gap-1 text-xs font-medium rounded-full px-3 py-1"
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    color: 'rgba(232,237,245,0.7)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                  }}
+                >
+                  {showAllPayables ? 'Show Less' : 'View All'}
+                  <ChevronDown
+                    className="w-3 h-3"
+                    style={{
+                      transform: showAllPayables ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease',
+                    }}
+                  />
+                </button>
+              )}
             </div>
             <div className="space-y-2">
-              {(data?.payables ?? []).length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--color-peach-text)', opacity: 0.7 }}>No upcoming bills.</p>
+              {payables.length === 0 && (
+                <p className="text-sm" style={{ color: 'rgba(232,237,245,0.5)' }}>No obligations on record.</p>
               )}
-              {(data?.payables ?? []).map((payable, idx) => (
+              {(showAllPayables ? payables : payables.slice(0, 3)).map((payable, idx) => (
                 <div
                   key={`${payable.vendor}-${idx}`}
                   className="flex items-center justify-between rounded-2xl px-4 py-3"
-                  style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium" style={{ color: '#0F1B35' }}>{payable.vendor}</span>
+                      <span className="text-sm font-medium" style={{ color: '#E8EDF5' }}>{payable.vendor}</span>
                       {payable.status === 'pending' && (
                         <span
                           className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                          style={{ background: 'rgba(139,116,214,0.15)', color: '#4A3DAA' }}
+                          style={{ background: 'rgba(139,116,214,0.20)', color: '#C4B5FD' }}
                         >
                           Auto-pay
                         </span>
@@ -237,15 +352,17 @@ export default function FinancePage() {
                       {payable.status === 'overdue' && (
                         <span
                           className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                          style={{ background: 'rgba(229,62,62,0.12)', color: '#E53E3E' }}
+                          style={{ background: 'rgba(248,113,113,0.15)', color: '#F87171' }}
                         >
                           Overdue
                         </span>
                       )}
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-peach-text)', opacity: 0.75 }}>Due {payable.dueDate}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(232,237,245,0.50)' }}>
+                      Due {payable.dueDate}
+                    </p>
                   </div>
-                  <span className="text-sm font-semibold" style={{ color: '#0F1B35' }}>
+                  <span className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>
                     ${payable.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -253,37 +370,49 @@ export default function FinancePage() {
             </div>
           </div>
 
-          {/* Recent Transactions — sky pastel */}
-          <div className="rounded-3xl p-5" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.06)' }}>
+          {/* Activity */}
+          <div
+            className="rounded-3xl p-5"
+            style={{ background: 'rgba(6,12,32,0.93)', border: '1px solid rgba(60,100,220,0.15)' }}
+          >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4" style={{ color: 'var(--color-sky-text)' }} />
-                <h2 className="text-base font-semibold" style={{ color: 'var(--color-sky-text)' }}>Recent Transactions</h2>
+                <Download className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
+                <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Activity</h2>
               </div>
               <button
+                onClick={handleExport}
                 className="text-xs font-medium rounded-full px-3 py-1"
-                style={{ background: 'rgba(255,255,255,0.6)', color: 'var(--color-sky-text)', border: '1px solid rgba(255,255,255,0.8)' }}
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  color: 'rgba(232,237,245,0.7)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                }}
               >
-                Export
+                {exportedFlash ? 'Exported ✓' : 'Export'}
               </button>
             </div>
             <div className="space-y-2">
-              {(data?.transactions ?? []).length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--color-sky-text)', opacity: 0.7 }}>No recent transactions.</p>
+              {transactions.length === 0 && (
+                <p className="text-sm" style={{ color: 'rgba(232,237,245,0.5)' }}>No recent activity recorded.</p>
               )}
-              {(data?.transactions ?? []).map((tx, idx) => (
+              {transactions.map((tx, idx) => (
                 <div
                   key={`${tx.description}-${idx}`}
                   className="flex items-center justify-between rounded-2xl px-4 py-3"
-                  style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
                 >
                   <div>
-                    <p className="text-sm font-medium" style={{ color: '#0F1B35' }}>{tx.description}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-sky-text)', opacity: 0.75 }}>
-                      {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {tx.category} · {tx.handledByBot}
+                    <p className="text-sm font-medium" style={{ color: '#E8EDF5' }}>{tx.description}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(232,237,245,0.50)' }}>
+                      {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ·{' '}
+                      {tx.category} · {tx.handledByBot}
                     </p>
                   </div>
-                  <span className="text-sm font-semibold" style={{ color: tx.amount < 0 ? '#E53E3E' : '#0A6B5A' }}>
+                  <span
+                    className="text-sm font-semibold"
+                    style={{ color: tx.amount < 0 ? '#F87171' : '#6EE7B7' }}
+                  >
                     {tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -291,13 +420,13 @@ export default function FinancePage() {
             </div>
           </div>
 
-          {/* Finance Plans */}
+          {/* Financial Plans */}
           {allPlans.length > 0 && (
             <div
               className="rounded-3xl p-5"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+              style={{ background: 'rgba(16,14,28,0.93)', border: '1px solid rgba(123,104,238,0.15)' }}
             >
-              <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Financial Plans</h2>
+              <h2 className="text-base font-semibold mb-4" style={{ color: '#E8EDF5' }}>Financial Plans</h2>
               <div className="space-y-3">
                 {allPlans.map((plan) => (
                   <PlanProgressCard key={plan.id} plan={plan} />
@@ -310,11 +439,14 @@ export default function FinancePage() {
         {/* Right column */}
         <div className="space-y-5">
 
-          {/* Alerts & Priorities */}
-          <div className="rounded-3xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+          {/* Alerts */}
+          <div
+            className="rounded-3xl p-5"
+            style={{ background: 'rgba(12,9,22,0.95)', border: '1px solid rgba(123,104,238,0.12)' }}
+          >
             <div className="flex items-center gap-2 mb-3">
-              <AlertCircle className="w-4 h-4" style={{ color: 'var(--muted-foreground)' }} />
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Alerts &amp; Priorities</h2>
+              <AlertCircle className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.5)' }} />
+              <h2 className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>Alerts</h2>
             </div>
             <div className="space-y-2">
               {alerts.map((alert, idx) => (
@@ -329,41 +461,108 @@ export default function FinancePage() {
             </div>
           </div>
 
-          {/* Quick Actions — lavender */}
-          <div className="rounded-3xl p-5" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.06)' }}>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-lavender-text)' }}>Quick Actions</h2>
+          {/* Vault Actions */}
+          <div
+            className="rounded-3xl p-5"
+            style={{ background: 'rgba(12,9,22,0.95)', border: '1px solid rgba(123,104,238,0.12)' }}
+          >
+            <h2 className="text-sm font-semibold mb-3" style={{ color: '#E8EDF5' }}>Vault Actions</h2>
             <div className="space-y-2">
-              {quickActions.map((action) => (
-                <button
-                  key={action}
-                  className="w-full text-left rounded-2xl px-4 py-2.5 text-sm transition-opacity hover:opacity-80"
-                  style={{ background: 'rgba(255,255,255,0.55)', color: '#0F1B35', border: '1px solid rgba(255,255,255,0.8)' }}
-                >
-                  {action}
-                </button>
-              ))}
+              {vaultActions.map((action) =>
+                action.live ? (
+                  <button
+                    key={action.label}
+                    onClick={action.onClick}
+                    className="w-full text-left rounded-2xl px-4 py-2.5 text-sm"
+                    style={{
+                      background: 'rgba(255,255,255,0.10)',
+                      color: '#E8EDF5',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span className="flex items-center gap-2">
+                      {action.label === 'Request Report from Adrian' ? (
+                        <>
+                          <Send className="w-3 h-3 flex-shrink-0" style={{ opacity: 0.7 }} />
+                          {adrianStatus === 'sending'
+                            ? 'Dispatching…'
+                            : adrianStatus === 'sent'
+                              ? 'Report requested ✓'
+                              : adrianStatus === 'error'
+                                ? 'Error — try again'
+                                : action.label}
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3 h-3 flex-shrink-0" style={{ opacity: 0.7 }} />
+                          {exportedFlash ? 'Exported ✓' : action.label}
+                        </>
+                      )}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    key={action.label}
+                    disabled
+                    className="w-full text-left rounded-2xl px-4 py-2.5 text-sm"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'rgba(232,237,245,0.30)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      cursor: 'default',
+                    }}
+                  >
+                    <span className="flex items-center justify-between">
+                      {action.label}
+                      <span
+                        className="text-[9px] font-semibold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                        style={{
+                          background: 'rgba(255,255,255,0.06)',
+                          color: 'rgba(232,237,245,0.35)',
+                        }}
+                      >
+                        Standby
+                      </span>
+                    </span>
+                  </button>
+                )
+              )}
             </div>
           </div>
 
-          {/* April Summary — pink */}
-          <div className="rounded-3xl p-5" style={{ background: 'var(--color-pink)', border: '1px solid rgba(0,0,0,0.06)' }}>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-pink-text)' }}>
+          {/* Monthly Summary */}
+          <div
+            className="rounded-3xl p-5"
+            style={{ background: 'rgba(12,9,22,0.95)', border: '1px solid rgba(123,104,238,0.12)' }}
+          >
+            <h2 className="text-sm font-semibold mb-3" style={{ color: '#E8EDF5' }}>
               {new Date().toLocaleDateString('en-US', { month: 'long' })} Summary
             </h2>
-            <div className="space-y-2">
-              {[
-                { label: 'Income', value: aprilSummary.income, positive: true },
-                { label: 'Expenses', value: aprilSummary.expenses, positive: false },
-                { label: 'Net', value: aprilSummary.income - aprilSummary.expenses, positive: aprilSummary.income >= aprilSummary.expenses },
-              ].map(({ label, value, positive }) => (
-                <div key={label} className="flex items-center justify-between text-sm">
-                  <span style={{ color: 'var(--color-pink-text)', opacity: 0.8 }}>{label}</span>
-                  <span className="font-semibold" style={{ color: positive ? 'var(--color-mint-text)' : '#E53E3E' }}>
-                    ${value.toLocaleString('en-US', { minimumFractionDigits: 0 })}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {!data ? (
+              <p className="text-sm text-center py-4" style={{ color: 'rgba(232,237,245,0.45)' }}>
+                No monthly activity available.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {[
+                  { label: 'Income', value: monthlySummary.income, positive: true },
+                  { label: 'Expenses', value: monthlySummary.expenses, positive: false },
+                  {
+                    label: 'Net',
+                    value: monthlySummary.income - monthlySummary.expenses,
+                    positive: monthlySummary.income >= monthlySummary.expenses,
+                  },
+                ].map(({ label, value, positive }) => (
+                  <div key={label} className="flex items-center justify-between text-sm">
+                    <span style={{ color: 'rgba(232,237,245,0.65)' }}>{label}</span>
+                    <span className="font-semibold" style={{ color: positive ? '#6EE7B7' : '#F87171' }}>
+                      ${value.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>
