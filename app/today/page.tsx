@@ -4,13 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  Calendar, Star, CheckCircle2, Clock, Zap, Video,
-  GripVertical, Target, Sparkles, Trophy, Plus,
-  ListChecks, MessageSquare, X, Award, ChevronDown,
-  Send, UserPlus, Droplets, Footprints, Dumbbell, Heart, BookOpen, RotateCcw,
+  Calendar, Star, CheckCircle2, Zap, Video,
+  GripVertical, Trophy, Plus,
+  ListChecks, MessageSquare,
+  Send,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { LiveRuby } from '@/components/today/live-ruby';
+import { TrophyModal } from '@/components/today/trophy-modal';
+import { NowLine } from '@/components/today/now-line';
+import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
+import { WellnessAnchors } from '@/components/today/wellness-anchors';
+import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER } from '@/lib/constants/today';
 import type { V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
@@ -26,430 +31,7 @@ type MergedItem =
       status: 'done' | 'current' | 'upcoming';
     });
 
-
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-// Bot → Telegram bot key mapping
-const BOT_TELEGRAM_KEY: Record<string, string> = {
-  Adrian: 'bot1',
-  Ruby: 'bot2',
-  Emerald: 'bot3',
-  Adobe: 'botAdobe',
-  'Adobe Pettaway': 'botAdobe',
-};
-
-const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe'];
-
-const BOT_COLORS: Record<string, { bg: string; text: string }> = {
-  Adrian: { bg: 'var(--color-peach)', text: 'var(--color-peach-text)' },
-  Ruby: { bg: 'var(--color-pink)', text: 'var(--color-pink-text)' },
-  Emerald: { bg: 'var(--color-mint)', text: 'var(--color-mint-text)' },
-  Adobe: { bg: 'var(--color-lemon)', text: 'var(--color-lemon-text)' },
-};
-
-const APPROVAL_BG: Record<string, string> = {
-  email: 'var(--color-lavender)',
-  finance: 'var(--color-peach)',
-  tasks: 'var(--color-mint)',
-  other: 'var(--color-sky)',
-};
-
-const APPROVAL_TEXT: Record<string, string> = {
-  email: 'var(--color-lavender-text)',
-  finance: 'var(--color-peach-text)',
-  tasks: 'var(--color-mint-text)',
-  other: 'var(--color-sky-text)',
-};
-
-const BOT_BORDER: Record<string, string> = {
-  Adrian: '#E53E3E',
-  Ruby: 'var(--color-purple)',
-  Emerald: 'var(--color-cyan)',
-  Adobe: '#FFB800',
-  default: 'var(--color-purple)',
-};
-
-const TIMELINE_ICON_MAP = {
-  check: CheckCircle2,
-  clock: Clock,
-  alert: Sparkles,
-  spark: Zap,
-  focus: Target,
-};
-
-// ── Trophy Modal ──
-type TrophyData = {
-  since: string;
-  totals: { tasks: number; commands: number; events: number };
-  tasks: Array<{ id: string; title: string; priority: string; completedAt: string }>;
-  commands: Array<{ id: string; input: string; channel: string; completedAt: string | null }>;
-};
-
-function TrophyModal({
-  onClose,
-  localCompletions,
-  completedIds,
-  onUndoTask,
-}: {
-  onClose: () => void;
-  localCompletions: string[];
-  completedIds: Set<string>;
-  onUndoTask: (taskId: string) => void;
-}) {
-  const { data, isLoading } = useSWR<TrophyData>('/api/v2/trophy', fetcher, { revalidateOnMount: true });
-
-  // Merge server tasks with locally completed task titles
-  const allTasks = useMemo(() => {
-    const server = data?.tasks ?? [];
-    const localItems = localCompletions.map((title, i) => ({
-      id: `local-${i}`,
-      title,
-      priority: 'high',
-      completedAt: new Date().toISOString(),
-    }));
-    // Deduplicate by title
-    const seen = new Set(server.map((t) => t.title));
-    const merged = [...server, ...localItems.filter((t) => !seen.has(t.title))];
-    return merged.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
-  }, [data, localCompletions]);
-
-  const total = allTasks.length + (data?.commands ?? []).length;
-
-  function fmtTime(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div
-        className="w-full max-w-lg rounded-3xl flex flex-col"
-        style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          maxHeight: '80vh',
-          boxShadow: '0 24px 48px rgba(0,0,0,0.3)',
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center gap-3 px-5 py-4 rounded-t-3xl flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}
-        >
-          <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(217,119,6,0.15)' }}>
-            <Trophy className="w-5 h-5" style={{ color: '#B45309' }} />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold" style={{ color: '#0F1B35' }}>Trophy Collection</h2>
-            <p className="text-xs" style={{ color: '#92400E' }}>
-              {isLoading ? 'Loading…' : `${total} win${total !== 1 ? 's' : ''} in the last 24 hours`}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="ml-auto w-8 h-8 rounded-xl flex items-center justify-center transition-opacity hover:opacity-70"
-            style={{ background: 'rgba(0,0,0,0.06)' }}
-          >
-            <X className="w-4 h-4" style={{ color: '#0F1B35' }} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 scrollbar-hide">
-          {isLoading && (
-            <div className="py-8 text-center">
-              <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-2" style={{ borderColor: '#FFB800', borderTopColor: 'transparent' }} />
-              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Counting your wins…</p>
-            </div>
-          )}
-
-          {!isLoading && total === 0 && (
-            <div className="py-8 text-center">
-              <Award className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Nothing completed yet today</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>Mark tasks done in the timeline to see them here</p>
-            </div>
-          )}
-
-          {/* Completed Tasks */}
-          {allTasks.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-                Tasks Completed · {allTasks.length}
-              </p>
-              <div className="space-y-2">
-                {allTasks.map((task) => {
-                  const isLocallyDone = task.id.startsWith('local-') ? completedIds.size > 0 : completedIds.has(task.id);
-                  return (
-                    <div
-                      key={task.id}
-                      className="flex items-center gap-3 rounded-2xl px-3 py-2.5"
-                      style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}
-                    >
-                      <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-mint-text)' }} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" style={{ color: '#0F1B35' }}>{task.title}</p>
-                      </div>
-                      <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--color-mint-text)', opacity: 0.75 }}>
-                        {fmtTime(task.completedAt)}
-                      </span>
-                      {/* Oops button — only for locally tracked completions */}
-                      {!task.id.startsWith('local-') && (
-                        <button
-                          onClick={() => { onUndoTask(task.id); onClose(); }}
-                          className="rounded-xl px-2 py-1 text-[10px] font-medium flex items-center gap-1 flex-shrink-0 hover:opacity-80 transition-opacity"
-                          style={{ background: 'rgba(0,0,0,0.08)', color: '#0F1B35' }}
-                          title="Mark as not done"
-                        >
-                          <RotateCcw className="w-2.5 h-2.5" /> Oops
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Completed Commands */}
-          {(data?.commands ?? []).length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted-foreground)' }}>
-                Gateway Commands · {data!.commands.length}
-              </p>
-              <div className="space-y-2">
-                {data!.commands.map((cmd) => (
-                  <div
-                    key={cmd.id}
-                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5"
-                    style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}
-                  >
-                    <Sparkles className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }} />
-                    <p className="text-sm truncate flex-1" style={{ color: '#0F1B35' }}>{cmd.input}</p>
-                    {cmd.completedAt && (
-                      <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--color-sky-text)', opacity: 0.75 }}>
-                        {fmtTime(cmd.completedAt)}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 flex-shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
-          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Resets at midnight</p>
-          <button
-            onClick={onClose}
-            className="rounded-xl px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-80"
-            style={{ background: '#B45309', color: '#FFFFFF' }}
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Now Line ──────────────────────────────────────────────────────────────────
-function NowLine() {
-  const [time, setTime] = useState(() => new Date());
-  useEffect(() => { const i = setInterval(() => setTime(new Date()), 60000); return () => clearInterval(i); }, []);
-  const label = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return (
-    <div className="relative flex items-center my-2" style={{ zIndex: 10 }}>
-      <span className="absolute -top-4 left-0 text-[10px] font-semibold" style={{ color: 'var(--color-cyan)' }}>
-        {label}
-      </span>
-      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 6px rgba(0,217,255,0.6)' }} />
-      <div className="flex-1 h-px" style={{ background: 'var(--color-cyan)', opacity: 0.7 }} />
-    </div>
-  );
-}
-
-// ── Assign-To Dropdown ────────────────────────────────────────────────────────
-function AssignToDropdown({ currentBot, taskTitle, onAssign }: { currentBot?: string; taskTitle: string; onAssign: (bot: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(!open)}
-        className="rounded-lg px-2 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-        style={{ background: 'var(--color-lavender)', color: 'var(--color-lavender-text)' }}>
-        <UserPlus className="w-3 h-3" /> Assign
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 rounded-xl shadow-lg overflow-hidden min-w-[140px]"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-          {ALL_BOTS.filter((b) => b !== currentBot).map((bot) => {
-            const c = BOT_COLORS[bot] ?? BOT_COLORS.Adrian;
-            return (
-              <button key={bot} onClick={() => { onAssign(bot); setOpen(false); }}
-                className="w-full text-left px-3 py-2 text-xs font-medium hover:opacity-80 flex items-center gap-2 transition-all"
-                style={{ color: 'var(--foreground)' }}>
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.text }} />
-                {bot}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Wellness Anchors ──────────────────────────────────────────────────────────
-interface WellnessState {
-  water: number;    // 0–8 glasses
-  steps: number;    // 0–10 (thousands of steps)
-  workout: boolean;
-  prayer: boolean;
-  journal: boolean;
-}
-
-const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
-
-function wellnessKey() { return `wellness-${new Date().toDateString()}`; }
-
-function loadWellness(): WellnessState {
-  if (typeof window === 'undefined') return WELLNESS_DEFAULT;
-  try { const s = localStorage.getItem(wellnessKey()); return s ? { ...WELLNESS_DEFAULT, ...JSON.parse(s) } : WELLNESS_DEFAULT; } catch { return WELLNESS_DEFAULT; }
-}
-
-function saveWellness(s: WellnessState) {
-  try { localStorage.setItem(wellnessKey(), JSON.stringify(s)); } catch { /**/ }
-}
-
-function WellnessAnchors() {
-  const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
-  const [celebrate, setCelebrate] = useState(false);
-  useEffect(() => { setW(loadWellness()); }, []);
-
-  function update(patch: Partial<WellnessState>) {
-    setW((prev) => {
-      const next = { ...prev, ...patch };
-      saveWellness(next);
-      const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal;
-      if (allDone) { setCelebrate(true); setTimeout(() => setCelebrate(false), 1800); }
-      return next;
-    });
-  }
-
-  const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal].filter(Boolean).length;
-  const pct = (done / 5) * 100;
-
-  // SVG ring dimensions
-  const r = 16; const circ = 2 * Math.PI * r;
-
-  const anchors = [
-    {
-      key: 'water', label: 'Water', icon: Droplets,
-      active: w.water >= 8, bg: 'var(--color-sky)', text: 'var(--color-sky-text)',
-      sub: (
-        <span className="flex gap-0.5 flex-wrap justify-center mt-0.5">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <span key={i} className="w-1.5 h-1.5 rounded-full transition-all"
-              style={{ background: i < w.water ? 'var(--color-sky-text)' : 'var(--border)' }} />
-          ))}
-        </span>
-      ),
-      onTap: () => update({ water: w.water >= 8 ? 0 : w.water + 1 }),
-    },
-    {
-      key: 'steps', label: 'Steps', icon: Footprints,
-      active: w.steps >= 10, bg: 'var(--color-mint)', text: 'var(--color-mint-text)',
-      sub: <span className="text-[9px]">{w.steps}k / 10k</span>,
-      onTap: () => update({ steps: w.steps >= 10 ? 0 : w.steps + 1 }),
-    },
-    {
-      key: 'workout', label: 'Move', icon: Dumbbell,
-      active: w.workout, bg: 'var(--color-peach)', text: 'var(--color-peach-text)',
-      sub: <span className="text-[9px]">{w.workout ? 'Done ✓' : 'Tap to log'}</span>,
-      onTap: () => update({ workout: !w.workout }),
-    },
-    {
-      key: 'prayer', label: 'Prayer', icon: Heart,
-      active: w.prayer, bg: 'var(--color-lavender)', text: 'var(--color-lavender-text)',
-      sub: <span className="text-[9px]">{w.prayer ? 'Done ✓' : 'Tap to log'}</span>,
-      onTap: () => update({ prayer: !w.prayer }),
-    },
-    {
-      key: 'journal', label: 'Journal', icon: BookOpen,
-      active: w.journal, bg: 'var(--color-lemon)', text: 'var(--color-lemon-text)',
-      sub: <span className="text-[9px]">{w.journal ? 'Done ✓' : 'Tap to log'}</span>,
-      onTap: () => update({ journal: !w.journal }),
-    },
-  ];
-
-  return (
-    <div className="rounded-3xl border p-4 transition-all"
-      style={{
-        background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : 'var(--card)',
-        borderColor: celebrate ? '#F59E0B' : 'var(--border)',
-      }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {/* SVG progress ring */}
-          <svg width="40" height="40" viewBox="0 0 40 40" className="-rotate-90">
-            <circle cx="20" cy="20" r={r} fill="none" stroke="var(--border)" strokeWidth="3" />
-            <circle cx="20" cy="20" r={r} fill="none"
-              stroke={done === 5 ? '#F59E0B' : 'var(--color-cyan)'}
-              strokeWidth="3"
-              strokeDasharray={circ}
-              strokeDashoffset={circ - (circ * pct) / 100}
-              strokeLinecap="round"
-              style={{ transition: 'stroke-dashoffset 0.4s ease' }}
-            />
-            <text x="20" y="20" textAnchor="middle" dominantBaseline="central"
-              className="rotate-90" style={{ fontSize: 10, fontWeight: 700, fill: done === 5 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '20px 20px' }}>
-              {done}/5
-            </text>
-          </svg>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>Daily Anchors</p>
-            <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-              {done === 5 ? '🏆 All done — you\'re on fire!' : `${5 - done} left today`}
-            </p>
-          </div>
-        </div>
-        {celebrate && <span className="text-lg animate-bounce">🎉</span>}
-      </div>
-      <div className="grid grid-cols-5 gap-2">
-        {anchors.map((a) => {
-          const Icon = a.icon;
-          return (
-            <button key={a.key} onClick={a.onTap}
-              className="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 transition-all hover:scale-105 active:scale-95"
-              style={{
-                background: a.active ? a.bg : 'var(--muted)',
-                border: `1.5px solid ${a.active ? a.text : 'transparent'}`,
-                boxShadow: a.active ? `0 2px 8px rgba(0,0,0,0.08)` : 'none',
-              }}>
-              <Icon className="w-4 h-4" style={{ color: a.active ? a.text : 'var(--muted-foreground)' }} />
-              <span className="text-[10px] font-semibold leading-tight"
-                style={{ color: a.active ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
-              <div style={{ color: a.active ? a.text : 'var(--muted-foreground)' }}>{a.sub}</div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ── Today-keyed localStorage helpers ─────────────────────────────────────────
 function todayKey(suffix: string) {
@@ -508,12 +90,26 @@ export default function TodayPage() {
   const [toastMsg, setToastMsg] = useState('');
   const nowRef = useRef<HTMLDivElement>(null);
 
+  // EventSource with retry (up to 3 attempts: 2s, 4s, 8s backoff)
   useEffect(() => {
-    const stream = new EventSource('/api/v2/stream/dashboard');
-    stream.addEventListener('connected', () => setStreamStatus('live'));
-    stream.addEventListener('approval.updated', () => void mutate());
-    stream.onerror = () => setStreamStatus('fallback');
-    return () => stream.close();
+    let attempts = 0;
+    let stream: EventSource;
+    function connect() {
+      stream = new EventSource('/api/v2/stream/dashboard');
+      stream.addEventListener('connected', () => { attempts = 0; setStreamStatus('live'); });
+      stream.addEventListener('approval.updated', () => void mutate());
+      stream.onerror = () => {
+        stream.close();
+        if (attempts < 3) {
+          attempts++;
+          setTimeout(connect, 2 ** attempts * 1000);
+        } else {
+          setStreamStatus('fallback');
+        }
+      };
+    }
+    connect();
+    return () => stream?.close();
   }, [mutate]);
 
   // Toast auto-hide
@@ -778,157 +374,166 @@ export default function TodayPage() {
             </div>
 
             <div className="mt-3 space-y-2">
-              {mergedTimeline.length === 0 && (
+              {!data ? (
+                // Loading skeleton
+                <div className="space-y-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: 'var(--muted)' }} />
+                  ))}
+                </div>
+              ) : mergedTimeline.length === 0 ? (
                 <div className="rounded-xl border-2 border-dashed p-6 text-center" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                   <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">No events yet — check back when calendar syncs</p>
                 </div>
-              )}
-
-              {mergedTimeline.map((entry, idx) => {
-                if (entry._calEvent) {
-                  // ── Calendar event row ──
-                  const calEntry = entry as { _calEvent: true; id: string; title: string; startTime: string; endTime: string | null; startDate: string; meetingUrl: string | null; location: string | null; status: 'done' | 'current' | 'upcoming' };
-                  const isCurrent = calEntry.status === 'current';
-                  const isDone = calEntry.status === 'done';
-                  return (
-                    <div
-                      key={`cal-${calEntry.id}`}
-                      onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
-                      onDragLeave={() => setDragOverIdx(null)}
-                      onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}
-                    >
-                      {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
-                      {dragOverIdx === idx && (
-                        <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
-                      )}
-                      <div className="rounded-xl p-3 transition-all group"
-                        style={{
-                          border: isCurrent ? '1.5px solid var(--color-sky-text)' : '1px solid var(--border)',
-                          background: isCurrent ? 'var(--color-sky)' : 'var(--input-background)',
-                          opacity: isDone ? 0.5 : 1,
-                        }}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="text-sm font-semibold w-16 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }}>
-                              {calEntry.startTime}
-                            </span>
-                            <div className="min-w-0">
-                              <span className="text-sm block truncate" style={{ color: 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none' }}>
-                                {calEntry.title}
-                              </span>
-                              {calEntry.endTime && (
-                                <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
-                                  {calEntry.startTime} – {calEntry.endTime}
+              ) : (
+                <>
+                  {mergedTimeline.map((entry, idx) => {
+                    if (entry._calEvent) {
+                      // ── Calendar event row ──
+                      const calEntry = entry as { _calEvent: true; id: string; title: string; startTime: string; endTime: string | null; startDate: string; meetingUrl: string | null; location: string | null; status: 'done' | 'current' | 'upcoming' };
+                      const isCurrent = calEntry.status === 'current';
+                      const isDone = calEntry.status === 'done';
+                      return (
+                        <div
+                          key={`cal-${calEntry.id}`}
+                          onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+                          onDragLeave={() => setDragOverIdx(null)}
+                          onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}
+                        >
+                          {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
+                          {dragOverIdx === idx && (
+                            <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
+                          )}
+                          <div className="rounded-xl p-3 transition-all group"
+                            style={{
+                              border: isCurrent ? '1.5px solid var(--color-sky-text)' : '1px solid var(--border)',
+                              background: isCurrent ? 'var(--color-sky)' : 'var(--input-background)',
+                              opacity: isDone ? 0.5 : 1,
+                            }}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="text-sm font-semibold w-16 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }}>
+                                  {calEntry.startTime}
                                 </span>
-                              )}
+                                <div className="min-w-0">
+                                  <span className="text-sm block truncate" style={{ color: 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none' }}>
+                                    {calEntry.title}
+                                  </span>
+                                  {calEntry.endTime && (
+                                    <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+                                      {calEntry.startTime} – {calEntry.endTime}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
+                                  Cal
+                                </span>
+                                {isCurrent && (
+                                  <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>Now</span>
+                                )}
+                                {calEntry.meetingUrl && !isDone && (
+                                  <a href={calEntry.meetingUrl} target="_blank" rel="noopener noreferrer"
+                                    className="rounded-lg p-1.5 transition-opacity hover:opacity-80"
+                                    style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
+                                    <Video className="w-3.5 h-3.5" />
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
-                              Cal
-                            </span>
-                            {isCurrent && (
-                              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>Now</span>
-                            )}
-                            {calEntry.meetingUrl && !isDone && (
-                              <a href={calEntry.meetingUrl} target="_blank" rel="noopener noreferrer"
-                                className="rounded-lg p-1.5 transition-opacity hover:opacity-80"
-                                style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
-                                <Video className="w-3.5 h-3.5" />
-                              </a>
-                            )}
+                        </div>
+                      );
+                    }
+
+                    // ── Task / focus-block row ──
+                    const taskEntry = entry as V2DashboardTimelineItem;
+                    const isCurrent = taskEntry.status === 'current';
+                    const isDone = taskEntry.status === 'done';
+                    const isFocus = taskEntry.type === 'focus-block';
+                    const isTask = taskEntry.type === 'task';
+                    const botColors = taskEntry.assignedBot ? BOT_COLORS[taskEntry.assignedBot] : null;
+
+                    return (
+                      <div key={`${taskEntry.time}-${taskEntry.title}-${idx}`}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+                        onDragLeave={() => setDragOverIdx(null)}
+                        onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}>
+                        {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
+                        {dragOverIdx === idx && (
+                          <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
+                        )}
+                        <div className="rounded-xl p-3 transition-all group"
+                          style={{
+                            border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
+                            background: isCurrent ? 'rgba(0,217,255,0.06)' : isFocus ? 'rgba(123,104,238,0.04)' : 'var(--input-background)',
+                            opacity: isDone ? 0.5 : 1,
+                          }}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-sm font-semibold w-16 flex-shrink-0"
+                                style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)' }}>
+                                {taskEntry.time}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="text-sm block truncate"
+                                  style={{ color: isFocus ? 'var(--color-purple)' : 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none', fontStyle: isFocus ? 'italic' : 'normal' }}>
+                                  {taskEntry.title}
+                                </span>
+                                {taskEntry.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{taskEntry.time} – {taskEntry.endTime}</span>}
+                              </div>
+                            </div>
+                            {!isDone && isCurrent && <Zap className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />}
                           </div>
+
+                          {/* Action buttons row */}
+                          {!isDone && (
+                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                              {isTask && (
+                                <button onClick={() => handleComplete(taskEntry.taskId)}
+                                  className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity"
+                                  style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}>
+                                  <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Done</span>
+                                </button>
+                              )}
+                              <button onClick={() => handleGateway(taskEntry.title)}
+                                className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity opacity-0 group-hover:opacity-100"
+                                style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
+                                <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Gateway</span>
+                              </button>
+                              {taskEntry.assignedBot && botColors && (
+                                <button onClick={() => handleBotTelegram(taskEntry.assignedBot!, taskEntry.title)}
+                                  className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 transition-opacity cursor-pointer"
+                                  style={{ background: botColors.bg, color: botColors.text }}
+                                  title={`Message ${taskEntry.assignedBot} on Telegram`}>
+                                  {taskEntry.assignedBot}
+                                </button>
+                              )}
+                              {taskEntry.meetingUrl && (
+                                <a href={taskEntry.meetingUrl} target="_blank" rel="noopener noreferrer"
+                                  className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1"
+                                  style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
+                                  <Video className="w-3 h-3" /> Join
+                                </a>
+                              )}
+                              {isTask && taskEntry.taskId && (
+                                <AssignToDropdown currentBot={taskEntry.assignedBot} taskTitle={taskEntry.title}
+                                  onAssign={(bot) => handleAssign(taskEntry.taskId!, taskEntry.title, bot)} />
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  );
-                }
+                    );
+                  })}
 
-                // ── Task / focus-block row ──
-                const taskEntry = entry as V2DashboardTimelineItem;
-                const isCurrent = taskEntry.status === 'current';
-                const isDone = taskEntry.status === 'done';
-                const isFocus = taskEntry.type === 'focus-block';
-                const isTask = taskEntry.type === 'task';
-                const botColors = taskEntry.assignedBot ? BOT_COLORS[taskEntry.assignedBot] : null;
-
-                return (
-                  <div key={`${taskEntry.time}-${taskEntry.title}-${idx}`}
-                    onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
-                    onDragLeave={() => setDragOverIdx(null)}
-                    onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}>
-                    {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
-                    {dragOverIdx === idx && (
-                      <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
-                    )}
-                    <div className="rounded-xl p-3 transition-all group"
-                      style={{
-                        border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
-                        background: isCurrent ? 'rgba(0,217,255,0.06)' : isFocus ? 'rgba(123,104,238,0.04)' : 'var(--input-background)',
-                        opacity: isDone ? 0.5 : 1,
-                      }}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-sm font-semibold w-16 flex-shrink-0"
-                            style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)' }}>
-                            {taskEntry.time}
-                          </span>
-                          <div className="min-w-0">
-                            <span className="text-sm block truncate"
-                              style={{ color: isFocus ? 'var(--color-purple)' : 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none', fontStyle: isFocus ? 'italic' : 'normal' }}>
-                              {taskEntry.title}
-                            </span>
-                            {taskEntry.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{taskEntry.time} – {taskEntry.endTime}</span>}
-                          </div>
-                        </div>
-                        {!isDone && isCurrent && <Zap className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />}
-                      </div>
-
-                      {/* Action buttons row */}
-                      {!isDone && (
-                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                          {isTask && (
-                            <button onClick={() => handleComplete(taskEntry.taskId)}
-                              className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity"
-                              style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}>
-                              <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Done</span>
-                            </button>
-                          )}
-                          <button onClick={() => handleGateway(taskEntry.title)}
-                            className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity opacity-0 group-hover:opacity-100"
-                            style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
-                            <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Gateway</span>
-                          </button>
-                          {taskEntry.assignedBot && botColors && (
-                            <button onClick={() => handleBotTelegram(taskEntry.assignedBot!, taskEntry.title)}
-                              className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 transition-opacity cursor-pointer"
-                              style={{ background: botColors.bg, color: botColors.text }}
-                              title={`Message ${taskEntry.assignedBot} on Telegram`}>
-                              {taskEntry.assignedBot}
-                            </button>
-                          )}
-                          {taskEntry.meetingUrl && (
-                            <a href={taskEntry.meetingUrl} target="_blank" rel="noopener noreferrer"
-                              className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1"
-                              style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
-                              <Video className="w-3 h-3" /> Join
-                            </a>
-                          )}
-                          {isTask && taskEntry.taskId && (
-                            <AssignToDropdown currentBot={taskEntry.assignedBot} taskTitle={taskEntry.title}
-                              onAssign={(bot) => handleAssign(taskEntry.taskId!, taskEntry.title, bot)} />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* NowLine at end when all entries are in the past */}
-              {nowIndex >= mergedTimeline.length && mergedTimeline.length > 0 && (
-                <div ref={nowRef}><NowLine /></div>
+                  {/* NowLine at end when all entries are in the past */}
+                  {nowIndex >= mergedTimeline.length && mergedTimeline.length > 0 && (
+                    <div ref={nowRef}><NowLine /></div>
+                  )}
+                </>
               )}
 
               {/* ── Drop zone below time bar ── */}
@@ -957,52 +562,60 @@ export default function TodayPage() {
             </div>
             <CardSubtitle>Drag into timeline to schedule · Click to take action</CardSubtitle>
             <div className="mt-3 space-y-2">
-              {availablePriorities.map((item) => {
-                const borderColor = BOT_BORDER[item.assignedBot] ?? BOT_BORDER.default;
-                const botC = BOT_COLORS[item.assignedBot];
-                return (
-                  <div key={item.id}
-                    draggable
-                    onDragStart={() => handleDragStart(item)}
-                    onDragEnd={() => { draggedItemRef.current = null; setDragOverIdx(null); setDragOverEnd(false); }}
-                    className="flex items-center justify-between rounded-xl p-3 group cursor-grab active:cursor-grabbing"
-                    style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <GripVertical className="w-3.5 h-3.5 flex-shrink-0 opacity-30 group-hover:opacity-70 transition-opacity" />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
-                          {item.dueAt && new Date(item.dueAt).getTime() < Date.now() && (
-                            <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(255,92,92,0.15)', color: '#FF5C5C' }}>OVERDUE</span>
-                          )}
+              {!data ? (
+                // Loading skeleton
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: 'var(--muted)' }} />
+                  ))}
+                </div>
+              ) : availablePriorities.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
+              ) : (
+                availablePriorities.map((item) => {
+                  const borderColor = BOT_BORDER[item.assignedBot] ?? BOT_BORDER.default;
+                  const botC = BOT_COLORS[item.assignedBot];
+                  return (
+                    <div key={item.id}
+                      draggable
+                      onDragStart={() => handleDragStart(item)}
+                      onDragEnd={() => { draggedItemRef.current = null; setDragOverIdx(null); setDragOverEnd(false); }}
+                      className="flex items-center justify-between rounded-xl p-3 group cursor-grab active:cursor-grabbing"
+                      style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <GripVertical className="w-3.5 h-3.5 flex-shrink-0 opacity-30 group-hover:opacity-70 transition-opacity" />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
+                            {item.dueAt && new Date(item.dueAt).getTime() < Date.now() && (
+                              <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(255,92,92,0.15)', color: '#FF5C5C' }}>OVERDUE</span>
+                            )}
+                          </div>
+                          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
                         </div>
-                        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {botC && (
+                          <button onClick={() => handleBotTelegram(item.assignedBot, item.title)}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
+                            style={{ background: botC.bg, color: botC.text }}
+                            title={`Message ${item.assignedBot} on Telegram`}>
+                            {item.assignedBot}
+                          </button>
+                        )}
+                        {item.taskId && (
+                          <AssignToDropdown currentBot={item.assignedBot} taskTitle={item.title}
+                            onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
+                        )}
+                        <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
+                          style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+                          onClick={() => handleTakeAction(item)}>
+                          Take Action
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {botC && (
-                        <button onClick={() => handleBotTelegram(item.assignedBot, item.title)}
-                          className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
-                          style={{ background: botC.bg, color: botC.text }}
-                          title={`Message ${item.assignedBot} on Telegram`}>
-                          {item.assignedBot}
-                        </button>
-                      )}
-                      {item.taskId && (
-                        <AssignToDropdown currentBot={item.assignedBot} taskTitle={item.title}
-                          onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
-                      )}
-                      <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
-                        style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
-                        onClick={() => handleTakeAction(item)}>
-                        Take Action
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {availablePriorities.length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
+                  );
+                })
               )}
             </div>
           </Card>
@@ -1075,6 +688,3 @@ export default function TodayPage() {
     </>
   );
 }
-
-
-
