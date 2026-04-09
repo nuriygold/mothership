@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Sidebar } from '@/components/ui/sidebar';
 import { MobileNav } from '@/components/ui/mobile-nav';
@@ -9,6 +9,12 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 export const metadata: Metadata = {
   title: 'Mothership',
   description: 'Operator command center for workflows, runs, and approvals.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 const navItems = [
@@ -32,9 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <MobileNav items={navItems} />
 
           {/* Sidebar + main content below */}
-          <div className="flex" style={{ minHeight: 'calc(100vh - 44px)' }}>
+          <div className="flex main-container">
             <Sidebar items={navItems} />
-            <main className="flex-1 px-4 md:px-8 py-8 pb-12 overflow-auto">
+            <main className="flex-1 px-4 md:px-8 py-8 pb-20 md:pb-12 overflow-auto">
               {children}
             </main>
           </div>

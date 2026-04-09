@@ -222,7 +222,7 @@ export function Header() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border px-3 py-1.5 text-[10px] transition-opacity hover:opacity-80"
+          className="rounded-full border px-3 py-2 text-xs min-h-[44px] transition-opacity hover:opacity-80"
           style={{
             borderColor: 'var(--sidebar-border)',
             color: 'var(--sidebar-foreground)',
