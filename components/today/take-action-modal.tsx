@@ -158,7 +158,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       color: 'var(--color-sky)',
       textColor: 'var(--color-sky-text)',
       fn: () => {
-        window.open(`https://www.google.com/search?q=${encodeURIComponent(item.title)}`, '_blank', 'noopener,noreferrer');
+        window.open(`https://www.google.com/search?q=${encodeURIComponent(item.title)}`, '_blank', 'noopener noreferrer');
       },
     },
   ];
