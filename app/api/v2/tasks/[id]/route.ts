@@ -15,7 +15,7 @@ type AssignableTask = {
 };
 
 function extractOwnerDisplayName(task: AssignableTask, fallback: string): string {
-  return task.ownerName || task.owner?.name || task.owner?.email || fallback;
+  return task.ownerName || task.owner?.name || fallback;
 }
 
 function extractOwnerId(task: AssignableTask): string | null {

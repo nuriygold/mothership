@@ -7,7 +7,7 @@ async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: str
   if (input.ownerLogin === undefined) return undefined;
 
   const ownerLogin = input.ownerLogin.trim();
-  if (!ownerLogin) return null;
+  if (!ownerLogin) throw new Error('ownerLogin cannot be empty');
 
   const user = await prisma.user.findFirst({
     where: {

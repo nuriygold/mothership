@@ -238,7 +238,7 @@ export default function TodayPage() {
         return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
       });
       setToastMsg(`Couldn’t complete "${title}"`);
-      logTodayClientFailure('task_complete', error, { taskId, title });
+      logTodayClientFailure('task_complete', error, { taskId });
     }
   }, [mutate, mergedTimeline, setDroppedTasks]);
 
@@ -264,7 +264,7 @@ export default function TodayPage() {
       setCompletedIds((prev) => new Set([...prev, taskId]));
       setCompletedTitles((prev) => [...prev, title]);
       setToastMsg(`Couldn’t defer "${title}"`);
-      logTodayClientFailure('task_defer', error, { taskId, title });
+      logTodayClientFailure('task_defer', error, { taskId });
     }
   }, [mergedTimeline, mutate, setDroppedTasks]);
 
@@ -286,7 +286,7 @@ export default function TodayPage() {
       setToastMsg(`Message sent to ${normalizedBot} via Telegram`);
     } catch (error) {
       setToastMsg(`Failed to reach ${normalizedBot}`);
-      logTodayClientFailure('telegram_send', error, { botName: normalizedBot, taskTitle });
+      logTodayClientFailure('telegram_send', error, { botName: normalizedBot });
     }
   }, []);
 
@@ -295,8 +295,12 @@ export default function TodayPage() {
     const normalizedBot = normalizeBotName(newBot);
     const ownerLogin =
       BOT_OWNER_LOGIN[normalizedBot] ??
-      BOT_OWNER_LOGIN[newBot] ??
-      normalizedBot.toLowerCase().replace(/\s+/g, '-');
+      BOT_OWNER_LOGIN[newBot];
+    if (!ownerLogin) {
+      setToastMsg(`Couldn’t assign "${taskTitle}" to ${normalizedBot}`);
+      logTodayClientFailure('task_assign', new Error('Unknown bot owner login mapping'), { taskId, botName: normalizedBot });
+      return;
+    }
     const botKey = BOT_TELEGRAM_KEY[normalizedBot] ?? BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
     try {
       const [assignRes, telegramRes] = await Promise.all([
@@ -316,11 +320,11 @@ export default function TodayPage() {
         setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
       } else {
         setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot} (Telegram notify failed)`);
-        logTodayClientFailure('assignment_telegram', new Error(`Telegram notify failed (${telegramRes.status})`), { taskId, taskTitle, botName: normalizedBot });
+        logTodayClientFailure('assignment_telegram', new Error(`Telegram notify failed (${telegramRes.status})`), { taskId, botName: normalizedBot });
       }
     } catch (error) {
       setToastMsg(`Couldn’t assign "${taskTitle}" to ${normalizedBot}`);
-      logTodayClientFailure('task_assign', error, { taskId, taskTitle, botName: normalizedBot, ownerLogin });
+      logTodayClientFailure('task_assign', error, { taskId, botName: normalizedBot, ownerLogin });
     }
   }, [mutate]);
 
@@ -335,7 +339,7 @@ export default function TodayPage() {
     const hasDuplicate = mergedTimeline.some((entry) => {
       if (entry._calEvent) return false;
       const timelineItem = entry as V2DashboardTimelineItem;
-      if (dragged.taskId && timelineItem.taskId && timelineItem.taskId === dragged.taskId) return true;
+      if (dragged.taskId) return Boolean(timelineItem.taskId && timelineItem.taskId === dragged.taskId);
       return timelineItem.title.toLowerCase() === dragged.title.toLowerCase();
     });
     if (hasDuplicate) {
@@ -375,7 +379,7 @@ export default function TodayPage() {
     const hasDuplicate = mergedTimeline.some((entry) => {
       if (entry._calEvent) return false;
       const timelineItem = entry as V2DashboardTimelineItem;
-      if (dragged.taskId && timelineItem.taskId && timelineItem.taskId === dragged.taskId) return true;
+      if (dragged.taskId) return Boolean(timelineItem.taskId && timelineItem.taskId === dragged.taskId);
       return timelineItem.title.toLowerCase() === dragged.title.toLowerCase();
     });
     if (hasDuplicate) {
@@ -548,7 +552,8 @@ export default function TodayPage() {
                     const isDone = taskEntry.status === 'done';
                     const isFocus = taskEntry.type === 'focus-block';
                     const isTask = taskEntry.type === 'task';
-                    const botColors = taskEntry.assignedBot ? BOT_COLORS[taskEntry.assignedBot] : null;
+                    const normalizedTaskBot = taskEntry.assignedBot ? normalizeBotName(taskEntry.assignedBot) : '';
+                    const botColors = normalizedTaskBot ? BOT_COLORS[normalizedTaskBot] : null;
 
                     return (
                       <div key={`${taskEntry.time}-${taskEntry.title}-${idx}`}
@@ -598,11 +603,11 @@ export default function TodayPage() {
                                 <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Gateway</span>
                               </button>
                               {taskEntry.assignedBot && botColors && (
-                                <button onClick={() => handleBotTelegram(taskEntry.assignedBot!, taskEntry.title)}
+                                <button onClick={() => handleBotTelegram(normalizedTaskBot, taskEntry.title)}
                                   className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 transition-opacity cursor-pointer"
                                   style={{ background: botColors.bg, color: botColors.text }}
-                                  title={`Message ${taskEntry.assignedBot} on Telegram`}>
-                                  {taskEntry.assignedBot}
+                                  title={`Message ${normalizedTaskBot} on Telegram`}>
+                                  {normalizedTaskBot}
                                 </button>
                               )}
                               {taskEntry.meetingUrl && (
@@ -613,7 +618,7 @@ export default function TodayPage() {
                                 </a>
                               )}
                               {isTask && taskEntry.taskId && (
-                                <AssignToDropdown currentBot={taskEntry.assignedBot} taskTitle={taskEntry.title}
+                                <AssignToDropdown currentBot={normalizedTaskBot || taskEntry.assignedBot} taskTitle={taskEntry.title}
                                   onAssign={(bot) => handleAssign(taskEntry.taskId!, taskEntry.title, bot)} />
                               )}
                             </div>
@@ -667,8 +672,9 @@ export default function TodayPage() {
                 <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
               ) : (
                 availablePriorities.map((item) => {
-                  const borderColor = BOT_BORDER[item.assignedBot] ?? BOT_BORDER.default;
-                  const botC = BOT_COLORS[item.assignedBot];
+                  const normalizedPriorityBot = normalizeBotName(item.assignedBot);
+                  const borderColor = BOT_BORDER[normalizedPriorityBot] ?? BOT_BORDER.default;
+                  const botC = BOT_COLORS[normalizedPriorityBot];
                   return (
                     <div key={item.id}
                       draggable
@@ -690,15 +696,15 @@ export default function TodayPage() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {botC && (
-                          <button onClick={() => handleBotTelegram(item.assignedBot, item.title)}
+                          <button onClick={() => handleBotTelegram(normalizedPriorityBot, item.title)}
                             className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
                             style={{ background: botC.bg, color: botC.text }}
-                            title={`Message ${item.assignedBot} on Telegram`}>
-                            {item.assignedBot}
+                            title={`Message ${normalizedPriorityBot} on Telegram`}>
+                            {normalizedPriorityBot}
                           </button>
                         )}
                         {item.taskId && (
-                          <AssignToDropdown currentBot={item.assignedBot} taskTitle={item.title}
+                          <AssignToDropdown currentBot={normalizedPriorityBot} taskTitle={item.title}
                             onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
                         )}
                         <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"

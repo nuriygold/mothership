@@ -17,7 +17,6 @@ export const BOT_TELEGRAM_KEY: Record<string, string> = {
   Ruby: 'bot2',
   Emerald: 'bot3',
   Adobe: 'botAdobe',
-  'Adobe Pettaway': 'botAdobe',
 };
 
 export const BOT_OWNER_LOGIN: Record<string, string> = {
@@ -25,7 +24,6 @@ export const BOT_OWNER_LOGIN: Record<string, string> = {
   Ruby: 'ruby',
   Emerald: 'emerald',
   Adobe: 'adobe',
-  'Adobe Pettaway': 'adobe',
 };
 
 export const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe'];
@@ -35,7 +33,6 @@ export const BOT_COLORS: Record<string, { bg: string; text: string }> = {
   Ruby: { bg: 'var(--color-pink)', text: 'var(--color-pink-text)' },
   Emerald: { bg: 'var(--color-mint)', text: 'var(--color-mint-text)' },
   Adobe: { bg: 'var(--color-lemon)', text: 'var(--color-lemon-text)' },
-  'Adobe Pettaway': { bg: 'var(--color-lemon)', text: 'var(--color-lemon-text)' },
 };
 
 export const APPROVAL_BG: Record<string, string> = {
