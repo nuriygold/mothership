@@ -11,7 +11,7 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn('card p-4', className)} style={style}>
+    <div className={cn('card p-3 md:p-4', className)} style={style}>
       {children}
     </div>
   );

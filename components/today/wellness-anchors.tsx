@@ -29,13 +29,21 @@ interface WellnessState {
 const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
 
 function todayDate() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function yesterdayDate() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  // Use local date parts to avoid UTC offset shifting the day
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function wellnessKey() { return `wellness-${new Date().toDateString()}`; }
@@ -259,7 +267,22 @@ export function WellnessAnchors() {
                 border: `1.5px solid ${a.todayActive ? a.text : 'transparent'}`,
                 boxShadow: a.todayActive ? `0 2px 8px rgba(0,0,0,0.08)` : 'none',
               }}>
-              {/* Today — interactive */}
+              {/* Yesterday — read-only (left on desktop, top on mobile) */}
+              <div className="flex flex-col items-center gap-0.5 py-2 px-1 flex-1 opacity-60"
+                style={{ background: a.ydayActive ? a.bg : 'var(--muted)' }}>
+                <span className="text-[7px] font-semibold uppercase tracking-wide opacity-50"
+                  style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>Yday</span>
+                <Icon className="w-3.5 h-3.5" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }} />
+                <span className="text-[9px] font-semibold leading-tight"
+                  style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
+                <div style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.ydaySub}</div>
+              </div>
+
+              {/* Divider — horizontal on mobile, vertical on desktop */}
+              <div className="h-px w-full sm:h-auto sm:w-px"
+                style={{ background: a.todayActive ? a.text : 'var(--border)', opacity: 0.3 }} />
+
+              {/* Today — interactive (right on desktop, bottom on mobile) */}
               <button onClick={a.onTap}
                 className="flex flex-col items-center gap-0.5 py-2 px-1 transition-all hover:brightness-95 active:scale-95 flex-1"
                 style={{ background: a.todayActive ? a.bg : 'var(--muted)' }}>
@@ -270,21 +293,6 @@ export function WellnessAnchors() {
                   style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
                 <div style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.todaySub}</div>
               </button>
-
-              {/* Divider — horizontal on mobile, vertical on desktop */}
-              <div className="h-px w-full sm:h-auto sm:w-px"
-                style={{ background: a.todayActive ? a.text : 'var(--border)', opacity: 0.3 }} />
-
-              {/* Yesterday — read-only */}
-              <div className="flex flex-col items-center gap-0.5 py-2 px-1 flex-1 opacity-60"
-                style={{ background: a.ydayActive ? a.bg : 'var(--muted)' }}>
-                <span className="text-[7px] font-semibold uppercase tracking-wide opacity-50"
-                  style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>Yday</span>
-                <Icon className="w-3.5 h-3.5" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }} />
-                <span className="text-[9px] font-semibold leading-tight"
-                  style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
-                <div style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.ydaySub}</div>
-              </div>
             </div>
           );
         })}
