@@ -417,7 +417,10 @@ export async function createTaskPoolIssue(input: {
   workflowId?: string | null;
 }): Promise<TaskPoolTask | null> {
   const { owner, repo, token } = getConfig();
-  if (!token) return null;
+  if (!token) {
+    logTaskPoolEvent('warn', 'create_issue_skipped', { reason: 'GITHUB_TOKEN not configured' });
+    return null;
+  }
 
   const domain = input.workflowId?.startsWith('tpw_')
     ? input.workflowId.replace(/^tpw_/, '').replace(/-/g, '_')
@@ -500,7 +503,10 @@ export async function updateTaskPoolIssue(input: {
   ownerLogin?: string;
 }): Promise<TaskPoolTask | null> {
   const { owner, repo, token } = getConfig();
-  if (!token) return null;
+  if (!token) {
+    logTaskPoolEvent('warn', 'update_issue_skipped', { reason: 'GITHUB_TOKEN not configured', id: input.id });
+    return null;
+  }
 
   const issueNumber = parseIssueNumber(input.id);
   if (!issueNumber) return null;

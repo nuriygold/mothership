@@ -6,7 +6,7 @@ Use this step-by-step guide for staging/prod launch. Prod stays unseeded; stagin
 - Set `DATABASE_URL` (Supabase service-role, schema=public, SSL required) in your host secrets (e.g., Vercel). Do **not** commit it.
 - Optional, keep unset if not in use yet:
   - `TELEGRAM_BOT_TOKEN` (command/approval surface)
-  - `GITHUB_TOKEN` (future task sync)
+  - `GITHUB_TOKEN` (required for task-pool repo access — issue read/write)
 
 ## 2) Database posture
 - Prod Supabase: ensure empty data except schema; do **not** seed.
