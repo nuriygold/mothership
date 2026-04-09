@@ -259,7 +259,7 @@ export default function TodayPage() {
       if (!res.ok) throw new Error(`Task defer failed (${res.status})`);
       setDroppedTasks((prev) => prev.filter((item) => item.taskId !== taskId));
       await mutate();
-      setToastMsg('Task moved back to queue');
+      setToastMsg('Task moved back to timeline');
     } catch (error) {
       setCompletedIds((prev) => new Set([...prev, taskId]));
       setCompletedTitles((prev) => [...prev, title]);

@@ -42,7 +42,7 @@ export async function PATCH(
       const ownerLogin = body.ownerLogin?.trim();
       if (!ownerLogin) {
         return Response.json(
-          { error: { code: 'VALIDATION_ERROR', message: 'ownerLogin is required for assign' } },
+          { error: { code: 'VALIDATION_ERROR', message: 'ownerLogin is required and cannot be empty for assign action' } },
           { status: 400 }
         );
       }

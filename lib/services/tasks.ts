@@ -21,7 +21,7 @@ async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: str
   });
 
   if (!user) {
-    throw new Error(`Unknown ownerLogin "${ownerLogin}"`);
+    throw new Error(`User not found for login "${ownerLogin}". Provide a valid username, email, or email prefix.`);
   }
 
   return user.id;
