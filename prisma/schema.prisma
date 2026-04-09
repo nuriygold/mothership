@@ -356,3 +356,39 @@ model FinancePlan {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 }
+
+model Account {
+  id        String   @id @default(uuid())
+  name      String
+  type      String
+  currency  String   @default("USD")
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  accountId   String
+  amount      Float
+  description String?
+  category    String?
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model Payable {
+  id          String   @id @default(uuid())
+  vendor      String
+  amount      Float
+  currency    String   @default("USD")
+  dueDate     DateTime?
+  status      String   @default("pending")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
