@@ -44,6 +44,18 @@ function logTodayClientFailure(action: string, error: unknown, metadata?: Record
   }));
 }
 
+function hasTimelineTaskDuplicate(
+  timeline: MergedItem[],
+  candidate: { taskId?: string; title: string }
+): boolean {
+  return timeline.some((entry) => {
+    if (entry._calEvent) return false;
+    const timelineItem = entry as V2DashboardTimelineItem;
+    if (candidate.taskId) return Boolean(timelineItem.taskId && timelineItem.taskId === candidate.taskId);
+    return timelineItem.title.toLowerCase() === candidate.title.toLowerCase();
+  });
+}
+
 // ── Today-keyed localStorage helpers ─────────────────────────────────────────
 function todayKey(suffix: string) {
   return `today-${new Date().toDateString()}-${suffix}`;
@@ -293,9 +305,7 @@ export default function TodayPage() {
   // ── Assign To ──
   const handleAssign = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
     const normalizedBot = normalizeBotName(newBot);
-    const ownerLogin =
-      BOT_OWNER_LOGIN[normalizedBot] ??
-      BOT_OWNER_LOGIN[newBot];
+    const ownerLogin = BOT_OWNER_LOGIN[normalizedBot];
     if (!ownerLogin) {
       setToastMsg(`Couldn’t assign "${taskTitle}" to ${normalizedBot}`);
       logTodayClientFailure('task_assign', new Error('Unknown bot owner login mapping'), { taskId, botName: normalizedBot });
@@ -336,12 +346,7 @@ export default function TodayPage() {
   const handleDrop = useCallback((dropIdx: number) => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
-    const hasDuplicate = mergedTimeline.some((entry) => {
-      if (entry._calEvent) return false;
-      const timelineItem = entry as V2DashboardTimelineItem;
-      if (dragged.taskId) return Boolean(timelineItem.taskId && timelineItem.taskId === dragged.taskId);
-      return timelineItem.title.toLowerCase() === dragged.title.toLowerCase();
-    });
+    const hasDuplicate = hasTimelineTaskDuplicate(mergedTimeline, dragged);
     if (hasDuplicate) {
       setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
       setDragOverIdx(null);
@@ -376,12 +381,7 @@ export default function TodayPage() {
   const handleDropEnd = useCallback(() => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
-    const hasDuplicate = mergedTimeline.some((entry) => {
-      if (entry._calEvent) return false;
-      const timelineItem = entry as V2DashboardTimelineItem;
-      if (dragged.taskId) return Boolean(timelineItem.taskId && timelineItem.taskId === dragged.taskId);
-      return timelineItem.title.toLowerCase() === dragged.title.toLowerCase();
-    });
+    const hasDuplicate = hasTimelineTaskDuplicate(mergedTimeline, dragged);
     if (hasDuplicate) {
       setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
       setDragOverEnd(false);
