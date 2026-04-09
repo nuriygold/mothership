@@ -1,7 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
-import path from 'path';
-
-const TOKEN_FILE = path.join(process.cwd(), '.oura-tokens.json');
+import { supabase } from './supabase';
 
 export type OuraTokens = {
   access_token: string;
@@ -9,14 +6,18 @@ export type OuraTokens = {
   expires_at: number; // ms since epoch
 };
 
-export function readTokens(): OuraTokens | null {
-  try {
-    return JSON.parse(readFileSync(TOKEN_FILE, 'utf-8')) as OuraTokens;
-  } catch {
-    return null;
-  }
+export async function readTokens(): Promise<OuraTokens | null> {
+  const { data, error } = await supabase
+    .from('oura_tokens')
+    .select('access_token, refresh_token, expires_at')
+    .eq('id', true)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as OuraTokens;
 }
 
-export function writeTokens(tokens: OuraTokens) {
-  writeFileSync(TOKEN_FILE, JSON.stringify(tokens, null, 2));
+export async function writeTokens(tokens: OuraTokens): Promise<void> {
+  await supabase
+    .from('oura_tokens')
+    .upsert({ id: true, ...tokens }, { onConflict: 'id' });
 }

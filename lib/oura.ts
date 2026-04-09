@@ -5,7 +5,7 @@ const CLIENT_SECRET = process.env.OURA_CLIENT_SECRET!;
 const TOKEN_URL = 'https://api.ouraring.com/oauth/token';
 
 async function getValidAccessToken(): Promise<string | null> {
-  const tokens = readTokens();
+  const tokens = await readTokens();
   if (!tokens) return null;
 
   // Refresh if expiring within 5 minutes
@@ -22,7 +22,7 @@ async function getValidAccessToken(): Promise<string | null> {
     });
     const data = await res.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
     if (!data.access_token) return null;
-    writeTokens({
+    await writeTokens({
       access_token: data.access_token,
       refresh_token: data.refresh_token ?? tokens.refresh_token,
       expires_at: Date.now() + (data.expires_in ?? 3600) * 1000,

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: 'http://localhost:3000/api/oura/callback',
+      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/oura/callback`,
       client_id: process.env.OURA_CLIENT_ID!,
       client_secret: process.env.OURA_CLIENT_SECRET!,
     }),
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(`Token exchange failed: ${data.error ?? 'unknown error'}`, { status: 500 });
   }
 
-  writeTokens({
+  await writeTokens({
     access_token: data.access_token,
     refresh_token: data.refresh_token!,
     expires_at: Date.now() + (data.expires_in ?? 3600) * 1000,
