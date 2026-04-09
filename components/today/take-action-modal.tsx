@@ -54,7 +54,6 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
   }
 
   const botC = BOT_COLORS[item.assignedBot] ?? BOT_COLORS.Adrian;
-  const defaultTelegramBotKey = BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
   const actions: Array<{
     key: string;
     icon: ElementType<{ className?: string; style?: CSSProperties }>;
@@ -62,7 +61,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
     desc: string;
     color: string;
     textColor: string;
-    fn: () => Promise<void>;
+    fn: () => void | Promise<void>;
   }> = [
     ...(item.taskId
       ? [
@@ -73,7 +72,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
             desc: 'Complete this task and log it to Trophy',
             color: 'var(--color-mint)',
             textColor: 'var(--color-mint-text)',
-            fn: async () => {
+            fn: () => {
               onComplete(item.taskId!);
             },
           },
@@ -131,7 +130,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       color: botC.bg,
       textColor: botC.text,
       fn: async () => {
-        const botKey = BOT_TELEGRAM_KEY[item.assignedBot] ?? defaultTelegramBotKey;
+        const botKey = BOT_TELEGRAM_KEY[item.assignedBot] ?? BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
         const res = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -147,7 +146,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       desc: 'Open the AI chat panel with this task as context',
       color: 'var(--color-pink)',
       textColor: 'var(--color-pink-text)',
-      fn: async () => {
+      fn: () => {
         onGateway(item.title);
       },
     },
@@ -158,7 +157,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       desc: `Google "${item.title}"`,
       color: 'var(--color-sky)',
       textColor: 'var(--color-sky-text)',
-      fn: async () => {
+      fn: () => {
         window.open(`https://www.google.com/search?q=${encodeURIComponent(item.title)}`, '_blank', 'noopener,noreferrer');
       },
     },
