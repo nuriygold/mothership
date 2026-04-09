@@ -5,6 +5,7 @@ import { updateTask } from '@/lib/services/tasks';
 export const dynamic = 'force-dynamic';
 
 type AssignableTask = {
+  // In DB mode updateTask returns Task with `owner`; in task-pool mode it may return `ownerName`/`ownerId`.
   ownerName?: string | null;
   ownerId?: string | null;
   owner?: {

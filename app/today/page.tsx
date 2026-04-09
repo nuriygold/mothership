@@ -44,7 +44,7 @@ function logTodayClientFailure(action: string, error: unknown, metadata?: Record
   }));
 }
 
-function hasTimelineTaskDuplicate(
+function taskExistsInTimeline(
   timeline: MergedItem[],
   candidate: { taskId?: string; title: string }
 ): boolean {
@@ -324,7 +324,7 @@ export default function TodayPage() {
         }),
       ]);
       if (!assignRes.ok) throw new Error(`Assignment failed (${assignRes.status})`);
-      const payload = await assignRes.json().catch(() => ({} as { assigned?: string }));
+      const payload = await assignRes.json().catch(() => ({} as AssignTaskResponse));
       await mutate();
       if (telegramRes.ok) {
         setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
@@ -346,7 +346,7 @@ export default function TodayPage() {
   const handleDrop = useCallback((dropIdx: number) => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
-    const hasDuplicate = hasTimelineTaskDuplicate(mergedTimeline, dragged);
+    const hasDuplicate = taskExistsInTimeline(mergedTimeline, dragged);
     if (hasDuplicate) {
       setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
       setDragOverIdx(null);
@@ -381,7 +381,7 @@ export default function TodayPage() {
   const handleDropEnd = useCallback(() => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
-    const hasDuplicate = hasTimelineTaskDuplicate(mergedTimeline, dragged);
+    const hasDuplicate = taskExistsInTimeline(mergedTimeline, dragged);
     if (hasDuplicate) {
       setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
       setDragOverEnd(false);
@@ -788,3 +788,7 @@ export default function TodayPage() {
     </>
   );
 }
+type AssignTaskResponse = {
+  assigned?: string;
+  ownerId?: string | null;
+};

@@ -8,13 +8,14 @@ async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: str
 
   const ownerLogin = input.ownerLogin.trim();
   if (!ownerLogin) throw new Error('ownerLogin cannot be empty');
+  const canUseEmailPrefixLookup = !ownerLogin.includes('@') && /^[a-zA-Z0-9._-]+$/.test(ownerLogin);
 
   const user = await prisma.user.findFirst({
     where: {
       OR: [
         { name: { equals: ownerLogin, mode: 'insensitive' } },
         { email: { equals: ownerLogin, mode: 'insensitive' } },
-        { email: { startsWith: `${ownerLogin}@`, mode: 'insensitive' } },
+        ...(canUseEmailPrefixLookup ? [{ email: { startsWith: `${ownerLogin}@`, mode: 'insensitive' as const } }] : []),
       ],
     },
     select: { id: true },

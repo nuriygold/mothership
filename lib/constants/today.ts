@@ -19,12 +19,9 @@ export const BOT_TELEGRAM_KEY: Record<string, string> = {
   Adobe: 'botAdobe',
 };
 
-export const BOT_OWNER_LOGIN: Record<string, string> = {
-  Adrian: 'adrian',
-  Ruby: 'ruby',
-  Emerald: 'emerald',
-  Adobe: 'adobe',
-};
+export const BOT_OWNER_LOGIN: Record<string, string> = Object.fromEntries(
+  Object.keys(BOT_CANONICAL_NAME).map((name) => [name, normalizeBotName(name).toLowerCase()])
+) as Record<string, string>;
 
 export const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe'];
 
