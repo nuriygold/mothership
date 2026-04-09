@@ -39,11 +39,11 @@ export type OuraTodayData = {
   workout: boolean;
 } | { connected: false };
 
-export async function getOuraTodayData(): Promise<OuraTodayData> {
+export async function getOuraTodayData(date?: string): Promise<OuraTodayData> {
   const token = await getValidAccessToken();
   if (!token) return { connected: false };
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = date ?? new Date().toISOString().split('T')[0];
 
   const [activityRes, workoutRes] = await Promise.all([
     fetch(`https://api.ouraring.com/v2/usercollection/daily_activity?start_date=${today}&end_date=${today}`, {
