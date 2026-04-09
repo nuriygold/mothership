@@ -14,23 +14,13 @@ async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: str
       OR: [
         { name: { equals: ownerLogin, mode: 'insensitive' } },
         { email: { equals: ownerLogin, mode: 'insensitive' } },
+        { email: { startsWith: `${ownerLogin}@`, mode: 'insensitive' } },
       ],
     },
     select: { id: true },
   });
 
   if (user) return user.id;
-
-  if (!ownerLogin.includes('@')) {
-    const users = await prisma.user.findMany({
-      select: { id: true, email: true },
-    });
-    const byEmailPrefix = users.find((candidate) => {
-      const prefix = candidate.email.split('@')[0];
-      return prefix?.toLowerCase() === ownerLogin.toLowerCase();
-    });
-    if (byEmailPrefix) return byEmailPrefix.id;
-  }
 
   throw new Error(`User not found for login "${ownerLogin}". Provide a valid username, email, or email prefix.`);
 }

@@ -48,11 +48,11 @@ function hasTimelineTaskDuplicate(
   timeline: MergedItem[],
   candidate: { taskId?: string; title: string }
 ): boolean {
+  if (!candidate.taskId) return false;
   return timeline.some((entry) => {
     if (entry._calEvent) return false;
     const timelineItem = entry as V2DashboardTimelineItem;
-    if (candidate.taskId) return Boolean(timelineItem.taskId && timelineItem.taskId === candidate.taskId);
-    return timelineItem.title.toLowerCase() === candidate.title.toLowerCase();
+    return Boolean(timelineItem.taskId && timelineItem.taskId === candidate.taskId);
   });
 }
 
