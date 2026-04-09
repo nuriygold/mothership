@@ -56,7 +56,7 @@ export function MobileNav({ items }: { items: SidebarItem[] }) {
             className="relative flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 transition-all duration-200"
           >
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200"
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200"
               style={{ background: active ? 'var(--color-cyan)' : 'transparent' }}
             >
               <Icon

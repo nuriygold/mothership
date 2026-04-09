@@ -184,3 +184,25 @@ body {
 a {
   color: inherit;
 }
+
+/* Responsive container height */
+.main-container {
+  min-height: calc(100vh - 104px); /* mobile: header 44px + mobile-nav 60px */
+}
+@media (min-width: 768px) {
+  .main-container {
+    min-height: calc(100vh - 44px); /* desktop: header only */
+  }
+}
+
+/* Safe area insets for notched iPhones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .main-container > main {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 768px) {
+    .main-container > main {
+      padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+    }
+  }
+}

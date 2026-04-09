@@ -46,6 +46,12 @@ export default function EmailPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [liveDraft, setLiveDraft] = useState<V2EmailDraft | null>(null);
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('Inbox');
+  const [showDetail, setShowDetail] = useState(false);
+
+  const handleSelectEmail = (id: string) => {
+    setSelectedId(id);
+    setShowDetail(true);
+  };
 
   const inbox = data?.inbox ?? [];
 
@@ -101,7 +107,7 @@ export default function EmailPage() {
 
         {/* ── LEFT PANE: Email List ── */}
         <div
-          className="rounded-l-3xl border-r-0 lg:border-r overflow-hidden flex flex-col"
+          className={`rounded-3xl lg:rounded-r-none lg:rounded-l-3xl border-r-0 lg:border-r overflow-hidden flex-col ${showDetail ? 'hidden lg:flex' : 'flex'}`}
           style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
         >
           {/* Tabs */}
@@ -131,7 +137,7 @@ export default function EmailPage() {
                 <button
                   key={email.id}
                   type="button"
-                  onClick={() => setSelectedId(email.id)}
+                  onClick={() => handleSelectEmail(email.id)}
                   className="w-full text-left rounded-2xl px-3 py-3 transition-all"
                   style={{
                     background: isSelected ? 'rgba(0,217,255,0.06)' : 'transparent',
@@ -187,9 +193,22 @@ export default function EmailPage() {
 
         {/* ── RIGHT PANE: Email Detail ── */}
         <div
-          className="rounded-r-3xl overflow-hidden flex flex-col"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)', borderLeft: 'none' }}
+          className={`rounded-3xl lg:rounded-l-none lg:rounded-r-3xl overflow-hidden flex-col lg:[border-left:none] ${showDetail ? 'flex' : 'hidden lg:flex'}`}
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
         >
+          {/* Back button: mobile only */}
+          <button
+            type="button"
+            onClick={() => setShowDetail(false)}
+            className="lg:hidden flex items-center gap-1.5 px-4 pt-4 pb-2 text-sm font-medium transition-opacity hover:opacity-70"
+            style={{ color: 'var(--color-cyan)' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Back to Inbox
+          </button>
+
           {selected ? (
             <div className="flex-1 overflow-y-auto p-5">
               {/* Subject + metadata */}
