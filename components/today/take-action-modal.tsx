@@ -37,7 +37,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
     return () => document.removeEventListener('keydown', handler);
   }, [busy, onClose]);
 
-  async function run(key: string, fn: () => Promise<void>) {
+  async function run(key: string, fn: () => void | Promise<void>) {
     setBusy(key);
     setErr(null);
     try {
