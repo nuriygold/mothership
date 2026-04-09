@@ -254,7 +254,6 @@ export function WellnessAnchors() {
         {anchors.map((a) => {
           const Icon = a.icon;
           return (
-            {/* Mobile: stacked top/bottom. Desktop: side by side left/right */}
             <div key={a.key} className="rounded-2xl overflow-hidden flex flex-col sm:flex-row"
               style={{
                 border: `1.5px solid ${a.todayActive ? a.text : 'transparent'}`,
