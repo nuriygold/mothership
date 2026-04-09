@@ -52,7 +52,7 @@ function BotCardSkeleton() {
         </div>
       </div>
       <div className="rounded-2xl h-16" style={{ background: 'var(--muted)' }} />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {[0, 1, 2].map((i) => (
           <div key={i} className="h-14 rounded-2xl" style={{ background: 'var(--muted)' }} />
         ))}
@@ -136,7 +136,7 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
       </div>
 
       {/* Throughput metrics — neutral white-alpha cells to avoid pastel-on-pastel conflict */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
         {[
           { label: 'Completed', value: bot.throughputMetrics.completed },
           { label: 'Queued',    value: bot.throughputMetrics.queued    },
@@ -271,15 +271,15 @@ export default function BotsPage() {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Bots</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Bots</h1>
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
             Your staffed operations bench
           </p>
         </div>
         <span
-          className="rounded-full px-3 py-1 text-xs font-medium"
+          className="rounded-full px-3 py-1 text-xs font-medium self-start sm:self-auto"
           style={{
             background: streamStatus === 'live' ? 'var(--color-mint)' : 'var(--color-lemon)',
             color: streamStatus === 'live' ? 'var(--color-mint-text)' : 'var(--color-lemon-text)',
@@ -323,8 +323,8 @@ export default function BotsPage() {
       {data && (
         <div className="grid gap-5 md:grid-cols-2">
           {data.bots.length === 0 ? (
-            <div
-              className="col-span-2 rounded-3xl p-10 flex flex-col items-center gap-3 text-center"
+              <div
+               className="md:col-span-2 rounded-3xl p-10 flex flex-col items-center gap-3 text-center"
               style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
             >
               <Users className="w-8 h-8 opacity-30" style={{ color: 'var(--foreground)' }} />

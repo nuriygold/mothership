@@ -189,9 +189,19 @@ a {
 .main-container {
   min-height: calc(100vh - 104px); /* mobile: header 44px + mobile-nav 60px */
 }
+@supports (height: 100dvh) {
+  .main-container {
+    min-height: calc(100dvh - 104px); /* dynamic viewport for mobile browser UI */
+  }
+}
 @media (min-width: 768px) {
   .main-container {
     min-height: calc(100vh - 44px); /* desktop: header only */
+  }
+  @supports (height: 100dvh) {
+    .main-container {
+      min-height: calc(100dvh - 44px);
+    }
   }
 }
 
