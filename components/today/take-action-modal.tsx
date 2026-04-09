@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, CheckCircle2, Send, Play, Clock } from 'lucide-react';
+import type { CSSProperties, ElementType } from 'react';
+import { X, CheckCircle2, Send, Zap, Clock, MessageSquare, Sparkles, Star } from 'lucide-react';
 import type { V2DashboardPriorityItem } from '@/lib/v2/types';
+import { BOT_COLORS, BOT_TELEGRAM_KEY } from '@/lib/constants/today';
 
 interface TakeActionModalProps {
   item: V2DashboardPriorityItem;
@@ -15,7 +17,9 @@ interface TakeActionModalProps {
 export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }: TakeActionModalProps) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
-  const [loading, setLoading] = useState<'start' | 'defer' | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement;
@@ -26,55 +30,138 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
   }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !busy) onClose();
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [busy, onClose]);
 
-  async function handleStart() {
-    if (!item.taskId) return;
-    setLoading('start');
+  async function run(key: string, fn: () => void | Promise<void>) {
+    setBusy(key);
+    setErr(null);
     try {
-      await fetch(`/api/v2/tasks/${item.taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start' }),
-      });
-      onDone();
-      onClose();
-    } finally {
-      setLoading(null);
+      await fn();
+      setDone(key);
+      setTimeout(() => {
+        onDone();
+        onClose();
+      }, 800);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Failed');
+      setBusy(null);
     }
   }
 
-  async function handleDefer() {
-    if (!item.taskId) return;
-    setLoading('defer');
-    try {
-      await fetch(`/api/v2/tasks/${item.taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'defer' }),
-      });
-      onDone();
-      onClose();
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  function handleComplete() {
-    if (!item.taskId) return;
-    onComplete(item.taskId);
-    onClose();
-  }
-
-  function handleGateway() {
-    onGateway(item.title);
-    onClose();
-  }
-
-  const isOverdue = item.dueAt ? new Date(item.dueAt).getTime() < Date.now() : false;
+  const botC = BOT_COLORS[item.assignedBot] ?? BOT_COLORS.Adrian;
+  const actions: Array<{
+    key: string;
+    icon: ElementType<{ className?: string; style?: CSSProperties }>;
+    label: string;
+    desc: string;
+    color: string;
+    textColor: string;
+    fn: () => void | Promise<void>;
+  }> = [
+    ...(item.taskId
+      ? [
+          {
+            key: 'done',
+            icon: CheckCircle2,
+            label: 'Mark as Done',
+            desc: 'Complete this task and log it to Trophy',
+            color: 'var(--color-mint)',
+            textColor: 'var(--color-mint-text)',
+            fn: () => {
+              onComplete(item.taskId!);
+            },
+          },
+          {
+            key: 'start',
+            icon: Zap,
+            label: 'Start Working',
+            desc: 'Set this task to In Progress',
+            color: 'var(--color-lemon)',
+            textColor: 'var(--color-lemon-text)',
+            fn: async () => {
+              const res = await fetch(`/api/v2/tasks/${item.taskId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'start' }),
+              });
+              if (!res.ok) throw new Error(`${res.status}`);
+            },
+          },
+          {
+            key: 'defer',
+            icon: Clock,
+            label: 'Not Today',
+            desc: 'Move back to the queue — tackle it another day',
+            color: 'var(--color-lavender)',
+            textColor: 'var(--color-lavender-text)',
+            fn: async () => {
+              const res = await fetch(`/api/v2/tasks/${item.taskId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'defer' }),
+              });
+              if (!res.ok) throw new Error(`${res.status}`);
+            },
+          },
+        ]
+      : []),
+    {
+      key: 'route',
+      icon: Send,
+      label: `Route to ${item.assignedBot}`,
+      desc: `Approve and send to ${item.assignedBot} via the action queue`,
+      color: botC.bg,
+      textColor: botC.text,
+      fn: async () => {
+        const res = await fetch(item.actionWebhook, { method: 'POST' });
+        if (!res.ok) throw new Error(`${res.status}`);
+      },
+    },
+    {
+      key: 'telegram',
+      icon: MessageSquare,
+      label: `Message ${item.assignedBot}`,
+      desc: `Send a direct Telegram message to ${item.assignedBot}`,
+      color: botC.bg,
+      textColor: botC.text,
+      fn: async () => {
+        const botKey = BOT_TELEGRAM_KEY[item.assignedBot] ?? BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
+        const res = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `Action needed: ${item.title}`, botKey }),
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+      },
+    },
+    {
+      key: 'ruby',
+      icon: Sparkles,
+      label: 'Ask Ruby',
+      desc: 'Open the AI chat panel with this task as context',
+      color: 'var(--color-pink)',
+      textColor: 'var(--color-pink-text)',
+      fn: () => {
+        onGateway(item.title);
+      },
+    },
+    {
+      key: 'search',
+      icon: Star,
+      label: 'Search Web',
+      desc: `Google "${item.title}"`,
+      color: 'var(--color-sky)',
+      textColor: 'var(--color-sky-text)',
+      fn: () => {
+        window.open(`https://www.google.com/search?q=${encodeURIComponent(item.title)}`, '_blank', 'noopener noreferrer');
+      },
+    },
+  ];
 
   return (
     <div
@@ -83,96 +170,85 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       aria-labelledby="take-action-modal-title"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
     >
       <div
-        className="w-full max-w-md rounded-3xl"
+        className="w-full max-w-lg rounded-3xl flex flex-col"
         style={{
           background: 'var(--card)',
           border: '1px solid var(--border)',
+          maxHeight: '80vh',
           boxShadow: '0 24px 48px rgba(0,0,0,0.3)',
         }}
       >
-        {/* Header */}
         <div
-          className="flex items-start gap-3 px-5 py-4 rounded-t-3xl"
-          style={{ borderBottom: '1px solid var(--border)' }}
+          className="flex items-start gap-3 px-5 py-4 rounded-t-3xl flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)', borderLeft: `4px solid ${botC.bg}` }}
         >
-          <div className="min-w-0 flex-1">
-            <h2 id="take-action-modal-title" className="text-base font-semibold leading-snug" style={{ color: 'var(--foreground)' }}>
+          <div className="flex-1 min-w-0">
+            <h2 id="take-action-modal-title" className="text-sm font-semibold leading-snug" style={{ color: 'var(--foreground)' }}>
               {item.title}
             </h2>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</span>
-              {item.assignedBot && (
-                <>
-                  <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-                  <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.assignedBot}</span>
-                </>
-              )}
-              {item.dueAt && (
-                <>
-                  <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-                  <span
-                    className="text-xs font-medium"
-                    style={{ color: isOverdue ? '#FF5C5C' : 'var(--muted-foreground)' }}
-                  >
-                    {isOverdue ? 'Overdue · ' : ''}{new Date(item.dueAt).toLocaleDateString()}
-                  </span>
-                </>
-              )}
-            </div>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
           </div>
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
+            style={{ background: botC.bg, color: botC.text }}
+          >
+            {item.assignedBot}
+          </span>
           <button
             ref={closeBtnRef}
             onClick={onClose}
+            disabled={!!busy}
             aria-label="Close"
-            className="w-8 h-8 rounded-xl flex items-center justify-center transition-opacity hover:opacity-70 flex-shrink-0"
-            style={{ background: 'var(--muted)' }}
+            className="w-7 h-7 rounded-xl flex items-center justify-center transition-opacity hover:opacity-70 disabled:opacity-30 flex-shrink-0"
+            style={{ background: 'rgba(0,0,0,0.06)' }}
           >
-            <X className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
+            <X className="w-3.5 h-3.5" style={{ color: 'var(--foreground)' }} />
           </button>
         </div>
 
-        {/* Actions */}
-        <div className="px-5 py-4 space-y-2">
-          <button
-            onClick={handleComplete}
-            disabled={!item.taskId}
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-opacity hover:opacity-85 disabled:opacity-40"
-            style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}
-          >
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            Mark Complete
-          </button>
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 scrollbar-hide">
+          {actions.map((action) => (
+            <button
+              key={action.key}
+              disabled={busy !== null}
+              onClick={() => void run(action.key, action.fn)}
+              className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-opacity hover:opacity-85 disabled:cursor-not-allowed"
+              style={{
+                background: done === action.key ? action.color : 'var(--bg-secondary, var(--muted))',
+                opacity: busy && busy !== action.key ? 0.4 : 1,
+              }}
+            >
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: action.color }}>
+                {busy === action.key ? (
+                  <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: action.textColor, borderTopColor: 'transparent' }} />
+                ) : done === action.key ? (
+                  <CheckCircle2 className="w-4 h-4" style={{ color: action.textColor }} />
+                ) : (
+                  <action.icon className="w-4 h-4" style={{ color: action.textColor }} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{action.label}</p>
+                <p className="text-xs truncate" style={{ color: 'var(--muted-foreground)' }}>{action.desc}</p>
+              </div>
+            </button>
+          ))}
+          {err && <p className="text-xs px-2 pt-1" style={{ color: 'var(--destructive, #ef4444)' }}>{err}</p>}
+        </div>
 
+        <div className="px-4 py-3 flex-shrink-0 flex justify-end" style={{ borderTop: '1px solid var(--border)' }}>
           <button
-            onClick={() => void handleStart()}
-            disabled={!item.taskId || loading !== null}
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-opacity hover:opacity-85 disabled:opacity-40"
-            style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
-          >
-            <Play className="w-4 h-4 flex-shrink-0" />
-            {loading === 'start' ? 'Starting…' : 'Start Now'}
-          </button>
-
-          <button
-            onClick={handleGateway}
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-opacity hover:opacity-85"
-            style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}
-          >
-            <Send className="w-4 h-4 flex-shrink-0" />
-            Send to Gateway
-          </button>
-
-          <button
-            onClick={() => void handleDefer()}
-            disabled={!item.taskId || loading !== null}
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-opacity hover:opacity-85 disabled:opacity-40"
+            onClick={onClose}
+            disabled={!!busy}
+            className="rounded-xl px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
           >
-            <Clock className="w-4 h-4 flex-shrink-0" />
-            {loading === 'defer' ? 'Deferring…' : 'Defer for Later'}
+            Cancel
           </button>
         </div>
       </div>
