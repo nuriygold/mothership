@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
 import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { OuraTodayData } from '@/lib/oura';
@@ -130,13 +130,13 @@ export function WellnessAnchors() {
   type AnchorDef = {
     key: string;
     label: string;
-    icon: React.ElementType;
+    icon: ElementType;
     bg: string;
     text: string;
     todayActive: boolean;
     ydayActive: boolean;
-    todaySub: React.ReactNode;
-    ydaySub: React.ReactNode;
+    todaySub: ReactNode;
+    ydaySub: ReactNode;
     onTap: () => void;
   };
 
