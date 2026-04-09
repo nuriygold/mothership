@@ -4,6 +4,24 @@ import { updateTask } from '@/lib/services/tasks';
 
 export const dynamic = 'force-dynamic';
 
+type AssignableTask = {
+  ownerName?: string | null;
+  ownerId?: string | null;
+  owner?: {
+    id?: string | null;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+};
+
+function extractOwnerDisplayName(task: AssignableTask, fallback: string): string {
+  return task.ownerName || task.owner?.name || task.owner?.email || fallback;
+}
+
+function extractOwnerId(task: AssignableTask): string | null {
+  return task.ownerId ?? task.owner?.id ?? null;
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }
@@ -28,16 +46,9 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      const updatedTask = await updateTask({ id: params.id, ownerLogin });
-      const assigned =
-        (typeof (updatedTask as { ownerName?: unknown }).ownerName === 'string' && (updatedTask as { ownerName?: string }).ownerName) ||
-        (typeof (updatedTask as { owner?: { name?: unknown } }).owner?.name === 'string' && (updatedTask as { owner?: { name?: string } }).owner?.name) ||
-        (typeof (updatedTask as { owner?: { email?: unknown } }).owner?.email === 'string' && (updatedTask as { owner?: { email?: string } }).owner?.email) ||
-        ownerLogin;
-      const ownerId =
-        (updatedTask as { ownerId?: string | null }).ownerId ??
-        (updatedTask as { owner?: { id?: string | null } }).owner?.id ??
-        null;
+      const updatedTask = await updateTask({ id: params.id, ownerLogin }) as AssignableTask;
+      const assigned = extractOwnerDisplayName(updatedTask, ownerLogin);
+      const ownerId = extractOwnerId(updatedTask);
       return Response.json({ ok: true, assigned, ownerId });
     }
 
