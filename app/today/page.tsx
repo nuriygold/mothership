@@ -456,7 +456,7 @@ export default function TodayPage() {
       {/* ── Daily Anchors ── */}
       <WellnessAnchors />
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-4 max-sm:mx-3 md:grid-cols-[1fr_1fr]">
         {/* ── Left: Today's Timeline ── */}
         <div className="space-y-4">
           <Card>
