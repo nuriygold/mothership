@@ -32,17 +32,19 @@ async function checkTelegram(): Promise<{ ok: boolean; reason?: string }> {
 
 async function checkGitHub(): Promise<{ ok: boolean; reason?: string }> {
   const token = process.env.GITHUB_TOKEN;
-  const repo = process.env.GITHUB_TASK_REPO ?? process.env.GITHUB_REPO;
+  const owner = process.env.TASK_POOL_REPO_OWNER ?? 'nuriygold';
+  const repoName = process.env.TASK_POOL_REPO_NAME ?? 'task-pool';
+  const repo = `${owner}/${repoName}`;
   if (!token) return { ok: false, reason: 'GITHUB_TOKEN not configured' };
   try {
-    const url = repo ? `https://api.github.com/repos/${repo}` : 'https://api.github.com/user';
+    const url = `https://api.github.com/repos/${repo}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'Mothership/1.0' },
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return { ok: false, reason: `GitHub API returned ${res.status}` };
-    return { ok: true, reason: repo ? `Repo ${repo} accessible` : 'Authenticated' };
+    return { ok: true, reason: `Repo ${repo} accessible` };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
