@@ -5,6 +5,19 @@ import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap } from 'lucide-rea
 import { supabase } from '@/lib/supabase';
 import type { OuraTodayData } from '@/lib/oura';
 
+type AnchorDef = {
+  key: string;
+  label: string;
+  icon: ElementType;
+  bg: string;
+  text: string;
+  todayActive: boolean;
+  ydayActive: boolean;
+  todaySub: ReactNode;
+  ydaySub: ReactNode;
+  onTap: () => void;
+};
+
 interface WellnessState {
   water: number;    // 0–8 glasses
   steps: number;    // 0–10 (thousands of steps)
@@ -126,19 +139,6 @@ export function WellnessAnchors() {
   const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal].filter(Boolean).length;
   const pct = (done / 5) * 100;
   const r = 16; const circ = 2 * Math.PI * r;
-
-  type AnchorDef = {
-    key: string;
-    label: string;
-    icon: ElementType;
-    bg: string;
-    text: string;
-    todayActive: boolean;
-    ydayActive: boolean;
-    todaySub: ReactNode;
-    ydaySub: ReactNode;
-    onTap: () => void;
-  };
 
   const anchors: AnchorDef[] = [
     {
