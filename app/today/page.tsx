@@ -16,7 +16,7 @@ import { NowLine } from '@/components/today/now-line';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
-import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER } from '@/lib/constants/today';
+import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
@@ -33,6 +33,16 @@ type MergedItem =
     });
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+function logTodayClientFailure(action: string, error: unknown, metadata?: Record<string, unknown>) {
+  console.error(JSON.stringify({
+    scope: 'today_page',
+    action,
+    error: error instanceof Error ? error.message : String(error),
+    metadata: metadata ?? {},
+    timestamp: new Date().toISOString(),
+  }));
+}
 
 // ── Today-keyed localStorage helpers ─────────────────────────────────────────
 function todayKey(suffix: string) {
@@ -204,34 +214,59 @@ export default function TodayPage() {
   // ── Done → Trophy ──
   const handleComplete = useCallback(async (taskId?: string) => {
     if (!taskId) return;
-    setCompletedIds((prev) => new Set([...prev, taskId]));
     const title = mergedTimeline.find((t) => !t._calEvent && (t as V2DashboardTimelineItem).taskId === taskId)?.title ?? taskId;
+    setCompletedIds((prev) => new Set([...prev, taskId]));
     setCompletedTitles((prev) => [...prev, title]);
-    setToastMsg(`✓ "${title}" added to Trophy Collection`);
-    fetch(`/api/v2/tasks/${taskId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'complete' }),
-    }).catch(() => {});
-    void mutate();
-  }, [mutate, mergedTimeline]);
+    try {
+      const res = await fetch(`/api/v2/tasks/${taskId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      });
+      if (!res.ok) throw new Error(`Task complete failed (${res.status})`);
+      setDroppedTasks((prev) => prev.filter((item) => item.taskId !== taskId));
+      setToastMsg(`✓ "${title}" added to Trophy Collection`);
+      await mutate();
+    } catch (error) {
+      setCompletedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+      setCompletedTitles((prev) => {
+        const idx = prev.lastIndexOf(title);
+        if (idx === -1) return prev;
+        return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      });
+      setToastMsg(`Couldn’t complete "${title}"`);
+      logTodayClientFailure('task_complete', error, { taskId, title });
+    }
+  }, [mutate, mergedTimeline, setDroppedTasks]);
 
   // ── Undo Done (from Trophy) ──
-  const handleUndoDone = useCallback((taskId: string) => {
+  const handleUndoDone = useCallback(async (taskId: string) => {
+    const title = mergedTimeline.find((t) => !t._calEvent && (t as V2DashboardTimelineItem).taskId === taskId)?.title ?? taskId;
     setCompletedIds((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
     setCompletedTitles((prev) => {
-      const title = mergedTimeline.find((t) => !t._calEvent && (t as V2DashboardTimelineItem).taskId === taskId)?.title;
-      if (!title) return prev;
       const idx = prev.lastIndexOf(title);
       if (idx === -1) return prev;
       return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
     });
-    fetch(`/api/v2/tasks/${taskId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'defer' }),
-    }).catch(() => {});
-    void mutate();
-    setToastMsg('Task moved back to timeline');
-  }, [mergedTimeline, mutate]);
+    try {
+      const res = await fetch(`/api/v2/tasks/${taskId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'defer' }),
+      });
+      if (!res.ok) throw new Error(`Task defer failed (${res.status})`);
+      setDroppedTasks((prev) => prev.filter((item) => item.taskId !== taskId));
+      await mutate();
+      setToastMsg('Task moved back to queue');
+    } catch (error) {
+      setCompletedIds((prev) => new Set([...prev, taskId]));
+      setCompletedTitles((prev) => [...prev, title]);
+      setToastMsg(`Couldn’t defer "${title}"`);
+      logTodayClientFailure('task_defer', error, { taskId, title });
+    }
+  }, [mergedTimeline, mutate, setDroppedTasks]);
 
   // ── Gateway → Pre-fill Kissin' Booth ──
   const handleGateway = useCallback((title: string) => {
@@ -241,32 +276,52 @@ export default function TodayPage() {
 
   // ── Bot badge → Telegram ──
   const handleBotTelegram = useCallback(async (botName: string, taskTitle: string) => {
-    const botKey = BOT_TELEGRAM_KEY[botName] ?? 'bot2';
+    const normalizedBot = normalizeBotName(botName);
+    const botKey = BOT_TELEGRAM_KEY[normalizedBot] ?? BOT_TELEGRAM_KEY[botName] ?? 'bot2';
     try {
       await fetch('/api/telegram/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: `📋 Task update: ${taskTitle}`, botKey }),
       });
-      setToastMsg(`Message sent to ${botName} via Telegram`);
-    } catch { setToastMsg(`Failed to reach ${botName}`); }
+      setToastMsg(`Message sent to ${normalizedBot} via Telegram`);
+    } catch (error) {
+      setToastMsg(`Failed to reach ${normalizedBot}`);
+      logTodayClientFailure('telegram_send', error, { botName: normalizedBot, taskTitle });
+    }
   }, []);
 
   // ── Assign To ──
   const handleAssign = useCallback(async (taskId: string, taskTitle: string, newBot: string) => {
-    const botKey = BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
-    // Persist the assignment and notify the bot via Telegram in parallel
-    await Promise.allSettled([
-      fetch(`/api/v2/tasks/${taskId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'assign', ownerLogin: newBot }),
-      }),
-      fetch('/api/telegram/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `📌 New assignment: ${taskTitle}\nPlease pick this up.`, botKey }),
-      }),
-    ]);
-    setToastMsg(`"${taskTitle}" assigned to ${newBot}`);
-    void mutate();
+    const normalizedBot = normalizeBotName(newBot);
+    const ownerLogin =
+      BOT_OWNER_LOGIN[normalizedBot] ??
+      BOT_OWNER_LOGIN[newBot] ??
+      normalizedBot.toLowerCase().replace(/\s+/g, '-');
+    const botKey = BOT_TELEGRAM_KEY[normalizedBot] ?? BOT_TELEGRAM_KEY[newBot] ?? 'bot2';
+    try {
+      const [assignRes, telegramRes] = await Promise.all([
+        fetch(`/api/v2/tasks/${taskId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'assign', ownerLogin }),
+        }),
+        fetch('/api/telegram/send', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `📌 New assignment: ${taskTitle}\nPlease pick this up.`, botKey }),
+        }),
+      ]);
+      if (!assignRes.ok) throw new Error(`Assignment failed (${assignRes.status})`);
+      const payload = await assignRes.json().catch(() => ({} as { assigned?: string }));
+      await mutate();
+      if (telegramRes.ok) {
+        setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
+      } else {
+        setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot} (Telegram notify failed)`);
+        logTodayClientFailure('assignment_telegram', new Error(`Telegram notify failed (${telegramRes.status})`), { taskId, taskTitle, botName: normalizedBot });
+      }
+    } catch (error) {
+      setToastMsg(`Couldn’t assign "${taskTitle}" to ${normalizedBot}`);
+      logTodayClientFailure('task_assign', error, { taskId, taskTitle, botName: normalizedBot, ownerLogin });
+    }
   }, [mutate]);
 
   // ── Drag & Drop ──
@@ -277,6 +332,20 @@ export default function TodayPage() {
   const handleDrop = useCallback((dropIdx: number) => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
+    const hasDuplicate = mergedTimeline.some((entry) => {
+      if (entry._calEvent) return false;
+      const timelineItem = entry as V2DashboardTimelineItem;
+      if (dragged.taskId && timelineItem.taskId && timelineItem.taskId === dragged.taskId) return true;
+      return timelineItem.title.toLowerCase() === dragged.title.toLowerCase();
+    });
+    if (hasDuplicate) {
+      setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
+      setDragOverIdx(null);
+      setDragOverEnd(false);
+      draggedItemRef.current = null;
+      setToastMsg(`"${dragged.title}" is already on the timeline`);
+      return;
+    }
     const refEntry = mergedTimeline[dropIdx];
     const refStartDate = refEntry && !refEntry._calEvent ? (refEntry as V2DashboardTimelineItem).startDate : refEntry?._calEvent ? (refEntry as { startDate: string }).startDate : undefined;
     const refTime = refEntry?._calEvent ? (refEntry as { startTime: string }).startTime : (refEntry as V2DashboardTimelineItem)?.time ?? 'TBD';
@@ -298,11 +367,24 @@ export default function TodayPage() {
     setDragOverEnd(false);
     draggedItemRef.current = null;
     setToastMsg(`"${dragged.title}" added to timeline`);
-  }, [mergedTimeline]);
+  }, [mergedTimeline, setDismissedPriorityIds]);
 
   const handleDropEnd = useCallback(() => {
     const dragged = draggedItemRef.current;
     if (!dragged) return;
+    const hasDuplicate = mergedTimeline.some((entry) => {
+      if (entry._calEvent) return false;
+      const timelineItem = entry as V2DashboardTimelineItem;
+      if (dragged.taskId && timelineItem.taskId && timelineItem.taskId === dragged.taskId) return true;
+      return timelineItem.title.toLowerCase() === dragged.title.toLowerCase();
+    });
+    if (hasDuplicate) {
+      setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
+      setDragOverEnd(false);
+      draggedItemRef.current = null;
+      setToastMsg(`"${dragged.title}" is already on the timeline`);
+      return;
+    }
     // Far-future startDate ensures sort always places this after everything else
     const farFuture = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const newEntry: V2DashboardTimelineItem = {
@@ -322,7 +404,7 @@ export default function TodayPage() {
     setDragOverEnd(false);
     draggedItemRef.current = null;
     setToastMsg(`"${dragged.title}" added to end of timeline`);
-  }, []);
+  }, [mergedTimeline, setDismissedPriorityIds]);
 
   // ── Take Action ──
   const handleTakeAction = useCallback((item: V2DashboardPriorityItem) => {
@@ -345,7 +427,7 @@ export default function TodayPage() {
         item={actionModalItem}
         onClose={() => setActionModalItem(null)}
         onDone={() => { void mutate(); }}
-        onComplete={(taskId) => { void handleComplete(taskId); }}
+        onComplete={handleComplete}
         onGateway={(title) => { setGatewayPrefill(title); setActionModalItem(null); }}
       />
     )}

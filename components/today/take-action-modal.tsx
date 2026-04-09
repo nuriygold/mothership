@@ -10,7 +10,7 @@ interface TakeActionModalProps {
   item: V2DashboardPriorityItem;
   onClose: () => void;
   onDone: () => void;
-  onComplete: (taskId: string) => void;
+  onComplete: (taskId: string) => void | Promise<void>;
   onGateway: (title: string) => void;
 }
 
@@ -113,8 +113,8 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
     {
       key: 'route',
       icon: Send,
-      label: `Route to ${item.assignedBot}`,
-      desc: `Approve and send to ${item.assignedBot} via the action queue`,
+      label: `Approve Route to ${item.assignedBot}`,
+      desc: `Approve this routing action in queue (does not change task status)`,
       color: botC.bg,
       textColor: botC.text,
       fn: async () => {

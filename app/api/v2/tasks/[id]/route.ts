@@ -21,14 +21,24 @@ export async function PATCH(
     }
 
     if (body.action === 'assign') {
-      if (!body.ownerLogin) {
+      const ownerLogin = body.ownerLogin?.trim();
+      if (!ownerLogin) {
         return Response.json(
           { error: { code: 'VALIDATION_ERROR', message: 'ownerLogin is required for assign' } },
           { status: 400 }
         );
       }
-      await updateTask({ id: params.id, ownerLogin: body.ownerLogin });
-      return Response.json({ ok: true, assigned: body.ownerLogin });
+      const updatedTask = await updateTask({ id: params.id, ownerLogin });
+      const assigned =
+        (typeof (updatedTask as { ownerName?: unknown }).ownerName === 'string' && (updatedTask as { ownerName?: string }).ownerName) ||
+        (typeof (updatedTask as { owner?: { name?: unknown } }).owner?.name === 'string' && (updatedTask as { owner?: { name?: string } }).owner?.name) ||
+        (typeof (updatedTask as { owner?: { email?: unknown } }).owner?.email === 'string' && (updatedTask as { owner?: { email?: string } }).owner?.email) ||
+        ownerLogin;
+      const ownerId =
+        (updatedTask as { ownerId?: string | null }).ownerId ??
+        (updatedTask as { owner?: { id?: string | null } }).owner?.id ??
+        null;
+      return Response.json({ ok: true, assigned, ownerId });
     }
 
     await mutateTaskFromAction(params.id, body.action);
@@ -45,4 +55,3 @@ export async function PATCH(
     );
   }
 }
-
