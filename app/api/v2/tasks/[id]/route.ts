@@ -4,6 +4,25 @@ import { updateTask } from '@/lib/services/tasks';
 
 export const dynamic = 'force-dynamic';
 
+type AssignableTask = {
+  // In DB mode updateTask returns Task with `owner`; in task-pool mode it may return `ownerName`/`ownerId`.
+  ownerName?: string | null;
+  ownerId?: string | null;
+  owner?: {
+    id?: string | null;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+};
+
+function extractOwnerDisplayName(task: AssignableTask, fallback: string): string {
+  return task.ownerName || task.owner?.name || fallback;
+}
+
+function extractOwnerId(task: AssignableTask): string | null {
+  return task.ownerId ?? task.owner?.id ?? null;
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }
@@ -21,14 +40,17 @@ export async function PATCH(
     }
 
     if (body.action === 'assign') {
-      if (!body.ownerLogin) {
+      const ownerLogin = body.ownerLogin?.trim();
+      if (!ownerLogin) {
         return Response.json(
-          { error: { code: 'VALIDATION_ERROR', message: 'ownerLogin is required for assign' } },
+          { error: { code: 'VALIDATION_ERROR', message: 'ownerLogin is required and cannot be empty for assign action' } },
           { status: 400 }
         );
       }
-      await updateTask({ id: params.id, ownerLogin: body.ownerLogin });
-      return Response.json({ ok: true, assigned: body.ownerLogin });
+      const updatedTask = await updateTask({ id: params.id, ownerLogin }) as AssignableTask;
+      const assigned = extractOwnerDisplayName(updatedTask, ownerLogin);
+      const ownerId = extractOwnerId(updatedTask);
+      return Response.json({ ok: true, assigned, ownerId });
     }
 
     await mutateTaskFromAction(params.id, body.action);
@@ -45,4 +67,3 @@ export async function PATCH(
     );
   }
 }
-

@@ -1,12 +1,27 @@
 import { CheckCircle2, Clock, Sparkles, Zap, Target } from 'lucide-react';
 
+export const BOT_CANONICAL_NAME: Record<string, string> = {
+  Adrian: 'Adrian',
+  Ruby: 'Ruby',
+  Emerald: 'Emerald',
+  Adobe: 'Adobe',
+  'Adobe Pettaway': 'Adobe',
+};
+
+export function normalizeBotName(name: string): string {
+  return BOT_CANONICAL_NAME[name] ?? name;
+}
+
 export const BOT_TELEGRAM_KEY: Record<string, string> = {
   Adrian: 'bot1',
   Ruby: 'bot2',
   Emerald: 'bot3',
   Adobe: 'botAdobe',
-  'Adobe Pettaway': 'botAdobe',
 };
+
+export const BOT_OWNER_LOGIN: Record<string, string> = Object.fromEntries(
+  Object.keys(BOT_CANONICAL_NAME).map((name) => [name, normalizeBotName(name).toLowerCase()])
+) as Record<string, string>;
 
 export const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe'];
 

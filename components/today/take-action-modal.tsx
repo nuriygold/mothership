@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ElementType } from 'react';
 import { X, CheckCircle2, Send, Zap, Clock, MessageSquare, Sparkles, Star } from 'lucide-react';
 import type { V2DashboardPriorityItem } from '@/lib/v2/types';
-import { BOT_COLORS, BOT_TELEGRAM_KEY } from '@/lib/constants/today';
+import { BOT_COLORS, BOT_TELEGRAM_KEY, normalizeBotName } from '@/lib/constants/today';
 
 interface TakeActionModalProps {
   item: V2DashboardPriorityItem;
   onClose: () => void;
   onDone: () => void;
-  onComplete: (taskId: string) => void;
+  onComplete: (taskId: string) => void | Promise<void>;
   onGateway: (title: string) => void;
 }
 
@@ -53,7 +53,8 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
     }
   }
 
-  const botC = BOT_COLORS[item.assignedBot] ?? BOT_COLORS.Adrian;
+  const normalizedBot = normalizeBotName(item.assignedBot);
+  const botC = BOT_COLORS[normalizedBot] ?? BOT_COLORS.Adrian;
   const actions: Array<{
     key: string;
     icon: ElementType<{ className?: string; style?: CSSProperties }>;
@@ -113,8 +114,8 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
     {
       key: 'route',
       icon: Send,
-      label: `Route to ${item.assignedBot}`,
-      desc: `Approve and send to ${item.assignedBot} via the action queue`,
+      label: `Approve Route to ${normalizedBot}`,
+      desc: `Approve this routing action in queue (does not change task status)`,
       color: botC.bg,
       textColor: botC.text,
       fn: async () => {
@@ -125,12 +126,12 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
     {
       key: 'telegram',
       icon: MessageSquare,
-      label: `Message ${item.assignedBot}`,
-      desc: `Send a direct Telegram message to ${item.assignedBot}`,
+      label: `Message ${normalizedBot}`,
+      desc: `Send a direct Telegram message to ${normalizedBot}`,
       color: botC.bg,
       textColor: botC.text,
       fn: async () => {
-        const botKey = BOT_TELEGRAM_KEY[item.assignedBot] ?? BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
+        const botKey = BOT_TELEGRAM_KEY[normalizedBot] ?? BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
         const res = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -197,7 +198,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
             className="rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
             style={{ background: botC.bg, color: botC.text }}
           >
-            {item.assignedBot}
+             {normalizedBot}
           </span>
           <button
             ref={closeBtnRef}
