@@ -99,7 +99,7 @@ export default function EmailPage() {
     <div className="space-y-4">
       {/* Heading */}
       <div>
-        <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Email</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Email</h1>
         <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Split-pane inbox with hybrid AI drafting from Ruby.</p>
       </div>
 
@@ -212,7 +212,7 @@ export default function EmailPage() {
           {selected ? (
             <div className="flex-1 overflow-y-auto p-5">
               {/* Subject + metadata */}
-              <div className="flex items-start justify-between mb-1">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-1">
                 <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
                   {selected.subject}
                 </h2>
@@ -236,7 +236,7 @@ export default function EmailPage() {
               </p>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2 mb-5">
+              <div className="flex flex-wrap items-center gap-2 mb-5">
                 <button
                   className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-85"
                   style={{ background: 'var(--color-purple)', color: '#FFFFFF' }}

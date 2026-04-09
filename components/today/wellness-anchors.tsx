@@ -258,7 +258,7 @@ export function WellnessAnchors() {
         {celebrate && <span className="text-lg animate-bounce">🎉</span>}
       </div>
 
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         {anchors.map((a) => {
           const Icon = a.icon;
           return (

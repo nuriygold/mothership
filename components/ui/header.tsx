@@ -216,7 +216,7 @@ export function Header() {
 
       {/* Right: date/time + theme toggle */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <span className="text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
+        <span className="hidden sm:inline text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
           {now}
         </span>
         <button
