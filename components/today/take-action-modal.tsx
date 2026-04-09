@@ -54,6 +54,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
   }
 
   const botC = BOT_COLORS[item.assignedBot] ?? BOT_COLORS.Adrian;
+  const defaultTelegramBotKey = BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
   const actions: Array<{
     key: string;
     icon: ElementType<{ className?: string; style?: CSSProperties }>;
@@ -130,7 +131,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       color: botC.bg,
       textColor: botC.text,
       fn: async () => {
-        const botKey = BOT_TELEGRAM_KEY[item.assignedBot] ?? 'bot1';
+        const botKey = BOT_TELEGRAM_KEY[item.assignedBot] ?? defaultTelegramBotKey;
         const res = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -158,7 +159,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       color: 'var(--color-sky)',
       textColor: 'var(--color-sky-text)',
       fn: async () => {
-        window.open(`https://www.google.com/search?q=${encodeURIComponent(item.title)}`, '_blank');
+        window.open(`https://www.google.com/search?q=${encodeURIComponent(item.title)}`, '_blank', 'noopener,noreferrer');
       },
     },
   ];
