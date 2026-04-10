@@ -15,7 +15,8 @@ export async function POST(req: Request) {
 
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
-  const model = modelForOpenClaw();
+  const resolvedAgent = agentForKey(agentId);
+  const model = modelForOpenClaw(resolvedAgent);
 
   if (!gateway || !token) {
     // Return a graceful mock stream if gateway not configured
@@ -28,8 +29,6 @@ export async function POST(req: Request) {
     });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
-
-  const resolvedAgent = agentForKey(agentId);
 
   let upstreamRes: Response;
   try {
