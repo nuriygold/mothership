@@ -56,32 +56,32 @@ const BOT_PROFILES: Array<{
   {
     key: 'adrian',
     name: 'Adrian',
-    role: 'Operations & Support',
+    role: 'Automation & System Operations',
     colorKey: 'mint',
     iconKey: 'trending-up',
-    workingStyle: 'Methodical and reconciliation-first',
-    personality: 'Calm, detail-first operator',
-    strengths: ['Task coordination', 'Data reconciliation', 'Exception flagging'],
+    workingStyle: 'Executes commands, scripts, and infrastructure operations end-to-end',
+    personality: 'Reliable, action-first executor — runs the machine',
+    strengths: ['Automation & orchestration', 'Infrastructure & deployment', 'System health monitoring'],
   },
   {
     key: 'ruby',
     name: 'Ruby',
-    role: 'Comms & Writing',
+    role: 'Personal Communication & Life Management',
     colorKey: 'pink',
     iconKey: 'mail',
-    workingStyle: 'Fast iteration with tone-aware variants',
-    personality: 'Warm, direct, and pragmatic',
-    strengths: ['Email drafting', 'Message sequencing', 'Narrative clarity'],
+    workingStyle: 'Tone-aware, fast iteration on messages and social coordination',
+    personality: 'Warm, direct, and relationship-aware — talks to people',
+    strengths: ['Personal messaging', 'Social & life coordination', 'Relationship interactions'],
   },
   {
     key: 'emerald',
     name: 'Emerald',
-    role: 'Financial Intelligence & Research',
+    role: 'Analysis, Verification & Financial Intelligence',
     colorKey: 'sky',
     iconKey: 'search',
-    workingStyle: 'Evidence-first synthesis with financial precision',
-    personality: 'Curious, structured, and numbers-first',
-    strengths: ['Financial analysis', 'Research synthesis', 'Forecasting & briefing'],
+    workingStyle: 'Traces problems layer by layer — data, schema, API, frontend — before reaching conclusions',
+    personality: 'Precise, auditable, decision-ready — understands what is happening and why',
+    strengths: ['Financial intelligence & cash flow analysis', 'System verification & QA', 'Strategic diagnostics & pattern detection'],
   },
   {
     key: 'adobe',
@@ -99,10 +99,14 @@ function routeForTask(task: any): BotRouteKey {
   const title = String(task.title ?? '').toLowerCase();
   const description = String(task.description ?? '').toLowerCase();
   const haystack = `${title} ${description}`;
-  if (haystack.match(/invoice|finance|budget|bill|expense|payment|ledger/)) return 'emerald';
-  if (haystack.match(/email|reply|message|copy|comms|outreach/)) return 'ruby';
-  if (haystack.match(/research|analysis|investigate|synthesis/)) return 'emerald';
+  // Emerald: analysis, verification, financial intelligence, diagnostics
+  if (haystack.match(/analyz|audit|verif|diagnos|investigat|pattern|architecture|dashboard|finance|financial|budget|cash.?flow|debt|invest|ledger|invoice|expense|payment|bill|liquidity|forecast|leverage|reconcil/)) return 'emerald';
+  // Ruby: personal communication, social coordination, life management
+  if (haystack.match(/email|reply|message|copy|comms|outreach|personal|social|relationship|schedule/)) return 'ruby';
+  // Adobe: document parsing and extraction
   if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
+  // Adrian: automation, infrastructure, system operations
+  if (haystack.match(/automat|deploy|infrastructure|script|command|system|health|orchestrat|build|install|setup|run /)) return 'adrian';
   return 'gateway';
 }
 
@@ -128,7 +132,7 @@ function mapTaskPriority(priority: TaskPriority): V2TaskItem['metadata']['priori
 function categoryFromRoute(route: BotRouteKey): PredictiveActionState['category'] {
   if (route === 'emerald') return 'finance';
   if (route === 'ruby') return 'email';
-  if (route === 'gateway') return 'tasks';
+  if (route === 'adrian' || route === 'gateway') return 'tasks';
   return 'other';
 }
 
