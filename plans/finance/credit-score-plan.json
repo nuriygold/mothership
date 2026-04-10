@@ -9,7 +9,7 @@
   "unit": "points",
   "startDate": "2026-01-01",
   "targetDate": "2026-12-31",
-  "managedByBot": "adrian",
+  "managedByBot": "emerald",
   "milestones": [
     { "label": "Pay down credit utilization below 30%", "targetValue": 650 },
     { "label": "Dispute incorrect late payment entries with bureaus", "targetValue": 670 },

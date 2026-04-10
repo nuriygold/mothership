@@ -427,13 +427,14 @@ model Account {
 }
 
 model Transaction {
-  id          String   @id @default(uuid())
-  accountId   String
-  amount      Float
-  description String?
-  category    String?
-  occurredAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  id            String   @id @default(uuid())
+  accountId     String
+  amount        Float
+  description   String?
+  category      String?
+  handledByBot  String   @default("Emerald")
+  occurredAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   account Account @relation(fields: [accountId], references: [id])
 }

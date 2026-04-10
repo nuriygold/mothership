@@ -9,7 +9,7 @@
   "unit": "USD",
   "startDate": "2026-04-01",
   "targetDate": "2026-06-30",
-  "managedByBot": "adrian",
+  "managedByBot": "emerald",
   "milestones": [
     { "label": "April revenue target", "targetValue": 60000 },
     { "label": "May revenue target", "targetValue": 130000 },

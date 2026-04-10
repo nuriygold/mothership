@@ -245,7 +245,7 @@ export default function FinancePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               text: 'Emerald, please generate a financial analysis: liquidity, obligations, transaction trends, and 30-day forecast.',
-              botKey: 'bot1',
+              botKey: 'bot3',
             }),
           });
           setEmeraldStatus(res.ok ? 'sent' : 'error');

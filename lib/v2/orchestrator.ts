@@ -56,12 +56,12 @@ const BOT_PROFILES: Array<{
   {
     key: 'adrian',
     name: 'Adrian',
-    role: 'Financial Operations',
+    role: 'Operations & Support',
     colorKey: 'mint',
     iconKey: 'trending-up',
     workingStyle: 'Methodical and reconciliation-first',
     personality: 'Calm, detail-first operator',
-    strengths: ['Financial analysis', 'Data reconciliation', 'Exception flagging'],
+    strengths: ['Task coordination', 'Data reconciliation', 'Exception flagging'],
   },
   {
     key: 'ruby',
@@ -76,12 +76,12 @@ const BOT_PROFILES: Array<{
   {
     key: 'emerald',
     name: 'Emerald',
-    role: 'Research & Synthesis',
+    role: 'Financial Intelligence & Research',
     colorKey: 'sky',
     iconKey: 'search',
-    workingStyle: 'Evidence-first synthesis',
-    personality: 'Curious and structured',
-    strengths: ['Research synthesis', 'Briefing', 'Comparative analysis'],
+    workingStyle: 'Evidence-first synthesis with financial precision',
+    personality: 'Curious, structured, and numbers-first',
+    strengths: ['Financial analysis', 'Research synthesis', 'Forecasting & briefing'],
   },
   {
     key: 'adobe',
@@ -99,7 +99,7 @@ function routeForTask(task: any): BotRouteKey {
   const title = String(task.title ?? '').toLowerCase();
   const description = String(task.description ?? '').toLowerCase();
   const haystack = `${title} ${description}`;
-  if (haystack.match(/invoice|finance|budget|bill|expense|payment|ledger/)) return 'adrian';
+  if (haystack.match(/invoice|finance|budget|bill|expense|payment|ledger/)) return 'emerald';
   if (haystack.match(/email|reply|message|copy|comms|outreach/)) return 'ruby';
   if (haystack.match(/research|analysis|investigate|synthesis/)) return 'emerald';
   if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
@@ -126,7 +126,7 @@ function mapTaskPriority(priority: TaskPriority): V2TaskItem['metadata']['priori
 }
 
 function categoryFromRoute(route: BotRouteKey): PredictiveActionState['category'] {
-  if (route === 'adrian') return 'finance';
+  if (route === 'emerald') return 'finance';
   if (route === 'ruby') return 'email';
   if (route === 'gateway') return 'tasks';
   return 'other';
@@ -283,7 +283,7 @@ export async function getV2BotsFeed(): Promise<V2BotsFeed> {
       .map((task) => ({
         title: `${task.title} completed`,
         timestamp: relativeTime(new Date(task.updatedAt ?? Date.now())),
-        type: profile.key === 'adrian' ? 'finance' : profile.key,
+        type: profile.key === 'emerald' ? 'finance' : profile.key,
       }));
 
     return {
@@ -437,7 +437,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       category: transaction.category ?? 'General',
       amount: transaction.amount,
       // If you have an agent field, use it. Default to Adrian.
-      handledByBot: transaction.handledByBot ?? 'Adrian',
+      handledByBot: transaction.handledByBot,
     })),
     plans: mappedPlans,
   };

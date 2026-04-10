@@ -13,6 +13,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const description = typeof body.description === 'string' ? body.description.trim() : '';
     const category = typeof body.category === 'string' ? body.category.trim() : null;
+    const handledByBot = typeof body.handledByBot === 'string' ? body.handledByBot.trim() : 'Emerald';
     const accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
     const type = typeof body.type === 'string' ? body.type.toUpperCase() : '';
     const rawAmount = Number(body.amount);
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
           accountId,
           description,
           category,
+          handledByBot,
           amount: normalizedAmount,
           occurredAt,
         },
