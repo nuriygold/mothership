@@ -179,7 +179,7 @@ export type V2FinancePlan = {
   milestones: V2FinancePlanMilestone[];
   progressPercent: number | null;
   notes: string | null;
-  updatedAt: string;
+  updatedAt: string | null;
 };
 
 export type V2FinanceOverviewFeed = {

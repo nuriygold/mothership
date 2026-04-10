@@ -360,7 +360,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     (async () => {
       try {
         payables = await prisma.payable.findMany({
-          where: { status: { equals: 'pending', mode: 'insensitive' } },
+          where: { status: { in: ['pending', 'overdue'], mode: 'insensitive' } },
           orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
           take: 10,
         });
@@ -427,7 +427,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       vendor: payable.vendor,
       amount: payable.amount,
       dueDate: payable.dueDate ? payable.dueDate.toISOString().slice(0, 10) : 'Unscheduled',
-      status: 'pending',
+      status: (payable.status?.toLowerCase() ?? 'pending') as 'pending' | 'paid' | 'overdue',
     })),
     transactions: transactions.map((transaction) => ({
       date: transaction.occurredAt

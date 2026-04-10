@@ -5,7 +5,11 @@ import useSWR from 'swr';
 import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown } from 'lucide-react';
 import type { V2FinanceOverviewFeed, V2FinancePlan } from '@/lib/v2/types';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) =>
+  fetch(url).then((res) => {
+    if (!res.ok) throw new Error(`Finance overview fetch failed: ${res.status}`);
+    return res.json();
+  });
 
 const PLAN_TYPE_LABELS: Record<string, string> = {
   CREDIT_SCORE: 'Credit Score',
@@ -209,7 +213,13 @@ export default function FinancePage() {
   }, [data]);
 
   const monthlySummary = useMemo(() => {
-    const txs = data?.transactions ?? [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const txs = (data?.transactions ?? []).filter((t) => {
+      const d = new Date(t.date);
+      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+    });
     const income = txs.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
     const expenses = txs.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
     return { income, expenses };
