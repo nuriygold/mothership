@@ -694,80 +694,14 @@ export default function TodayPage() {
             </div>
           </Card>
 
-          {/* ── Top Priorities (drag source) ── */}
+          {/* ── Quick Actions ── */}
           <Card>
             <div className="flex items-center gap-2">
-              <Star className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
-              <CardTitle>Top Priorities</CardTitle>
+              <Zap className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
+              <CardTitle>Quick Actions</CardTitle>
             </div>
-            <CardSubtitle>Drag into timeline to schedule · Click to take action</CardSubtitle>
-            <div className="mt-3 space-y-2">
-              {!data ? (
-                // Loading skeleton
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: 'var(--muted)' }} />
-                  ))}
-                </div>
-              ) : availablePriorities.length === 0 ? (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
-              ) : (
-                availablePriorities.map((item) => {
-                  const normalizedPriorityBot = normalizeBotName(item.assignedBot);
-                  const borderColor = BOT_BORDER[normalizedPriorityBot] ?? BOT_BORDER.default;
-                  const botC = BOT_COLORS[normalizedPriorityBot];
-                  return (
-                    <div key={item.id}
-                      draggable
-                      onDragStart={() => handleDragStart(item)}
-                      onDragEnd={() => { draggedItemRef.current = null; setDragOverIdx(null); setDragOverEnd(false); }}
-                      className="flex items-center justify-between rounded-xl p-3 group cursor-grab active:cursor-grabbing"
-                      style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <GripVertical className="w-3.5 h-3.5 flex-shrink-0 opacity-30 group-hover:opacity-70 transition-opacity" />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
-                            {item.dueAt && new Date(item.dueAt).getTime() < Date.now() && (
-                              <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(255,92,92,0.15)', color: '#FF5C5C' }}>OVERDUE</span>
-                            )}
-                          </div>
-                          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {botC && (
-                          <button onClick={() => handleBotTelegram(normalizedPriorityBot, item.title)}
-                            className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
-                            style={{ background: botC.bg, color: botC.text }}
-                            title={`Message ${normalizedPriorityBot} on Telegram`}>
-                            {normalizedPriorityBot}
-                          </button>
-                        )}
-                        {item.taskId && (
-                          <AssignToDropdown currentBot={normalizedPriorityBot} taskTitle={item.title}
-                            onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
-                        )}
-                        <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
-                          style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
-                          onClick={() => handleTakeAction(item)}>
-                          Take Action
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* ── Right: Quick Actions ── */}
-        <div className="space-y-4">
-          {/* Quick Actions */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: 'var(--muted-foreground)' }}>Quick Actions</p>
-            <div className="grid grid-cols-2 gap-3">
+            <CardSubtitle>Fast paths to create, approve, dispatch, and celebrate</CardSubtitle>
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}>
                   <Plus className="w-5 h-5" style={{ color: '#4A3DAA' }} />
@@ -840,7 +774,76 @@ export default function TodayPage() {
                 </div>
               </button>
             </div>
-          </div>
+          </Card>
+        </div>
+
+        {/* ── Right: Top Priorities (drag source) ── */}
+        <div className="space-y-4">
+          <Card>
+            <div className="flex items-center gap-2">
+              <Star className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
+              <CardTitle>Top Priorities</CardTitle>
+            </div>
+            <CardSubtitle>Drag into timeline to schedule · Click to take action</CardSubtitle>
+            <div className="mt-3 space-y-2">
+              {!data ? (
+                // Loading skeleton
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: 'var(--muted)' }} />
+                  ))}
+                </div>
+              ) : availablePriorities.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
+              ) : (
+                availablePriorities.map((item) => {
+                  const normalizedPriorityBot = normalizeBotName(item.assignedBot);
+                  const borderColor = BOT_BORDER[normalizedPriorityBot] ?? BOT_BORDER.default;
+                  const botC = BOT_COLORS[normalizedPriorityBot];
+                  return (
+                    <div key={item.id}
+                      draggable
+                      onDragStart={() => handleDragStart(item)}
+                      onDragEnd={() => { draggedItemRef.current = null; setDragOverIdx(null); setDragOverEnd(false); }}
+                      className="flex items-center justify-between rounded-xl p-3 group cursor-grab active:cursor-grabbing"
+                      style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <GripVertical className="w-3.5 h-3.5 flex-shrink-0 opacity-30 group-hover:opacity-70 transition-opacity" />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
+                            {item.dueAt && new Date(item.dueAt).getTime() < Date.now() && (
+                              <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(255,92,92,0.15)', color: '#FF5C5C' }}>OVERDUE</span>
+                            )}
+                          </div>
+                          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {botC && (
+                          <button onClick={() => handleBotTelegram(normalizedPriorityBot, item.title)}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
+                            style={{ background: botC.bg, color: botC.text }}
+                            title={`Message ${normalizedPriorityBot} on Telegram`}>
+                            {normalizedPriorityBot}
+                          </button>
+                        )}
+                        {item.taskId && (
+                          <AssignToDropdown currentBot={normalizedPriorityBot} taskTitle={item.title}
+                            onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
+                        )}
+                        <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
+                          style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+                          onClick={() => handleTakeAction(item)}>
+                          Take Action
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
         </div>
       </div>
     </div>
