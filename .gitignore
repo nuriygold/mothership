@@ -15,3 +15,7 @@ tsconfig.tsbuildinfo
 tsconfig.tsbuildinfo
 fix-*.js
 .oura-tokens.json
+
+.claw/
+.sandbox-home/
+.sandbox-tmp/
