@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -200,7 +200,7 @@ function getSupportedMimeType(): string {
   return '';
 }
 
-export default function DispatchPage() {
+function DispatchPageInner() {
   const searchParams = useSearchParams();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
@@ -959,5 +959,13 @@ export default function DispatchPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function DispatchPage() {
+  return (
+    <Suspense>
+      <DispatchPageInner />
+    </Suspense>
   );
 }
