@@ -4,18 +4,53 @@ type DispatchInput = {
   sessionKey?: string | null;
 };
 
+const DEFAULT_OPENCLAW_MODEL = 'blessed-abundance/gpt-5.3-chat';
+
+function normalizeAgentId(value?: string | null) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'main';
+
+  switch (raw.toLowerCase()) {
+    case 'adrian':
+    case 'main':
+      return 'main';
+    case 'ruby':
+      return 'ruby';
+    case 'emerald':
+      return 'emerald';
+    case 'adobe':
+      return 'adobe';
+    default:
+      return raw;
+  }
+}
+
 export function agentForKey(key?: string) {
-  if (!key) return process.env.OPENCLAW_DEFAULT_AGENT || 'main';
-  if (key === 'ruby') return process.env.OPENCLAW_AGENT_RUBY || 'ruby';
-  if (key === 'emerald') return process.env.OPENCLAW_AGENT_EMERALD || 'emerald';
-  return key;
+  const requested = normalizeAgentId(key);
+  if (requested === 'main') {
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_ADRIAN || process.env.OPENCLAW_DEFAULT_AGENT || 'main');
+  }
+  if (requested === 'ruby') {
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_RUBY || 'ruby');
+  }
+  if (requested === 'emerald') {
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_EMERALD || 'emerald');
+  }
+  if (requested === 'adobe') {
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_ADOBE || 'adobe');
+  }
+  return requested;
+}
+
+export function modelForOpenClaw() {
+  return String(process.env.OPENCLAW_MODEL || DEFAULT_OPENCLAW_MODEL).trim() || DEFAULT_OPENCLAW_MODEL;
 }
 
 export async function dispatchToOpenClaw(input: DispatchInput) {
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
-  const defaultAgent = process.env.OPENCLAW_DEFAULT_AGENT || 'main';
-  const model = process.env.OPENCLAW_MODEL || 'openclaw/ruby';
+  const defaultAgent = agentForKey();
+  const model = modelForOpenClaw();
 
   if (!gateway || !token) {
     throw new Error('OPENCLAW_GATEWAY or OPENCLAW_TOKEN not set');
