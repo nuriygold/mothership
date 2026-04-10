@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+.env
+.DS_Store
+coverage/
+.env.local
+.vercel
+.env*.local
+
+.env.local
+.env
+/services/workflowService.ts
+tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
+fix-*.js
+.oura-tokens.json

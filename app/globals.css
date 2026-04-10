@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --radius: 1rem;
+
+  /* Main content backgrounds — LIGHT/PASTEL dominant */
+  --background: #F2F5FF;
+  --foreground: #0F1B35;
+  --card: #FFFFFF;
+  --card-foreground: #0F1B35;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F1B35;
+
+  /* Primary - Electric Cyan */
+  --primary: #00D9FF;
+  --primary-foreground: #0A0E1A;
+
+  /* Secondary - Deep Purple */
+  --secondary: #7B68EE;
+  --secondary-foreground: #FFFFFF;
+
+  --muted: #EDF0FA;
+  --muted-foreground: #5B6B8A;
+  --accent: #00D9FF;
+  --accent-foreground: #0A0E1A;
+  --destructive: #E53E3E;
+  --destructive-foreground: #FFFFFF;
+
+  /* Borders & Input */
+  --border: rgba(100, 130, 200, 0.18);
+  --input: transparent;
+  --input-background: #FFFFFF;
+  --switch-background: #CBD5E8;
+  --ring: #00D9FF;
+
+  /* Sidebar & StatusBar — Dark Navy */
+  --sidebar: #0A1628;
+  --sidebar-foreground: #E8EDF5;
+  --sidebar-primary: #00D9FF;
+  --sidebar-primary-foreground: #0A0E1A;
+  --sidebar-accent: #1A2A45;
+  --sidebar-accent-foreground: #E8EDF5;
+  --sidebar-border: rgba(0, 217, 255, 0.1);
+  --sidebar-ring: #00D9FF;
+
+  /* Brand Palette */
+  --color-cyan: #00D9FF;
+  --color-cyan-dark: #00B8D9;
+  --color-blue: #5B9FFF;
+  --color-purple: #7B68EE;
+  --color-purple-dark: #6B5ACD;
+  --color-navy: #0A1628;
+  --color-steel: #7A8AAA;
+  --color-surface: #FFFFFF;
+  --color-surface-light: #F2F5FF;
+  --color-glow: #00E5FF;
+
+  /* Pastel Palette */
+  --color-mint: #C8F5EC;
+  --color-mint-text: #0A6B5A;
+  --color-lavender: #E4E0FF;
+  --color-lavender-text: #4A3DAA;
+  --color-peach: #FFE5D0;
+  --color-peach-text: #8B4513;
+  --color-sky: #D0E8FF;
+  --color-sky-text: #1A4A8B;
+  --color-pink: #FFD6E8;
+  --color-pink-text: #8B1A4A;
+  --color-mauve: #8B76D6;
+  --color-mauve-text: #FFFFFF;
+  --color-lemon: #FFF3C4;
+  --color-lemon-text: #7A5A00;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --background: #0F1419;
+  --foreground: #E8EDF5;
+  --card: #1A1F2E;
+  --card-foreground: #E8EDF5;
+  --popover: #1A1F2E;
+  --popover-foreground: #E8EDF5;
+  --primary: #00D9FF;
+  --primary-foreground: #0A0E1A;
+  --secondary: #7B68EE;
+  --secondary-foreground: #F0F4FF;
+  --muted: #2A2F3E;
+  --muted-foreground: #A8B5D1;
+  --accent: #00D9FF;
+  --accent-foreground: #0A0E1A;
+  --destructive: #FF5C5C;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(0, 217, 255, 0.12);
+  --input: transparent;
+  --input-background: #1A1F2E;
+  --switch-background: #2A3A5A;
+  --ring: #00D9FF;
+  --sidebar: #0A0E1A;
+  --sidebar-foreground: #E8EDF5;
+  --sidebar-primary: #00D9FF;
+  --sidebar-primary-foreground: #0A0E1A;
+  --sidebar-accent: #1A1F2E;
+  --sidebar-accent-foreground: #E8EDF5;
+  --sidebar-border: rgba(0, 217, 255, 0.08);
+  --sidebar-ring: #00D9FF;
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(0, 217, 255, 0.08), transparent 38%),
+    radial-gradient(circle at 85% 0%, rgba(123, 104, 238, 0.08), transparent 42%),
+    var(--background);
+  color: var(--foreground);
+  font-family: Sora, 'Avenir Next', 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  h1, h2, h3, h4, label, button {
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  input {
+    font-weight: 400;
+    line-height: 1.5;
+  }
+}
+
+.card {
+  @apply rounded-3xl border shadow-sm;
+  background: var(--card);
+  border-color: var(--border);
+  backdrop-filter: blur(10px);
+}
+
+.panel {
+  @apply rounded-3xl border;
+  background: var(--popover);
+  border-color: var(--border);
+  backdrop-filter: blur(8px);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes logoGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px #00D9FF) drop-shadow(0 0 16px rgba(0, 217, 255, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px #7B68EE) drop-shadow(0 0 16px rgba(123, 104, 238, 0.4));
+  }
+}
+
+@keyframes pulseRing {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.08);
+  }
+}
+
+.logo-glow-animate {
+  animation: logoGlow 3s ease-in-out infinite;
+}
+
+.logo-pulse-ring {
+  animation: pulseRing 3s ease-in-out infinite;
+}
+
+a {
+  color: inherit;
+}
+
+/* Responsive container height */
+.main-container {
+  min-height: calc(100vh - 104px); /* mobile: header 44px + mobile-nav 60px */
+}
+@supports (height: 100dvh) {
+  .main-container {
+    min-height: calc(100dvh - 104px); /* dynamic viewport for mobile browser UI */
+  }
+}
+@media (min-width: 768px) {
+  .main-container {
+    min-height: calc(100vh - 44px); /* desktop: header only */
+  }
+  @supports (height: 100dvh) {
+    .main-container {
+      min-height: calc(100dvh - 44px);
+    }
+  }
+}
+
+/* Safe area insets for notched iPhones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .main-container > main {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 768px) {
+    .main-container > main {
+      padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+    }
+  }
+}

@@ -1,0 +1,9 @@
+import { NextResponse } from 'next/server';
+import { listAuditEvents } from '@/lib/services/audit';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  const events = await listAuditEvents();
+  return NextResponse.json(events);
+}

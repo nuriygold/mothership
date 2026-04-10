@@ -1,0 +1,20 @@
+{
+  "title": "Emergency Fund Build-Up",
+  "type": "SAVINGS",
+  "status": "ACTIVE",
+  "description": "Build a 6-month operating expense reserve to protect against revenue disruptions.",
+  "goal": "Accumulate $50,000 emergency reserve in the dedicated savings account",
+  "currentValue": 12000,
+  "targetValue": 50000,
+  "unit": "USD",
+  "startDate": "2026-01-01",
+  "targetDate": "2026-10-01",
+  "managedByBot": "adrian",
+  "milestones": [
+    { "label": "First $10K saved", "targetValue": 10000 },
+    { "label": "25% of target", "targetValue": 12500 },
+    { "label": "50% of target", "targetValue": 25000 },
+    { "label": "Full 6-month reserve", "targetValue": 50000 }
+  ],
+  "notes": "Auto-transfer $5,000/month on the 1st. Do not touch unless there is a revenue shortfall exceeding 3 months."
+}

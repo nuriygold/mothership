@@ -1,0 +1,451 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkflowType {
+  STANDARD
+  BOOMERANG
+}
+
+enum WorkflowStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum SubmissionValidationStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+  APPROVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELED
+}
+
+enum ApprovalDecision {
+  REQUESTED
+  APPROVED
+  DENIED
+}
+
+enum ConnectorStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum CommandStatus {
+  RECEIVED
+  EXECUTING
+  COMPLETED
+  FAILED
+}
+
+enum PredictiveActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+}
+
+enum IntegrationEventStatus {
+  RECEIVED
+  ROUTED
+  FAILED
+}
+
+enum DispatchCampaignStatus {
+  DRAFT
+  PLANNING
+  READY
+  EXECUTING
+  PAUSED
+  COMPLETED
+}
+
+enum DispatchTaskStatus {
+  PLANNED
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  PARTIAL
+  CANCELED
+}
+
+model User {
+  id                 String       @id @default(uuid())
+  email              String       @unique
+  name               String?
+  workflows          Workflow[]   @relation("WorkflowOwner")
+  tasks              Task[]
+  approvalsRequested Approval[]   @relation("ApprovalRequestedBy")
+  approvalsDecided   Approval[]   @relation("ApprovalDecidedBy")
+  submissions        Submission[] @relation("SubmissionUser")
+  commands           Command[]    @relation("CommandRequester")
+  auditEvents        AuditEvent[] @relation("AuditActor")
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+model Workflow {
+  id                     String                  @id @default(uuid())
+  name                   String
+  description            String?
+  type                   WorkflowType            @default(STANDARD)
+  status                 WorkflowStatus          @default(ACTIVE)
+  ownerId                String
+  owner                  User                    @relation("WorkflowOwner", fields: [ownerId], references: [id])
+  currentSchemaVersionId String? @unique
+  currentSchemaVersion   WorkflowSchemaVersion?  @relation("CurrentSchemaVersion", fields: [currentSchemaVersionId], references: [id])
+  schemaVersions         WorkflowSchemaVersion[] @relation("WorkflowSchemaVersions")
+  submissions            Submission[]
+  tasks                  Task[]
+  runs                   Run[]
+  approvals              Approval[]
+  connectors             Connector[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+}
+
+model WorkflowSchemaVersion {
+  id         String   @id @default(uuid())
+  workflowId String
+  version    Int
+  schemaJson Json
+  createdAt  DateTime @default(now())
+
+  workflow           Workflow @relation("WorkflowSchemaVersions", fields: [workflowId], references: [id])
+  currentForWorkflow Workflow? @relation("CurrentSchemaVersion")
+  @@unique([workflowId, version])
+}
+
+model Submission {
+  id                 String                       @id @default(uuid())
+  workflowId         String
+  submittedById      String?
+  sourceChannel      String
+  fileName           String?
+  rawPayload         Json
+  normalizedPayload  Json?
+  validationStatus   SubmissionValidationStatus @default(PENDING)
+  validationSummary  Json?
+  submittedAt        DateTime                     @default(now())
+  processedAt        DateTime?
+
+  workflow    Workflow @relation(fields: [workflowId], references: [id])
+  submittedBy User?    @relation("SubmissionUser", fields: [submittedById], references: [id])
+  runs        Run[]
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  workflowId  String?
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  ownerId     String?
+  assignee    String?
+  dueAt       DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  workflow Workflow? @relation(fields: [workflowId], references: [id])
+  owner    User?     @relation(fields: [ownerId], references: [id])
+  approvals Approval[]
+  run       Run?
+}
+
+model Run {
+  id           String    @id @default(uuid())
+  workflowId   String?
+  taskId       String?   @unique
+  type         String
+  sourceSystem String
+  status       RunStatus @default(QUEUED)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  metadata     Json?
+  errorMessage String?
+  submissionId String?
+
+  workflow   Workflow?  @relation(fields: [workflowId], references: [id])
+  task       Task?      @relation(fields: [taskId], references: [id])
+  submission Submission? @relation(fields: [submissionId], references: [id])
+  commands   Command[]
+}
+
+model Approval {
+  id            String           @id @default(uuid())
+  workflowId    String?
+  taskId        String?
+  requestedById String?
+  decidedById   String?
+  status        ApprovalDecision @default(REQUESTED)
+  reason        String?
+  createdAt     DateTime         @default(now())
+  decidedAt     DateTime?
+
+  workflow     Workflow? @relation(fields: [workflowId], references: [id])
+  task         Task?     @relation(fields: [taskId], references: [id])
+  requestedBy  User?     @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+  decidedBy    User?     @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  eventType  String
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor    User?    @relation("AuditActor", fields: [actorId], references: [id])
+}
+
+model Connector {
+  id        String          @id @default(uuid())
+  name      String
+  type      String
+  status    ConnectorStatus @default(DISCONNECTED)
+  config    Json?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  workflowId String?
+
+  workflow Workflow? @relation(fields: [workflowId], references: [id])
+}
+
+model Command {
+  id             String         @id @default(uuid())
+  input          String
+  sourceChannel  String
+  requestedById  String?
+  status         CommandStatus  @default(RECEIVED)
+  runId          String?
+  createdAt      DateTime       @default(now())
+  completedAt    DateTime?
+
+  requestedBy User? @relation("CommandRequester", fields: [requestedById], references: [id])
+  run         Run?  @relation(fields: [runId], references: [id])
+}
+
+model DispatchCampaign {
+  id                  String                 @id @default(uuid())
+  title               String
+  description         String?
+  status              DispatchCampaignStatus @default(DRAFT)
+  costBudgetCents     Int?
+  timeBudgetSeconds   Int?
+  callbackUrl         String?
+  callbackSecret      String?
+  latestPlan          Json?
+  latestPlanCreatedAt DateTime?
+  approvedPlanName    String?
+  approvedPlanAt      DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  tasks DispatchTask[]
+}
+
+model DispatchTask {
+  id               String             @id @default(uuid())
+  campaignId       String
+  title            String
+  description      String?
+  priority         Int                @default(5)
+  dependencies     Json?
+  toolRequirements Json?
+  status           DispatchTaskStatus @default(PLANNED)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  campaign DispatchCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status])
+}
+
+model PredictiveAction {
+  id                String                 @id @default(uuid())
+  dedupeKey         String                 @unique
+  title             String
+  category          String
+  sourceIntegration String
+  assignedBot       String
+  status            PredictiveActionStatus @default(PENDING)
+  payload           Json?
+  actionWebhook     String
+  executedAt        DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}
+
+model BotProfile {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  name           String
+  role           String
+  workingStyle   String?
+  personality    String?
+  strengths      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  liveSnapshots  BotLiveStateSnapshot[]
+  outputs        BotOutput[]
+}
+
+model BotLiveStateSnapshot {
+  id          String   @id @default(uuid())
+  botProfileId String
+  currentTask String?
+  status      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  botProfile BotProfile @relation(fields: [botProfileId], references: [id])
+}
+
+model BotOutput {
+  id          String   @id @default(uuid())
+  botProfileId String
+  title       String
+  type        String
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  botProfile BotProfile @relation(fields: [botProfileId], references: [id])
+}
+
+model IntegrationEvent {
+  id                String                 @id @default(uuid())
+  sourceIntegration String
+  eventType         String
+  payload           Json
+  correlationKey    String?
+  status            IntegrationEventStatus @default(RECEIVED)
+  routedBot         String?
+  errorMessage      String?
+  createdAt         DateTime               @default(now())
+}
+
+model EmailDraftSuggestion {
+  id             String   @id @default(uuid())
+  emailExternalId String
+  tone           String
+  body           String
+  source         String
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model SystemHealthMetricSnapshot {
+  id              String   @id @default(uuid())
+  primarySystems  Int
+  botPerformance  Int
+  emailProcessing Int
+  dataSync        Int
+  createdAt       DateTime @default(now())
+}
+
+enum FinancePlanType {
+  CREDIT_SCORE
+  BUDGET
+  SAVINGS
+  DEBT_PAYOFF
+  INVESTMENT
+  EXPENSE_REDUCTION
+  CUSTOM
+}
+
+enum FinancePlanStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+model FinancePlan {
+  id           String            @id @default(uuid())
+  title        String
+  type         FinancePlanType   @default(CUSTOM)
+  status       FinancePlanStatus @default(ACTIVE)
+  description  String?
+  goal         String?
+  currentValue Float?
+  targetValue  Float?
+  unit         String?
+  startDate    DateTime?
+  targetDate   DateTime?
+  managedByBot String            @default("adrian")
+  milestones   Json?
+  notes        String?
+  sourceFile   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  name      String
+  type      String
+  currency  String   @default("USD")
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  accountId   String
+  amount      Float
+  description String?
+  category    String?
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model Payable {
+  id          String   @id @default(uuid())
+  vendor      String
+  amount      Float
+  currency    String   @default("USD")
+  dueDate     DateTime?
+  status      String   @default("pending")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
