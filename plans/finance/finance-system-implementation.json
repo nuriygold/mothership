@@ -1,0 +1,20 @@
+{
+  "title": "Finance System Implementation",
+  "type": "CUSTOM",
+  "status": "ACTIVE",
+  "description": "Populate the Mothership finance dashboard with structured real-world data across all four primitives.",
+  "goal": "Populate the Mothership finance dashboard with structured real-world data",
+  "currentValue": 0,
+  "targetValue": 4,
+  "unit": "milestones",
+  "startDate": "2026-04-10",
+  "targetDate": "2026-04-30",
+  "managedByBot": "emerald",
+  "milestones": [
+    { "label": "Seed accounts" },
+    { "label": "Import transactions" },
+    { "label": "Add payables" },
+    { "label": "Verify /api/v2/finance/overview response" }
+  ],
+  "notes": "Tracking implementation progress of the Mothership finance module."
+}
