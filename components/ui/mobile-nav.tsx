@@ -9,6 +9,8 @@ import {
   Mail,
   DollarSign,
   Activity,
+  Sparkles,
+  Send,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -24,6 +26,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/email': Mail,
   '/finance': DollarSign,
   '/activity': Activity,
+  '/ruby': Sparkles,
+  '/dispatch': Send,
 };
 
 export function MobileNav({ items }: { items: SidebarItem[] }) {
@@ -38,8 +42,8 @@ export function MobileNav({ items }: { items: SidebarItem[] }) {
         height: '60px',
       }}
     >
-      {/* Logo */}
-      <Link href="/today" className="flex-shrink-0 mr-1 px-2 transition-opacity hover:opacity-85">
+      {/* Logo — links to Dispatch */}
+      <Link href="/dispatch" className="flex-shrink-0 mr-1 px-2 transition-opacity hover:opacity-85">
         <MothershipLogo size={32} />
       </Link>
 
