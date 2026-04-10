@@ -375,10 +375,10 @@ export default function DispatchPage() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isDenied = msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('not allowed');
+      const name = err instanceof Error ? err.name : '';
+      const isDenied = name === 'NotAllowedError' || name === 'PermissionDeniedError';
       setVoiceStatus(isDenied ? 'Permission denied' : 'Mic error');
-      setVoiceError(msg);
+      setVoiceError(err instanceof Error ? err.message : String(err));
       throw err;
     }
 
