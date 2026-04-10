@@ -1,0 +1,60 @@
+import { ensureV2Authorized } from '@/lib/v2/auth';
+import { prisma } from '@/lib/prisma';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(req: Request) {
+  const authError = ensureV2Authorized(req);
+  if (authError) return authError;
+
+  try {
+    const body = await req.json();
+    const vendor = typeof body.vendor === 'string' ? body.vendor.trim() : '';
+    const description = typeof body.description === 'string' ? body.description.trim() : null;
+    const amount = Number(body.amount);
+    const dueDate = body.dueDate ? new Date(body.dueDate) : null;
+
+    if (!vendor) {
+      return Response.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'vendor is required' } },
+        { status: 400 }
+      );
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return Response.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'amount must be a positive number' } },
+        { status: 400 }
+      );
+    }
+
+    if (dueDate && Number.isNaN(dueDate.getTime())) {
+      return Response.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'dueDate must be a valid ISO date' } },
+        { status: 400 }
+      );
+    }
+
+    const payable = await prisma.payable.create({
+      data: {
+        vendor,
+        description,
+        amount,
+        dueDate,
+        status: 'pending',
+      },
+    });
+
+    return Response.json({ payable }, { status: 201 });
+  } catch (error) {
+    return Response.json(
+      {
+        error: {
+          code: 'PAYABLE_CREATE_FAILED',
+          message: error instanceof Error ? error.message : 'Failed to create payable',
+        },
+      },
+      { status: 500 }
+    );
+  }
+}

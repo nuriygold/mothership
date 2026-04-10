@@ -7,6 +7,7 @@ import { fetchTodayCalendarEvents } from '@/lib/services/calendar';
 import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
+import { prisma } from '@/lib/prisma';
 import type {
   BotRouteKey,
   SystemHealthSnapshot,
@@ -342,18 +343,29 @@ export async function getV2EmailDrafts(emailId: string): Promise<V2EmailDraftFee
 
 export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
   try {
-    const [tasks, plans] = await Promise.all([listTasks(), listFinancePlans()]);
-    const financeTasks = (tasks as any[]).filter((task) => routeForTask(task) === 'adrian').slice(0, 10);
-    const payables = financeTasks.map((task) => ({
-      vendor: task.title.split('—')[0]?.trim() || 'Unspecified vendor',
-      amount: Number(task.description?.match(/\$([0-9,.]+)/)?.[1]?.replace(/,/g, '') || 0),
-      dueDate: task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-      status: (task.status === TaskStatus.DONE
-        ? 'paid'
-        : task.status === TaskStatus.BLOCKED
-          ? 'overdue'
-          : 'pending') as 'pending' | 'paid' | 'overdue',
-    }));
+    const [accounts, payables, transactions, plans] = await Promise.all([
+      prisma.account.findMany({
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.payable.findMany({
+        where: {
+          status: {
+            equals: 'pending',
+            mode: 'insensitive',
+          },
+        },
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
+        take: 10,
+      }),
+      prisma.transaction.findMany({
+        orderBy: { occurredAt: 'desc' },
+        take: 20,
+        include: {
+          account: true,
+        },
+      }),
+      listFinancePlans(),
+    ]);
 
     const mappedPlans = plans.map((plan) => {
       const progressPercent =
@@ -382,17 +394,25 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     });
 
     return {
-      accounts: [
-        { type: 'Operating', balance: 145000, trendPercentage: '+2.4%' },
-        { type: 'Payroll', balance: 42000, trendPercentage: '+0.6%' },
-      ],
-      payables,
-      transactions: financeTasks.slice(0, 8).map((task) => ({
-        date: new Date(task.updatedAt ?? Date.now()).toISOString(),
-        description: task.title,
-        category: 'Operations',
-        amount: Number(task.description?.match(/\$([0-9,.]+)/)?.[1]?.replace(/,/g, '') || 0),
-        handledByBot: 'Adrian',
+      accounts: accounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        balance: account.balance,
+        trendPercentage: '—',
+      })),
+      payables: payables.map((payable) => ({
+        vendor: payable.vendor,
+        amount: payable.amount,
+        dueDate: payable.dueDate ? payable.dueDate.toISOString().slice(0, 10) : 'Unscheduled',
+        status: 'pending',
+      })),
+      transactions: transactions.map((transaction) => ({
+        date: transaction.occurredAt.toISOString(),
+        description: transaction.description ?? 'Transaction',
+        category: transaction.category ?? 'General',
+        amount: transaction.amount,
+        handledByBot: transaction.account.name,
       })),
       plans: mappedPlans,
     };
