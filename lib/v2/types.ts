@@ -184,6 +184,8 @@ export type V2FinancePlan = {
 
 export type V2FinanceOverviewFeed = {
   accounts: Array<{
+    id: string;
+    name: string;
     type: string;
     balance: number;
     trendPercentage: string;
@@ -219,4 +221,3 @@ export type V2ActivityFeed = {
   pageSize: number;
   hasMore: boolean;
 };
-

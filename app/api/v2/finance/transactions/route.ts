@@ -16,7 +16,8 @@ export async function POST(req: Request) {
     const accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
     const type = typeof body.type === 'string' ? body.type.toUpperCase() : '';
     const rawAmount = Number(body.amount);
-    const occurredAt = body.date ? new Date(body.date) : new Date();
+    const occurredAtInput = body.occurredAt ?? body.date;
+    const occurredAt = occurredAtInput ? new Date(occurredAtInput) : new Date();
 
     if (!description) {
       return Response.json(
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
 
     if (Number.isNaN(occurredAt.getTime())) {
       return Response.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'date must be a valid ISO date' } },
+        { error: { code: 'VALIDATION_ERROR', message: 'occurredAt must be a valid ISO date' } },
         { status: 400 }
       );
     }
@@ -64,27 +65,32 @@ export async function POST(req: Request) {
     const normalizedAmount =
       type === 'EXPENSE'
         ? -Math.abs(rawAmount)
-        : Math.abs(rawAmount);
+        : type === 'TRANSFER'
+          ? rawAmount
+          : Math.abs(rawAmount);
 
-    const transaction = await prisma.transaction.create({
-      data: {
-        accountId,
-        description,
-        category,
-        amount: normalizedAmount,
-        occurredAt,
-      },
-      include: {
-        account: true,
-      },
-    });
-
-    await prisma.account.update({
-      where: { id: accountId },
-      data: {
-        balance: account.balance + normalizedAmount,
-      },
-    });
+    const [transaction] = await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          accountId,
+          description,
+          category,
+          amount: normalizedAmount,
+          occurredAt,
+        },
+        include: {
+          account: true,
+        },
+      }),
+      prisma.account.update({
+        where: { id: accountId },
+        data: {
+          balance: {
+            increment: normalizedAmount,
+          },
+        },
+      }),
+    ]);
 
     return Response.json({ transaction }, { status: 201 });
   } catch (error) {
@@ -99,4 +105,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

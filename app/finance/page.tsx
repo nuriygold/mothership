@@ -155,7 +155,7 @@ export default function FinancePage() {
     refreshInterval: 30000,
   });
 
-  const [adrianStatus, setAdrianStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [emeraldStatus, setEmeraldStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [showAllPayables, setShowAllPayables] = useState(false);
   const [exportedFlash, setExportedFlash] = useState(false);
 
@@ -167,7 +167,7 @@ export default function FinancePage() {
   const liquidity = useMemo(
     () =>
       (data?.accounts ?? [])
-        .filter((account) => !account.type.toLowerCase().includes('credit'))
+        .filter((account) => account.type.toLowerCase() !== 'credit')
         .reduce((sum, account) => sum + account.balance, 0),
     [data]
   );
@@ -228,7 +228,7 @@ export default function FinancePage() {
       label: 'Request Financial Analysis from Emerald',
       live: true,
       onClick: async () => {
-        setAdrianStatus('sending');
+        setEmeraldStatus('sending');
         try {
           const res = await fetch('/api/telegram/send', {
             method: 'POST',
@@ -238,11 +238,11 @@ export default function FinancePage() {
               botKey: 'bot1',
             }),
           });
-          setAdrianStatus(res.ok ? 'sent' : 'error');
+          setEmeraldStatus(res.ok ? 'sent' : 'error');
         } catch {
-          setAdrianStatus('error');
+          setEmeraldStatus('error');
         }
-        setTimeout(() => setAdrianStatus('idle'), 3000);
+        setTimeout(() => setEmeraldStatus('idle'), 3000);
       },
     },
     { label: 'Set Budget Alert', live: false },
@@ -285,11 +285,11 @@ export default function FinancePage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 {data.accounts.map((account) => (
                   <div
-                    key={account.type}
+                    key={account.id}
                     className="rounded-2xl p-4"
                     style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
                   >
-                    <p className="text-xs mb-1" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.type}</p>
+                    <p className="text-xs mb-1" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.name}</p>
                     <p className="text-xl font-bold" style={{ color: '#E8EDF5' }}>
                       ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
@@ -507,11 +507,11 @@ export default function FinancePage() {
                       {action.label === 'Request Financial Analysis from Emerald' ? (
                         <>
                           <Send className="w-3 h-3 flex-shrink-0" style={{ opacity: 0.7 }} />
-                          {adrianStatus === 'sending'
+                          {emeraldStatus === 'sending'
                             ? 'Dispatching…'
-                            : adrianStatus === 'sent'
+                            : emeraldStatus === 'sent'
                               ? 'Analysis requested ✓'
-                              : adrianStatus === 'error'
+                              : emeraldStatus === 'error'
                                 ? 'Error — try again'
                                 : action.label}
                         </>
