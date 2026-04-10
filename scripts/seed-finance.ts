@@ -31,7 +31,11 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient, FinancePlanType, FinancePlanStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+
+// Use string literals to avoid dependency on generated Prisma enum exports
+type PlanType   = 'CREDIT_SCORE' | 'BUDGET' | 'SAVINGS' | 'DEBT_PAYOFF' | 'INVESTMENT' | 'EXPENSE_REDUCTION' | 'CUSTOM';
+type PlanStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
 
 const prisma = new PrismaClient();
 
@@ -102,8 +106,8 @@ async function upsertPayable(data: {
 
 async function upsertPlan(data: {
   title: string;
-  type: FinancePlanType;
-  status: FinancePlanStatus;
+  type: PlanType;
+  status: PlanStatus;
   goal?: string;
   currentValue?: number;
   targetValue?: number;
@@ -212,8 +216,8 @@ const PAYABLES = [
 const PLANS = [
   {
     title: 'Storage Unit Liquidation',
-    type: FinancePlanType.CUSTOM,
-    status: FinancePlanStatus.ACTIVE,
+    type: 'CUSTOM' as PlanType,
+    status: 'ACTIVE' as PlanStatus,
     goal: 'Generate $1,000+ by selling storage unit contents before April 19, 2026',
     currentValue: 0,
     targetValue: 1000,
@@ -230,8 +234,8 @@ const PLANS = [
   },
   {
     title: 'Cash Flow Stabilization',
-    type: FinancePlanType.BUDGET,
-    status: FinancePlanStatus.ACTIVE,
+    type: 'BUDGET' as PlanType,
+    status: 'ACTIVE' as PlanStatus,
     goal: 'Increase liquid cash and reduce short-term financial pressure',
     currentValue: 1352,
     targetValue: 5000,
@@ -251,8 +255,8 @@ const PLANS = [
   },
   {
     title: 'Finance System Implementation',
-    type: FinancePlanType.CUSTOM,
-    status: FinancePlanStatus.ACTIVE,
+    type: 'CUSTOM' as PlanType,
+    status: 'ACTIVE' as PlanStatus,
     goal: 'Populate the Mothership finance dashboard with structured real-world data',
     currentValue: 0,
     targetValue: 4,
