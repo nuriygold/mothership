@@ -14,7 +14,8 @@ export async function POST(req: Request) {
 
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
-  const model = modelForOpenClaw();
+  const resolvedAgent = agentForKey('ruby');
+  const model = modelForOpenClaw(resolvedAgent);
 
   if (!gateway || !token) {
     const fallback = 'Ruby is not configured. Set OPENCLAW_GATEWAY and OPENCLAW_TOKEN.';
@@ -23,8 +24,6 @@ export async function POST(req: Request) {
     });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
-
-  const resolvedAgent = agentForKey('ruby');
 
   let upstreamRes: Response;
   try {
@@ -77,12 +76,15 @@ export async function POST(req: Request) {
             try {
               const evt = JSON.parse(dataStr);
               const payload = evt?.data ?? evt;
-              if (payload?.event === 'response.output_text.delta') {
-                const delta = payload?.data ?? '';
+              const eventType = payload?.event ?? evt?.type;
+              if (eventType === 'response.output_text.delta') {
+                const delta = payload?.data ?? evt?.delta ?? '';
                 if (delta) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
-              } else if (payload?.event === 'response.error') {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? 'Gateway error' })}\n\n`));
-              } else if (payload?.event === 'response.completed') {
+              } else if (eventType === 'response.output_text.done' && evt?.text) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+              } else if (eventType === 'response.error') {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? evt?.error ?? 'Gateway error' })}\n\n`));
+              } else if (eventType === 'response.completed') {
                 controller.enqueue(encoder.encode('data: [DONE]\n\n')); controller.close(); return;
               }
             } catch (_) {}

@@ -4,8 +4,6 @@ type DispatchInput = {
   sessionKey?: string | null;
 };
 
-const DEFAULT_OPENCLAW_MODEL = 'blessed-abundance/gpt-5.3-chat';
-
 function normalizeAgentId(value?: string | null) {
   const raw = String(value ?? '').trim();
   if (!raw) return 'main';
@@ -42,21 +40,27 @@ export function agentForKey(key?: string) {
   return requested;
 }
 
-export function modelForOpenClaw() {
-  return String(process.env.OPENCLAW_MODEL || DEFAULT_OPENCLAW_MODEL).trim() || DEFAULT_OPENCLAW_MODEL;
+export function modelForOpenClaw(agentId?: string) {
+  const configured = String(process.env.OPENCLAW_MODEL || '').trim();
+  if (configured === 'openclaw' || configured.startsWith('openclaw/')) {
+    return configured;
+  }
+
+  const resolvedAgent = agentForKey(agentId);
+  return resolvedAgent === 'main' ? 'openclaw/main' : `openclaw/${resolvedAgent}`;
 }
 
 export async function dispatchToOpenClaw(input: DispatchInput) {
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
   const defaultAgent = agentForKey();
-  const model = modelForOpenClaw();
 
   if (!gateway || !token) {
     throw new Error('OPENCLAW_GATEWAY or OPENCLAW_TOKEN not set');
   }
 
   const agentId = agentForKey(input.agentId) || defaultAgent;
+  const model = modelForOpenClaw(agentId);
   const body = {
     stream: true,
     model,
@@ -102,11 +106,14 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
         try {
           const evt = JSON.parse(dataStr);
           const payload = evt?.data ?? evt;
-          if (payload?.event === 'response.output_text.delta') {
-            output += payload?.data ?? '';
-          } else if (payload?.event === 'response.error') {
-            error = payload?.data ?? 'Unknown error';
-          } else if (payload?.event === 'response.completed') {
+          const eventType = payload?.event ?? evt?.type;
+          if (eventType === 'response.output_text.delta') {
+            output += payload?.data ?? evt?.delta ?? '';
+          } else if (eventType === 'response.output_text.done' && !output) {
+            output = evt?.text ?? payload?.text ?? output;
+          } else if (eventType === 'response.error') {
+            error = payload?.data ?? evt?.error ?? 'Unknown error';
+          } else if (eventType === 'response.completed') {
             done = true;
             break;
           }
