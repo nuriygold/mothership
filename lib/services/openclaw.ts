@@ -106,11 +106,14 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
         try {
           const evt = JSON.parse(dataStr);
           const payload = evt?.data ?? evt;
-          if (payload?.event === 'response.output_text.delta') {
-            output += payload?.data ?? '';
-          } else if (payload?.event === 'response.error') {
-            error = payload?.data ?? 'Unknown error';
-          } else if (payload?.event === 'response.completed') {
+          const eventType = payload?.event ?? evt?.type;
+          if (eventType === 'response.output_text.delta') {
+            output += payload?.data ?? evt?.delta ?? '';
+          } else if (eventType === 'response.output_text.done' && !output) {
+            output = evt?.text ?? payload?.text ?? output;
+          } else if (eventType === 'response.error') {
+            error = payload?.data ?? evt?.error ?? 'Unknown error';
+          } else if (eventType === 'response.completed') {
             done = true;
             break;
           }

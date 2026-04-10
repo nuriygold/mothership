@@ -95,14 +95,17 @@ export async function POST(req: Request) {
             try {
               const evt = JSON.parse(dataStr);
               const payload = evt?.data ?? evt;
-              if (payload?.event === 'response.output_text.delta') {
-                const delta = payload?.data ?? '';
+              const eventType = payload?.event ?? evt?.type;
+              if (eventType === 'response.output_text.delta') {
+                const delta = payload?.data ?? evt?.delta ?? '';
                 if (delta) {
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
                 }
-              } else if (payload?.event === 'response.error') {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? 'Gateway error' })}\n\n`));
-              } else if (payload?.event === 'response.completed') {
+              } else if (eventType === 'response.output_text.done' && evt?.text) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+              } else if (eventType === 'response.error') {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? evt?.error ?? 'Gateway error' })}\n\n`));
+              } else if (eventType === 'response.completed') {
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 controller.close();
                 return;
