@@ -31,6 +31,10 @@ async function main() {
   await prisma.approval.deleteMany();
   await prisma.run.deleteMany();
   await prisma.task.deleteMany();
+  await prisma.transaction.deleteMany();
+  await prisma.payable.deleteMany();
+  await prisma.account.deleteMany();
+  await prisma.financePlan.deleteMany();
   await prisma.submission.deleteMany();
   await prisma.workflowSchemaVersion.deleteMany();
   await prisma.workflow.deleteMany();
@@ -40,6 +44,16 @@ async function main() {
     data: { email: 'adrian@nuriy.com', name: 'Adrian' },
   });
   const ruby = await prisma.user.create({ data: { email: 'ruby@nuriy.com', name: 'Ruby' } });
+
+  await prisma.account.createMany({
+    data: [
+      { name: 'Operating', type: 'asset', balance: 0 },
+      { name: 'Payroll', type: 'asset', balance: 0 },
+      { name: 'Betterment', type: 'asset', balance: 0 },
+      { name: 'Robinhood', type: 'asset', balance: 0 },
+      { name: 'HSA', type: 'asset', balance: 0 },
+    ],
+  });
 
   const workflows = await prisma.$transaction([
     prisma.workflow.create({

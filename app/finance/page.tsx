@@ -164,6 +164,13 @@ export default function FinancePage() {
   const activePlans = (data?.plans ?? []).filter((p) => p.status === 'ACTIVE');
   const otherPlans = (data?.plans ?? []).filter((p) => p.status !== 'ACTIVE');
   const allPlans = [...activePlans, ...otherPlans];
+  const liquidity = useMemo(
+    () =>
+      (data?.accounts ?? [])
+        .filter((account) => !account.type.toLowerCase().includes('credit'))
+        .reduce((sum, account) => sum + account.balance, 0),
+    [data]
+  );
 
   const alerts = useMemo(() => {
     const list: { text: string; color: string; textColor: string }[] = [];
@@ -218,7 +225,7 @@ export default function FinancePage() {
     { label: 'Record Transaction', live: false },
     { label: 'Create Invoice', live: false },
     {
-      label: 'Request Report from Adrian',
+      label: 'Request Financial Analysis from Emerald',
       live: true,
       onClick: async () => {
         setAdrianStatus('sending');
@@ -227,7 +234,7 @@ export default function FinancePage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: 'Adrian, please generate a finance summary report: current account balances, top payables, and credit score progress.',
+              text: 'Emerald, please generate a financial analysis: liquidity, obligations, transaction trends, and 30-day forecast.',
               botKey: 'bot1',
             }),
           });
@@ -261,6 +268,15 @@ export default function FinancePage() {
             className="rounded-3xl p-5"
             style={{ background: 'rgba(6,32,20,0.93)', border: '1px solid rgba(0,180,100,0.15)' }}
           >
+            <div
+              className="rounded-2xl p-4 mb-4"
+              style={{ background: 'rgba(110,231,183,0.12)', border: '1px solid rgba(110,231,183,0.25)' }}
+            >
+              <p className="text-xs mb-1" style={{ color: 'rgba(232,237,245,0.65)' }}>Liquidity</p>
+              <p className="text-2xl font-bold" style={{ color: '#6EE7B7' }}>
+                ${liquidity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
             <div className="flex items-center gap-2 mb-4">
               <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
               <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
@@ -370,7 +386,7 @@ export default function FinancePage() {
             </div>
           </div>
 
-          {/* Activity */}
+          {/* Transactions */}
           <div
             className="rounded-3xl p-5"
             style={{ background: 'rgba(6,12,32,0.93)', border: '1px solid rgba(60,100,220,0.15)' }}
@@ -378,7 +394,7 @@ export default function FinancePage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
-                <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Activity</h2>
+                <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Transactions</h2>
               </div>
               <button
                 onClick={handleExport}
@@ -475,20 +491,26 @@ export default function FinancePage() {
                     onClick={action.onClick}
                     className="w-full text-left rounded-2xl px-4 py-2.5 text-sm"
                     style={{
-                      background: 'rgba(255,255,255,0.10)',
+                      background:
+                        action.label === 'Request Financial Analysis from Emerald'
+                          ? 'rgba(16,185,129,0.18)'
+                          : 'rgba(255,255,255,0.10)',
                       color: '#E8EDF5',
-                      border: '1px solid rgba(255,255,255,0.18)',
+                      border:
+                        action.label === 'Request Financial Analysis from Emerald'
+                          ? '1px solid rgba(16,185,129,0.45)'
+                          : '1px solid rgba(255,255,255,0.18)',
                       cursor: 'pointer',
                     }}
                   >
                     <span className="flex items-center gap-2">
-                      {action.label === 'Request Report from Adrian' ? (
+                      {action.label === 'Request Financial Analysis from Emerald' ? (
                         <>
                           <Send className="w-3 h-3 flex-shrink-0" style={{ opacity: 0.7 }} />
                           {adrianStatus === 'sending'
                             ? 'Dispatching…'
                             : adrianStatus === 'sent'
-                              ? 'Report requested ✓'
+                              ? 'Analysis requested ✓'
                               : adrianStatus === 'error'
                                 ? 'Error — try again'
                                 : action.label}
