@@ -79,6 +79,25 @@ enum IntegrationEventStatus {
   FAILED
 }
 
+enum DispatchCampaignStatus {
+  DRAFT
+  PLANNING
+  READY
+  EXECUTING
+  PAUSED
+  COMPLETED
+}
+
+enum DispatchTaskStatus {
+  PLANNED
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  PARTIAL
+  CANCELED
+}
+
 model User {
   id                 String       @id @default(uuid())
   email              String       @unique
@@ -236,6 +255,44 @@ model Command {
 
   requestedBy User? @relation("CommandRequester", fields: [requestedById], references: [id])
   run         Run?  @relation(fields: [runId], references: [id])
+}
+
+model DispatchCampaign {
+  id                  String                 @id @default(uuid())
+  title               String
+  description         String?
+  status              DispatchCampaignStatus @default(DRAFT)
+  costBudgetCents     Int?
+  timeBudgetSeconds   Int?
+  callbackUrl         String?
+  callbackSecret      String?
+  latestPlan          Json?
+  latestPlanCreatedAt DateTime?
+  approvedPlanName    String?
+  approvedPlanAt      DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  tasks DispatchTask[]
+}
+
+model DispatchTask {
+  id               String             @id @default(uuid())
+  campaignId       String
+  title            String
+  description      String?
+  priority         Int                @default(5)
+  dependencies     Json?
+  toolRequirements Json?
+  status           DispatchTaskStatus @default(PLANNED)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  campaign DispatchCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status])
 }
 
 model PredictiveAction {
