@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
-import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap } from 'lucide-react';
+import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap, Pill } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { OuraTodayData } from '@/lib/oura';
 
@@ -24,9 +24,10 @@ interface WellnessState {
   workout: boolean;
   prayer: boolean;
   journal: boolean;
+  vitamins: boolean;
 }
 
-const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
+const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false, vitamins: false };
 
 function easternDateString(offsetDays = 0): string {
   const d = new Date();
@@ -63,7 +64,7 @@ function saveWellness(s: WellnessState) {
 async function fetchFromSupabase(date: string): Promise<WellnessState | null> {
   const { data, error } = await supabase
     .from('wellness_logs')
-    .select('water, steps, workout, prayer, journal')
+    .select('water, steps, workout, prayer, journal, vitamins')
     .eq('date', date)
     .maybeSingle();
   if (error || !data) return null;
@@ -73,6 +74,7 @@ async function fetchFromSupabase(date: string): Promise<WellnessState | null> {
     workout: data.workout,
     prayer: data.prayer,
     journal: data.journal,
+    vitamins: data.vitamins ?? false,
   };
 }
 
@@ -134,8 +136,8 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       const next = { ...prev, ...patch };
       saveWellness(next);
       void syncToSupabase(next);
-      const wasAllDone = prev.water >= 8 && prev.steps >= 10 && prev.workout && prev.prayer && prev.journal;
-      const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal;
+      const wasAllDone = prev.water >= 8 && prev.steps >= 10 && prev.workout && prev.prayer && prev.journal && prev.vitamins;
+      const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal && next.vitamins;
       if (allDone) {
         setCelebrate(true);
         clearTimeout(celebrateTimer.current);
@@ -148,8 +150,8 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
     });
   }
 
-  const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal].filter(Boolean).length;
-  const pct = (done / 5) * 100;
+  const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal, w.vitamins].filter(Boolean).length;
+  const pct = (done / 6) * 100;
   const r = 16; const circ = 2 * Math.PI * r;
 
   const anchors: AnchorDef[] = [
@@ -227,6 +229,14 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       ydaySub: <span className="text-[8px]">{yw.journal ? '✓' : '—'}</span>,
       onTap: () => update({ journal: !w.journal }),
     },
+    {
+      key: 'vitamins', label: 'Vitamins', icon: Pill,
+      bg: 'var(--color-pink)', text: 'var(--color-pink-text)',
+      todayActive: w.vitamins, ydayActive: yw.vitamins,
+      todaySub: <span className="text-[8px]">{w.vitamins ? '✓' : '—'}</span>,
+      ydaySub: <span className="text-[8px]">{yw.vitamins ? '✓' : '—'}</span>,
+      onTap: () => update({ vitamins: !w.vitamins }),
+    },
   ];
 
   return (
@@ -240,7 +250,7 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
           <svg width="40" height="40" viewBox="0 0 40 40" className="-rotate-90">
             <circle cx="20" cy="20" r={r} fill="none" stroke="var(--border)" strokeWidth="3" />
             <circle cx="20" cy="20" r={r} fill="none"
-              stroke={done === 5 ? '#F59E0B' : 'var(--color-cyan)'}
+              stroke={done === 6 ? '#F59E0B' : 'var(--color-cyan)'}
               strokeWidth="3"
               strokeDasharray={circ}
               strokeDashoffset={circ - (circ * pct) / 100}
@@ -248,21 +258,21 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
               style={{ transition: 'stroke-dashoffset 0.4s ease' }}
             />
             <text x="20" y="20" textAnchor="middle" dominantBaseline="central"
-              className="rotate-90" style={{ fontSize: 10, fontWeight: 700, fill: done === 5 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '20px 20px' }}>
-              {done}/5
+              className="rotate-90" style={{ fontSize: 10, fontWeight: 700, fill: done === 6 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '20px 20px' }}>
+              {done}/6
             </text>
           </svg>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>Daily Anchors</p>
             <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-              {done === 5 ? '🏆 All done — you\'re on fire!' : `${5 - done} left today`}
+              {done === 6 ? '🏆 All done — you\'re on fire!' : `${6 - done} left today`}
             </p>
           </div>
         </div>
         {celebrate && <span className="text-lg animate-bounce">🎉</span>}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         {anchors.map((a) => {
           const Icon = a.icon;
           return (
