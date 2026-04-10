@@ -1,0 +1,19 @@
+{
+  "title": "Storage Unit Liquidation",
+  "type": "CUSTOM",
+  "status": "ACTIVE",
+  "description": "Sell storage unit contents on Facebook Marketplace to generate immediate cash before the April 19 billing deadline.",
+  "goal": "Generate $1,000+ by selling storage unit contents before April 19, 2026",
+  "currentValue": 0,
+  "targetValue": 1000,
+  "unit": "USD",
+  "startDate": "2026-04-01",
+  "targetDate": "2026-04-19",
+  "managedByBot": "emerald",
+  "milestones": [
+    { "label": "Marketplace listing posted" },
+    { "label": "Buyers scheduled" },
+    { "label": "Unit cleared before April 19" }
+  ],
+  "notes": "Storage unit payment of $120 due April 19. Unit must be cleared to avoid next billing cycle."
+}

@@ -9,7 +9,7 @@
   "unit": "USD",
   "startDate": "2026-01-01",
   "targetDate": "2026-10-01",
-  "managedByBot": "adrian",
+  "managedByBot": "emerald",
   "milestones": [
     { "label": "First $10K saved", "targetValue": 10000 },
     { "label": "25% of target", "targetValue": 12500 },

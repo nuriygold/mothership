@@ -36,7 +36,7 @@ export async function createFinancePlan(input: {
       unit: input.unit ?? null,
       startDate: input.startDate ?? null,
       targetDate: input.targetDate ?? null,
-      managedByBot: input.managedByBot ?? 'adrian',
+      managedByBot: input.managedByBot ?? 'emerald',
       milestones: input.milestones ?? [],
       notes: input.notes ?? null,
       sourceFile: input.sourceFile ?? null,

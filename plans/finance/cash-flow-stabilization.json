@@ -1,0 +1,19 @@
+{
+  "title": "Cash Flow Stabilization",
+  "type": "BUDGET",
+  "status": "ACTIVE",
+  "description": "Increase liquid cash reserves and reduce short-term financial pressure across credit and operating accounts.",
+  "goal": "Increase liquid cash from $1,352 to $5,000 while reducing credit utilization",
+  "currentValue": 1352,
+  "targetValue": 5000,
+  "unit": "USD",
+  "startDate": "2026-04-01",
+  "targetDate": "2026-09-30",
+  "managedByBot": "emerald",
+  "milestones": [
+    { "label": "Liquidate storage unit items" },
+    { "label": "Evaluate HSA and Betterment balances" },
+    { "label": "Reduce unnecessary contractor expenses" }
+  ],
+  "notes": "Current liquid cash: $1,352. Credit exposure: $29,596. Chase Freedom Unlimited ($19,372) is the dominant liability at 65% of total debt. Capital One Quicksilver ($8,863) accounts for another 30%."
+}

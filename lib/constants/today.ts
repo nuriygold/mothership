@@ -34,16 +34,16 @@ export const BOT_COLORS: Record<string, { bg: string; text: string }> = {
 
 export const APPROVAL_BG: Record<string, string> = {
   email: 'var(--color-lavender)',
-  finance: 'var(--color-peach)',
-  tasks: 'var(--color-mint)',
-  other: 'var(--color-sky)',
+  finance: 'var(--color-mint)',
+  tasks: 'var(--color-sky)',
+  other: 'var(--color-peach)',
 };
 
 export const APPROVAL_TEXT: Record<string, string> = {
   email: 'var(--color-lavender-text)',
-  finance: 'var(--color-peach-text)',
-  tasks: 'var(--color-mint-text)',
-  other: 'var(--color-sky-text)',
+  finance: 'var(--color-mint-text)',
+  tasks: 'var(--color-sky-text)',
+  other: 'var(--color-peach-text)',
 };
 
 export const BOT_BORDER: Record<string, string> = {
