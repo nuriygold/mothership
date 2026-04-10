@@ -721,9 +721,10 @@ export default function CommandCenterPage() {
               value={ocAgent}
               onChange={(e) => setOcAgent(e.target.value)}
             >
-              <option value="main">bot_one · Adrian · Mistral-Large-3</option>
-              <option value="ruby">bot_two · Ruby · Codestral-2501</option>
-              <option value="emerald">bot_three · Emerald · mistral-medium-2505</option>
+              <option value="main">Adrian · main · GPT-5.3 Chat</option>
+              <option value="ruby">Ruby · ruby · GPT-5.3 Chat</option>
+              <option value="emerald">Emerald · emerald · GPT-5.3 Chat</option>
+              <option value="adobe">Adobe Pettaway · adobe · Gemini 2.5 Flash</option>
             </select>
             <input
               className="w-48 rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
@@ -772,9 +773,10 @@ export default function CommandCenterPage() {
               value={ocAgent}
               onChange={(e) => setOcAgent(e.target.value)}
             >
-              <option value="main">bot_one · Adrian</option>
-              <option value="ruby">bot_two · Ruby</option>
-              <option value="emerald">bot_three · Emerald</option>
+              <option value="main">Adrian · main</option>
+              <option value="ruby">Ruby · ruby</option>
+              <option value="emerald">Emerald · emerald</option>
+              <option value="adobe">Adobe Pettaway · adobe</option>
             </select>
             <span className="text-xs text-slate-400">{voiceStatus || 'Idle'}</span>
             {voiceError && <span className="text-xs text-rose-400">{voiceError}</span>}

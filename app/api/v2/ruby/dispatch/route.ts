@@ -1,4 +1,4 @@
-import { agentForKey } from '@/lib/services/openclaw';
+import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
-  const model = process.env.OPENCLAW_MODEL || 'openclaw/ruby';
+  const model = modelForOpenClaw();
 
   if (!gateway || !token) {
     const fallback = 'Ruby is not configured. Set OPENCLAW_GATEWAY and OPENCLAW_TOKEN.';
