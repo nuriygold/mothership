@@ -24,6 +24,8 @@ const navItems = [
   { label: 'Email', href: '/email' },
   { label: 'Finance', href: '/finance' },
   { label: 'Activity (Log)', href: '/activity' },
+  { label: 'Ruby', href: '/ruby' },
+  { label: 'Dispatch', href: '/dispatch' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

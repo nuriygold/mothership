@@ -9,6 +9,8 @@ import {
   Mail,
   DollarSign,
   Activity,
+  Sparkles,
+  Send,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -24,6 +26,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/email': Mail,
   '/finance': DollarSign,
   '/activity': Activity,
+  '/ruby': Sparkles,
+  '/dispatch': Send,
 };
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
@@ -34,8 +38,8 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
       className="hidden md:flex flex-shrink-0 w-20 flex-col items-center py-5 gap-1 border-r"
       style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)', minHeight: '100vh' }}
     >
-      {/* Logo at top — links back to Today */}
-      <Link href="/today" className="mb-5 mt-1 transition-opacity hover:opacity-85">
+      {/* Logo at top — links to Dispatch */}
+      <Link href="/dispatch" className="mb-5 mt-1 transition-opacity hover:opacity-85">
         <MothershipLogo size={44} />
       </Link>
 

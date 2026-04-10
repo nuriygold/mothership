@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ElementType } from 'react';
-import { X, CheckCircle2, Send, Zap, Clock, MessageSquare, Sparkles, Star } from 'lucide-react';
+import { X, CheckCircle2, Send, Zap, Clock, MessageSquare, Sparkles, Star, Rocket } from 'lucide-react';
 import type { V2DashboardPriorityItem } from '@/lib/v2/types';
 import { BOT_COLORS, BOT_TELEGRAM_KEY, normalizeBotName } from '@/lib/constants/today';
 
@@ -12,9 +12,11 @@ interface TakeActionModalProps {
   onDone: () => void;
   onComplete: (taskId: string) => void | Promise<void>;
   onGateway: (title: string) => void;
+  onStartWorking?: (item: V2DashboardPriorityItem) => void;
+  onDispatch?: (item: V2DashboardPriorityItem) => void;
 }
 
-export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }: TakeActionModalProps) {
+export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch }: TakeActionModalProps) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
             key: 'start',
             icon: Zap,
             label: 'Start Working',
-            desc: 'Set this task to In Progress',
+            desc: 'Move to Today\'s Timeline and set to In Progress',
             color: 'var(--color-lemon)',
             textColor: 'var(--color-lemon-text)',
             fn: async () => {
@@ -91,6 +93,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
                 body: JSON.stringify({ action: 'start' }),
               });
               if (!res.ok) throw new Error(`${res.status}`);
+              onStartWorking?.(item);
             },
           },
           {
@@ -111,6 +114,17 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
           },
         ]
       : []),
+    {
+      key: 'dispatch',
+      icon: Rocket,
+      label: 'Dispatch This',
+      desc: 'Template this task in Dispatch and start a campaign',
+      color: 'var(--color-cyan)',
+      textColor: '#0A0E1A',
+      fn: () => {
+        onDispatch?.(item);
+      },
+    },
     {
       key: 'route',
       icon: Send,
@@ -144,7 +158,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway }
       key: 'ruby',
       icon: Sparkles,
       label: 'Ask Ruby',
-      desc: 'Open the AI chat panel with this task as context',
+      desc: 'Open Ruby with this task as context',
       color: 'var(--color-pink)',
       textColor: 'var(--color-pink-text)',
       fn: () => {

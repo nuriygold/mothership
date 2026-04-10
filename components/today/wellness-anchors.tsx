@@ -28,25 +28,25 @@ interface WellnessState {
 
 const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, prayer: false, journal: false };
 
-function todayDate() {
+function easternDateString(offsetDays = 0): string {
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  if (offsetDays !== 0) {
+    d.setDate(d.getDate() + offsetDays);
+  }
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+}
+
+function todayDate() {
+  return easternDateString(0);
 }
 
 function yesterdayDate() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  // Use local date parts to avoid UTC offset shifting the day
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return easternDateString(-1);
 }
 
-function wellnessKey() { return `wellness-${new Date().toDateString()}`; }
+function wellnessKey() {
+  return `wellness-${easternDateString(0)}`;
+}
 
 function loadWellness(): WellnessState {
   if (typeof window === 'undefined') return WELLNESS_DEFAULT;
@@ -83,7 +83,7 @@ async function syncToSupabase(state: WellnessState) {
   );
 }
 
-export function WellnessAnchors() {
+export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void } = {}) {
   const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [yw, setYw] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [celebrate, setCelebrate] = useState(false);
@@ -134,11 +134,15 @@ export function WellnessAnchors() {
       const next = { ...prev, ...patch };
       saveWellness(next);
       void syncToSupabase(next);
+      const wasAllDone = prev.water >= 8 && prev.steps >= 10 && prev.workout && prev.prayer && prev.journal;
       const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal;
       if (allDone) {
         setCelebrate(true);
         clearTimeout(celebrateTimer.current);
         celebrateTimer.current = setTimeout(() => setCelebrate(false), 1800);
+        if (!wasAllDone) {
+          onAllComplete?.();
+        }
       }
       return next;
     });

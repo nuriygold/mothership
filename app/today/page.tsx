@@ -7,10 +7,9 @@ import {
   Calendar, Star, CheckCircle2, Zap, Video,
   GripVertical, Trophy, Plus,
   ListChecks, MessageSquare,
-  Send,
+  Send, Sparkles, Rocket,
 } from 'lucide-react';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
-import { LiveRuby } from '@/components/today/live-ruby';
 import { TrophyModal } from '@/components/today/trophy-modal';
 import { NowLine } from '@/components/today/now-line';
 import { TakeActionModal } from '@/components/today/take-action-modal';
@@ -56,9 +55,12 @@ function taskExistsInTimeline(
   });
 }
 
-// ── Today-keyed localStorage helpers ─────────────────────────────────────────
+// ── Today-keyed localStorage helpers (Eastern Time boundary = 12am ET) ────────
+function easternDateKey(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
 function todayKey(suffix: string) {
-  return `today-${new Date().toDateString()}-${suffix}`;
+  return `today-${easternDateKey()}-${suffix}`;
 }
 function loadTodayJSON<T>(suffix: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -109,7 +111,6 @@ export default function TodayPage() {
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
   const [showTrophy, setShowTrophy] = useState(false);
-  const [gatewayPrefill, setGatewayPrefill] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [actionModalItem, setActionModalItem] = useState<V2DashboardPriorityItem | null>(null);
   const nowRef = useRef<HTMLDivElement>(null);
@@ -280,10 +281,48 @@ export default function TodayPage() {
     }
   }, [mergedTimeline, mutate, setDroppedTasks]);
 
-  // ── Gateway → Pre-fill Kissin' Booth ──
+  // ── Gateway → Navigate to Ruby ──
   const handleGateway = useCallback((title: string) => {
-    setGatewayPrefill(`Tell me about: ${title}`);
-    setToastMsg('Message sent to Kissin\' Booth');
+    const params = new URLSearchParams({ q: title });
+    window.location.href = `/ruby?${params.toString()}`;
+  }, []);
+
+  // ── Start Working → Move to Timeline + dismiss from priorities ──
+  const handleStartWorking = useCallback((item: V2DashboardPriorityItem) => {
+    const newEntry: V2DashboardTimelineItem = {
+      time: 'Now',
+      title: item.title,
+      type: 'task',
+      status: 'current',
+      iconType: 'clock',
+      assignedBot: item.assignedBot,
+      taskId: item.taskId,
+      startDate: new Date().toISOString(),
+      endTime: undefined,
+      meetingUrl: undefined,
+    };
+    setDroppedTasks((prev) => {
+      if (item.taskId && prev.some((t) => t.taskId === item.taskId)) return prev;
+      return [...prev, newEntry];
+    });
+    setDismissedPriorityIds((prev) => new Set([...prev, item.id]));
+    setToastMsg(`"${item.title}" moved to Today's Timeline`);
+  }, [setDroppedTasks, setDismissedPriorityIds]);
+
+  // ── Dispatch This → Navigate to /dispatch with task pre-filled ──
+  const handleDispatch = useCallback((item: V2DashboardPriorityItem) => {
+    const params = new URLSearchParams({ task: item.title, source: item.source });
+    window.location.href = `/dispatch?${params.toString()}`;
+  }, []);
+
+  // ── Anchor all-complete → add to Trophy ──
+  const handleAnchorAllComplete = useCallback(() => {
+    const label = '🏆 Daily Anchors Complete';
+    setCompletedTitles((prev) => {
+      if (prev.includes(label)) return prev;
+      return [...prev, label];
+    });
+    setToastMsg('🏆 All Daily Anchors done — added to Trophy Collection!');
   }, []);
 
   // ── Bot badge → Telegram ──
@@ -432,7 +471,9 @@ export default function TodayPage() {
         onClose={() => setActionModalItem(null)}
         onDone={() => { void mutate(); }}
         onComplete={handleComplete}
-        onGateway={(title) => { setGatewayPrefill(title); setActionModalItem(null); }}
+        onGateway={(title) => { handleGateway(title); setActionModalItem(null); }}
+        onStartWorking={(item) => { handleStartWorking(item); setActionModalItem(null); }}
+        onDispatch={(item) => { handleDispatch(item); }}
       />
     )}
 
@@ -454,7 +495,7 @@ export default function TodayPage() {
       </div>
 
       {/* ── Daily Anchors ── */}
-      <WellnessAnchors />
+      <WellnessAnchors onAllComplete={handleAnchorAllComplete} />
 
       <div className="grid gap-4 max-sm:mx-3 md:grid-cols-[1fr_1fr]">
         {/* ── Left: Today's Timeline ── */}
@@ -600,7 +641,7 @@ export default function TodayPage() {
                               <button onClick={() => handleGateway(taskEntry.title)}
                                 className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity opacity-0 group-hover:opacity-100"
                                 style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
-                                <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Gateway</span>
+                                <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Ask Ruby</span>
                               </button>
                               {taskEntry.assignedBot && botColors && (
                                 <button onClick={() => handleBotTelegram(normalizedTaskBot, taskEntry.title)}
@@ -721,10 +762,8 @@ export default function TodayPage() {
           </Card>
         </div>
 
-        {/* ── Right: Live Ruby + Quick Actions ── */}
+        {/* ── Right: Quick Actions ── */}
         <div className="space-y-4">
-          <LiveRuby prefill={gatewayPrefill} onPrefillConsumed={() => setGatewayPrefill('')} />
-
           {/* Quick Actions */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: 'var(--muted-foreground)' }}>Quick Actions</p>
@@ -749,13 +788,33 @@ export default function TodayPage() {
                 </div>
               </Link>
 
-              <Link href="/email" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}>
+              <Link href="/ruby" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-pink, #fce7f3)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(190,24,93,0.12)' }}>
+                  <Sparkles className="w-5 h-5" style={{ color: '#be185d' }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Ask Ruby</p>
+                  <p className="text-[11px]" style={{ color: '#9d174d' }}>Drafts, replies, and writing help</p>
+                </div>
+              </Link>
+
+              <Link href="/dispatch" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}>
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,120,0.15)' }}>
-                  <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-mint-text)' }} />
+                  <Rocket className="w-5 h-5" style={{ color: 'var(--color-mint-text)' }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Dispatch</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-mint-text)' }}>Launch campaigns via Dispatch-Bot</p>
+                </div>
+              </Link>
+
+              <Link href="/email" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,200,0.15)' }}>
+                  <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-sky-text)' }} />
                 </div>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Draft Reply</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-mint-text)' }}>Ruby writes your urgent response</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-sky-text)' }}>Ruby writes your urgent response</p>
                 </div>
               </Link>
 
