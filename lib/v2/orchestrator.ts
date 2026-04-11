@@ -14,6 +14,7 @@ import type {
   V2ActivityFeed,
   V2BotProfile,
   V2BotsFeed,
+  V2CashFlowForecast,
   V2DashboardPriorityItem,
   V2DashboardTimelineItem,
   V2EmailDraft,
@@ -21,7 +22,11 @@ import type {
   V2EmailFeed,
   V2EmailItem,
   V2FinanceOverviewFeed,
+  V2HealthScore,
+  V2IncomeSource,
+  V2NetWorthPoint,
   V2PendingApprovalSummary,
+  V2Subscription,
   V2TaskItem,
   V2TasksFeed,
   V2TodayFeed,
@@ -346,6 +351,7 @@ export async function getV2EmailDrafts(emailId: string): Promise<V2EmailDraftFee
 }
 
 export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
+  const assembledAt = new Date();
   // Make each section failure-independent
   let accounts: any[] = [];
   let payables: any[] = [];
@@ -355,13 +361,19 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
   let merchantTotal = 0;
   let merchantsUncategorized: any[] = [];
   let budgetRows: any[] = [];
+  let forecast: V2CashFlowForecast | null = null;
+  let subscriptions: V2Subscription[] = [];
+  let incomeSources: V2IncomeSource[] = [];
+  let netWorthHistory: V2NetWorthPoint[] = [];
+  let healthScore: V2HealthScore | null = null;
+  let systemStatus: 'ok' | 'partial' = 'ok';
   // Get all datasets independently
   await Promise.all([
     (async () => {
       try {
         accounts = await prisma.account.findMany({ orderBy: { createdAt: 'asc' } });
       } catch (error) {
-        console.error('[finance_adapter:accounts]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:accounts]', error);
         accounts = [];
       }
     })(),
@@ -373,7 +385,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
           take: 10,
         });
       } catch (error) {
-        console.error('[finance_adapter:payables]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:payables]', error);
         payables = [];
       }
     })(),
@@ -385,7 +397,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
           include: { account: true },
         });
       } catch (error) {
-        console.error('[finance_adapter:transactions]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:transactions]', error);
         transactions = [];
       }
     })(),
@@ -393,7 +405,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       try {
         plans = await listFinancePlans();
       } catch (error) {
-        console.error('[finance_adapter:plans]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:plans]', error);
         plans = [];
       }
     })(),
@@ -405,7 +417,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
           take: 20,
         });
       } catch (error) {
-        console.error('[finance_adapter:events]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:events]', error);
         events = [];
       }
     })(),
@@ -420,7 +432,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
           }),
         ]);
       } catch (error) {
-        console.error('[finance_adapter:merchants]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:merchants]', error);
       }
     })(),
     (async () => {
@@ -430,11 +442,118 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
         // Fire-and-forget threshold check — emits events if needed
         checkBudgetThresholds().catch(() => {});
       } catch (error) {
-        console.error('[finance_adapter:budget]', error);
+        systemStatus = 'partial'; console.error('[finance_adapter:budget]', error);
         budgetRows = [];
       }
     })(),
+    (async () => {
+      try {
+        const { scanSubscriptionOverlaps } = await import('@/lib/finance/subscriptionOverlapDetector');
+        // Fire-and-forget — emits SUBSCRIPTION_OVERLAP events as needed
+        scanSubscriptionOverlaps().catch(() => {});
+      } catch (error) {
+        systemStatus = 'partial'; console.error('[finance_adapter:overlapDetector]', error);
+      }
+    })(),
+    (async () => {
+      try {
+        const { runCashFlowForecast } = await import('@/lib/finance/cashflowForecast');
+        forecast = await runCashFlowForecast();
+      } catch (error) {
+        systemStatus = 'partial'; console.error('[finance_adapter:forecast]', error);
+        forecast = null;
+      }
+    })(),
+    (async () => {
+      try {
+        const MONTHLY_MULT: Record<string, number> = {
+          weekly: 4.33, biweekly: 2.167, monthly: 1, quarterly: 1 / 3, annual: 1 / 12,
+        };
+        const INTERVAL_DAYS: Record<string, number> = {
+          weekly: 7, biweekly: 14, monthly: 30, quarterly: 91, annual: 365,
+        };
+        const confirmed = await prisma.merchantProfile.findMany({
+          where: { isSubscription: true, subscriptionConfirmed: true, billingInterval: { not: null } },
+          select: { id: true, merchantName: true, billingInterval: true, defaultCategory: true },
+        });
+        subscriptions = (
+          await Promise.all(
+            confirmed.map(async (sub) => {
+              const lastTx = await prisma.transaction.findFirst({
+                where: { description: { equals: sub.merchantName, mode: 'insensitive' }, amount: { lt: 0 } },
+                orderBy: { occurredAt: 'desc' },
+                select: { amount: true, occurredAt: true },
+              });
+              const amount = lastTx ? Math.abs(lastTx.amount) : 0;
+              const intervalDays = INTERVAL_DAYS[sub.billingInterval ?? ''] ?? 30;
+              const nextChargeDate = lastTx
+                ? new Date(new Date(lastTx.occurredAt).getTime() + intervalDays * 86400000)
+                    .toISOString().slice(0, 10)
+                : null;
+              const monthlyEquivalent =
+                Math.round(amount * (MONTHLY_MULT[sub.billingInterval ?? 'monthly'] ?? 1) * 100) / 100;
+              return {
+                id: sub.id,
+                merchant: sub.merchantName,
+                amount,
+                interval: sub.billingInterval ?? 'monthly',
+                monthlyEquivalent,
+                nextChargeDate,
+                category: sub.defaultCategory ?? null,
+              };
+            })
+          )
+        ).sort((a, b) => b.monthlyEquivalent - a.monthlyEquivalent);
+      } catch (error) {
+        systemStatus = 'partial'; console.error('[finance_adapter:subscriptions]', error);
+        subscriptions = [];
+      }
+    })(),
+    (async () => {
+      try {
+        const { listIncomeSources } = await import('@/lib/finance/incomeDetector');
+        const sources = await listIncomeSources();
+        const now = new Date();
+        incomeSources = sources.map((src) => {
+          let cursor = new Date(src.lastSeenDate.getTime() + src.avgDays * 86400000);
+          while (cursor < now) cursor = new Date(cursor.getTime() + src.avgDays * 86400000);
+          return {
+            id: src.id,
+            source: src.source,
+            amount: src.amount,
+            interval: src.interval,
+            nextPayday: cursor.toISOString().slice(0, 10),
+            lastSeen: new Date(src.lastSeenDate).toISOString().slice(0, 10),
+            confirmed: src.confirmed,
+          };
+        });
+      } catch (error) {
+        systemStatus = 'partial'; console.error('[finance_adapter:incomeSources]', error);
+        incomeSources = [];
+      }
+    })(),
+    (async () => {
+      try {
+        const { recordNetWorthSnapshot, ensureNetWorthHistory, getNetWorthHistory } = await import('@/lib/finance/netWorth');
+        recordNetWorthSnapshot().catch(() => {}); // fire-and-forget, idempotent
+        // One-time backfill if history is empty (cheap count check each request)
+        await ensureNetWorthHistory(30);
+        netWorthHistory = await getNetWorthHistory(30);
+      } catch (error) {
+        systemStatus = 'partial'; console.error('[finance_adapter:netWorth]', error);
+        netWorthHistory = [];
+      }
+    })(),
   ]);
+
+  // Health score runs after the parallel block so it can use budgetRows
+  try {
+    const { computeHealthScore } = await import('@/lib/finance/healthScore');
+    healthScore = await computeHealthScore(budgetRows);
+  } catch (error) {
+    systemStatus = 'partial'; console.error('[finance_adapter:healthScore]', error);
+    healthScore = null;
+  }
 
   const mappedPlans = plans.map((plan) => {
     const progressPercent = plan.currentValue != null && plan.targetValue != null && plan.targetValue !== 0
@@ -505,6 +624,13 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       })),
     },
     budget: budgetRows,
+    forecast,
+    subscriptions,
+    incomeSources,
+    netWorthHistory,
+    healthScore,
+    generatedAt: assembledAt.toISOString(),
+    systemStatus,
   };
 }
 
