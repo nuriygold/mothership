@@ -40,12 +40,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: `Azure TTS failed: ${res.status} ${body}` }, { status: 500 });
     }
 
-    const audio = Buffer.from(await res.arrayBuffer());
+    const audio = await res.arrayBuffer();
     return new NextResponse(audio, {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Length': audio.length.toString(),
+        'Content-Length': audio.byteLength.toString(),
       },
     });
   } catch (err: any) {
