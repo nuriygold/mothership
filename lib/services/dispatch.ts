@@ -166,11 +166,16 @@ export async function generateDispatchPlans(campaignId: string) {
   });
 
   const prompt = [
-    'Break this goal into a concise numbered action item list.',
+    'You are breaking a goal into discrete tasks that an AI assistant can execute via chat messages.',
     `Goal: ${campaign.title}`,
-    campaign.description ? `Context: ${campaign.description}` : null,
+    campaign.description ? `Resources and context: ${campaign.description}` : null,
+    '',
+    'Each task must be something an AI agent can actually do: draft copy, write code, summarize a document, research a topic, generate a file, review content, or produce a structured output.',
+    'Do NOT include tasks that require a human to click a UI, open a native app, or make a live deployment decision.',
+    'Every task description must include: (1) the specific action to take, (2) any relevant resource from the context (URL, file, repo, doc), (3) the exact output to return (e.g. "return as a markdown list", "output a React component", "write as a JSON object").',
+    '',
     'Return strict JSON only. No markdown, no explanation.',
-    'Schema: {"plans":[{"name":"Action Plan","tasks":[{"key":"task-1","title":"Do X","description":"Brief detail or null","deps":[]}]}]}',
+    'Schema: {"plans":[{"name":"Action Plan","tasks":[{"key":"task-1","title":"Verb + subject","description":"Full executable instruction with resources and expected output format","deps":[]}]}]}',
     'Rules: 3–8 tasks. Keys must be unique (task-1, task-2, …). deps must reference keys in this list or be empty. Return exactly ONE plan.',
   ]
     .filter(Boolean)
