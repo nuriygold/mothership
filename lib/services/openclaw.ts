@@ -109,7 +109,7 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
           const eventType = payload?.event ?? evt?.type;
           if (eventType === 'response.output_text.delta') {
             output += payload?.data ?? evt?.delta ?? '';
-          } else if (eventType === 'response.output_text.done' && !output) {
+          } else if (eventType === 'response.output_text.done') {
             output = evt?.text ?? payload?.text ?? output;
           } else if (eventType === 'response.error') {
             error = payload?.data ?? evt?.error ?? 'Unknown error';
