@@ -235,6 +235,94 @@ export type V2FinanceOverviewFeed = {
     percentUsed: number;
     status: 'green' | 'yellow' | 'red';
   }>;
+  forecast: V2CashFlowForecast | null;
+  subscriptions: V2Subscription[];
+  incomeSources: V2IncomeSource[];
+  netWorthHistory: V2NetWorthPoint[];
+  healthScore: V2HealthScore | null;
+  generatedAt: string;                            // ISO timestamp — when this payload was assembled
+  systemStatus: 'ok' | 'partial';                // 'partial' if any module threw during assembly
+};
+
+export type V2Subscription = {
+  id: string;
+  merchant: string;
+  amount: number;
+  interval: string;
+  monthlyEquivalent: number;
+  nextChargeDate: string | null;
+  category: string | null;
+};
+
+export type V2IncomeSource = {
+  id: string;
+  source: string;
+  amount: number;
+  interval: string;
+  nextPayday: string | null;
+  lastSeen: string;
+  confirmed: boolean;
+};
+
+export type V2NetWorthPoint = {
+  date: string;
+  assets: number;
+  liabilities: number;
+  netWorth: number;
+};
+
+export type V2HealthScoreBreakdown = {
+  liquidityBuffer: number;
+  budgetCompliance: number;
+  subscriptionBurden: number;
+  forecastRisk: number;
+  anomalyLoad: number;
+};
+
+export type V2HealthScore = {
+  score: number;
+  message: string;
+  breakdown: V2HealthScoreBreakdown;
+};
+
+export type V2ForecastOutflow = {
+  label: string;
+  amount: number;
+  type: 'payable' | 'subscription';
+};
+
+export type V2ForecastDay = {
+  date: string;
+  projectedBalance: number;
+  scheduledOutflows: V2ForecastOutflow[];
+  projectedIncome: number;
+  estimatedSpend: number;
+  isLowBalanceAlert: boolean;
+};
+
+export type V2PaydaySchedule = {
+  source: string;
+  amount: number;
+  intervalLabel: string;
+  intervalDays: number;
+  nextDate: string;
+};
+
+export type V2ForecastConfidence = {
+  score: number;
+  label: string;
+  factors: string[];
+};
+
+export type V2CashFlowForecast = {
+  generatedAt: string;
+  openingBalance: number;
+  liquidAccountsOnly: boolean;
+  days: V2ForecastDay[];
+  lowestPoint: { date: string; balance: number };
+  paydaySchedules: V2PaydaySchedule[];
+  alerts: string[];
+  confidence: V2ForecastConfidence;
 };
 
 export type V2ActivityItem = {

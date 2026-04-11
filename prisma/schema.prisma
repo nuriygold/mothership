@@ -420,6 +420,7 @@ model Account {
   type      String
   currency  String   @default("USD")
   balance   Float    @default(0)
+  liquid    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -477,4 +478,28 @@ model MerchantProfile {
   subscriptionConfirmed Boolean @default(false)
   transactionCount Int      @default(0)
   lastSeen         DateTime @default(now())
+}
+
+/// Daily net-worth snapshot — one row per calendar day
+model NetWorthSnapshot {
+  id          String   @id @default(cuid())
+  date        DateTime @unique
+  assets      Float
+  liabilities Float
+  netWorth    Float
+  createdAt   DateTime @default(now())
+}
+
+/// Detected recurring income source (payroll, freelance, etc.)
+/// Mirrors MerchantProfile for subscriptions but on the income side.
+model IncomeSource {
+  id           String   @id @default(cuid())
+  source       String   @unique  // normalized transaction description
+  amount       Float              // median detected amount
+  interval     String             // 'weekly' | 'biweekly' | 'monthly'
+  avgDays      Int
+  lastSeenDate DateTime
+  confirmed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

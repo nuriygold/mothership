@@ -2,8 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag } from 'lucide-react';
-import type { V2FinanceOverviewFeed, V2FinancePlan, V2FinanceEvent } from '@/lib/v2/types';
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown } from 'lucide-react';
+import type {
+  V2FinanceOverviewFeed, V2FinancePlan, V2FinanceEvent,
+  V2CashFlowForecast, V2PaydaySchedule,
+  V2Subscription, V2IncomeSource, V2NetWorthPoint, V2HealthScore,
+} from '@/lib/v2/types';
 
 const fetcher = (url: string) =>
   fetch(url).then((res) => {
@@ -55,6 +59,718 @@ function exportTransactionsCSV(transactions: V2FinanceOverviewFeed['transactions
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ─── Cash Flow Forecast Card ────────────────────────────────────────────────
+
+function CashFlowForecastCard({ forecast }: { forecast: V2CashFlowForecast }) {
+  const days = forecast.days;
+  const balances = days.map((d) => d.projectedBalance);
+  const minBalance = Math.min(...balances);
+  const maxBalance = Math.max(forecast.openingBalance, ...balances);
+  const range = maxBalance - minBalance || 1;
+
+  // SVG dimensions
+  const W = 600;
+  const H = 80;
+  const PAD_X = 2;
+  const PAD_Y = 6;
+
+  // Map a balance value to an SVG y coordinate (higher balance = lower y)
+  function toY(val: number) {
+    return PAD_Y + (1 - (val - minBalance) / range) * (H - PAD_Y * 2);
+  }
+
+  function toX(i: number) {
+    return PAD_X + (i / (days.length - 1)) * (W - PAD_X * 2);
+  }
+
+  // Build polyline points
+  const points = days.map((_, i) => `${toX(i)},${toY(balances[i])}`).join(' ');
+
+  // Find the lowest point index
+  const lowestIdx = balances.indexOf(minBalance);
+  const lowestX = toX(lowestIdx);
+  const lowestY = toY(minBalance);
+
+  // Find days with large scheduled outflows (payables/subscriptions >200)
+  const bigOutflowMarkers = days
+    .map((d, i) => {
+      const total = d.scheduledOutflows.reduce((s, o) => s + o.amount, 0);
+      if (total < 200) return null;
+      return { i, total, label: d.scheduledOutflows[0]?.label ?? 'Payment', date: d.date };
+    })
+    .filter(Boolean)
+    .slice(0, 3) as Array<{ i: number; total: number; label: string; date: string }>;
+
+  const hasAlert = forecast.lowestPoint.balance < 1000;
+
+  const formatCurrency = (n: number) =>
+    '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  // Build area fill path
+  const areaPath =
+    `M ${toX(0)},${toY(balances[0])} ` +
+    days.slice(1).map((_, i) => `L ${toX(i + 1)},${toY(balances[i + 1])}`).join(' ') +
+    ` L ${toX(days.length - 1)},${H} L ${toX(0)},${H} Z`;
+
+  const lineColor = hasAlert ? '#F87171' : '#38BDF8';
+  const areaColor = hasAlert ? 'rgba(248,113,113,0.10)' : 'rgba(56,189,248,0.10)';
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{
+        background: 'rgba(6,18,30,0.93)',
+        border: `1px solid ${hasAlert ? 'rgba(248,113,113,0.25)' : 'rgba(56,189,248,0.15)'}`,
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingDown size={14} style={{ color: hasAlert ? '#F87171' : '#38BDF8' }} />
+          <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>
+            60-Day Cash Flow
+          </h2>
+          {/* Confidence badge */}
+          {forecast.confidence && (() => {
+            const c = forecast.confidence;
+            const badgeColor =
+              c.label === 'High' ? '#6EE7B7' :
+              c.label === 'Good' ? '#93C5FD' :
+              c.label === 'Fair' ? '#FDE68A' : '#F87171';
+            return (
+              <span
+                title={`Confidence factors:\n${c.factors.join('\n')}`}
+                className="text-[10px] rounded-full px-2 py-0.5 cursor-help"
+                style={{
+                  background: `${badgeColor}15`,
+                  border: `1px solid ${badgeColor}35`,
+                  color: badgeColor,
+                }}
+              >
+                {c.score}% confidence · {c.label}
+              </span>
+            );
+          })()}
+        </div>
+        <div className="flex items-center gap-3 text-xs" style={{ color: 'rgba(232,237,245,0.55)' }}>
+          <span>Opening {formatCurrency(forecast.openingBalance)}</span>
+          <span
+            className="font-semibold"
+            style={{ color: hasAlert ? '#F87171' : '#6EE7B7' }}
+          >
+            Low {formatCurrency(forecast.lowestPoint.balance)} · {formatDate(forecast.lowestPoint.date)}
+          </span>
+        </div>
+      </div>
+
+      {/* Sparkline */}
+      <div className="relative" style={{ height: H }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          style={{ width: '100%', height: '100%', display: 'block' }}
+        >
+          {/* Zero / floor line at threshold $1k */}
+          {minBalance < 1000 && (
+            <line
+              x1={0}
+              x2={W}
+              y1={toY(1000)}
+              y2={toY(1000)}
+              stroke="rgba(248,113,113,0.30)"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+          )}
+
+          {/* Area fill */}
+          <path d={areaPath} fill={areaColor} />
+
+          {/* Main sparkline */}
+          <polyline
+            points={points}
+            fill="none"
+            stroke={lineColor}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+
+          {/* Lowest point marker */}
+          {lowestIdx > 0 && lowestIdx < days.length - 1 && (
+            <circle cx={lowestX} cy={lowestY} r={3} fill={lineColor} />
+          )}
+
+          {/* Big outflow tick marks */}
+          {bigOutflowMarkers.map((m) => {
+            const x = toX(m.i);
+            return (
+              <line
+                key={m.i}
+                x1={x} x2={x}
+                y1={H - 6} y2={H}
+                stroke="rgba(253,211,77,0.60)"
+                strokeWidth={1.5}
+              />
+            );
+          })}
+        </svg>
+
+        {/* Week labels along bottom */}
+        <div className="absolute bottom-0 left-0 right-0 flex justify-between px-0.5">
+          {[0, 7, 14, 21, 28, 35, 42, 49, 59].map((dayOffset) => {
+            const d = days[dayOffset];
+            if (!d) return null;
+            return (
+              <span
+                key={dayOffset}
+                className="text-[9px]"
+                style={{ color: 'rgba(232,237,245,0.30)' }}
+              >
+                {formatDate(d.date)}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Alerts — low cash + non-liquid warning */}
+      {forecast.alerts.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {forecast.alerts.map((alert, i) => {
+            const isWarning = alert.includes('non-liquid');
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs"
+                style={{
+                  background: isWarning ? 'rgba(251,146,60,0.08)' : 'rgba(248,113,113,0.08)',
+                  border: `1px solid ${isWarning ? 'rgba(251,146,60,0.20)' : 'rgba(248,113,113,0.20)'}`,
+                  color: isWarning ? '#FED7AA' : '#FCA5A5',
+                }}
+              >
+                <AlertCircle size={11} style={{ flexShrink: 0 }} />
+                {alert}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bottom row: paydays + outflow pills */}
+      <div className="mt-3 space-y-2">
+        {/* Payday schedules — green income pills */}
+        {(forecast.paydaySchedules ?? []).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {(forecast.paydaySchedules as V2PaydaySchedule[]).map((p, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]"
+                style={{
+                  background: 'rgba(110,231,183,0.08)',
+                  border: '1px solid rgba(110,231,183,0.20)',
+                  color: '#6EE7B7',
+                }}
+              >
+                <span style={{ color: 'rgba(110,231,183,0.55)' }}>↓</span>
+                <span>{p.source}</span>
+                <span style={{ color: 'rgba(110,231,183,0.55)' }}>·</span>
+                <span className="font-semibold">{formatCurrency(p.amount)}</span>
+                <span style={{ color: 'rgba(110,231,183,0.50)' }}>{p.intervalLabel}</span>
+                <span style={{ color: 'rgba(110,231,183,0.50)' }}>next {formatDate(p.nextDate)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upcoming large outflow pills */}
+        {bigOutflowMarkers.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {bigOutflowMarkers.map((m, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]"
+                style={{
+                  background: 'rgba(253,211,77,0.08)',
+                  border: '1px solid rgba(253,211,77,0.20)',
+                  color: '#FDE68A',
+                }}
+              >
+                <span>{formatDate(m.date)}</span>
+                <span style={{ color: 'rgba(253,211,77,0.60)' }}>·</span>
+                <span>{m.label}</span>
+                <span style={{ color: '#FDE68A', fontWeight: 600 }}>{formatCurrency(m.total)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Liquidity badge — only when accounts are typed */}
+      {forecast.liquidAccountsOnly && (
+        <div className="mt-3 flex items-center gap-1.5 text-[10px]" style={{ color: 'rgba(232,237,245,0.30)' }}>
+          <Lock size={9} />
+          Liquid accounts only · investments and retirement excluded
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Finance Health Card ─────────────────────────────────────────────────────
+
+function FinanceHealthCard({ health }: { health: V2HealthScore }) {
+  const { score, message, breakdown } = health;
+
+  const scoreColor =
+    score >= 80 ? '#6EE7B7' :
+    score >= 60 ? '#FDE68A' : '#F87171';
+
+  const scoreGlow =
+    score >= 80 ? '0 0 20px rgba(110,231,183,0.25)' :
+    score >= 60 ? '0 0 20px rgba(253,211,77,0.20)' :
+    '0 0 20px rgba(248,113,113,0.25)';
+
+  const components = [
+    { label: 'Liquidity',     value: breakdown.liquidityBuffer,    weight: '35%' },
+    { label: 'Budget',        value: breakdown.budgetCompliance,   weight: '25%' },
+    { label: 'Subscriptions', value: breakdown.subscriptionBurden, weight: '15%' },
+    { label: 'Forecast',      value: breakdown.forecastRisk,       weight: '15%' },
+    { label: 'Anomalies',     value: breakdown.anomalyLoad,        weight: '10%' },
+  ];
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(6,18,30,0.96)', border: `1px solid ${scoreColor}22` }}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <div
+            className="text-4xl font-bold tabular-nums"
+            style={{ color: scoreColor, textShadow: scoreGlow, lineHeight: 1 }}
+          >
+            {score}
+          </div>
+          <div className="text-xs mt-1 font-medium" style={{ color: 'rgba(232,237,245,0.60)' }}>
+            {message}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'rgba(232,237,245,0.30)' }}>
+            Health Score
+          </div>
+          {/* Ring indicator */}
+          <svg width={44} height={44} viewBox="0 0 44 44">
+            <circle cx={22} cy={22} r={18} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={4} />
+            <circle
+              cx={22} cy={22} r={18}
+              fill="none"
+              stroke={scoreColor}
+              strokeWidth={4}
+              strokeDasharray={`${(score / 100) * 113} 113`}
+              strokeLinecap="round"
+              transform="rotate(-90 22 22)"
+              style={{ transition: 'stroke-dasharray 0.6s ease' }}
+            />
+          </svg>
+        </div>
+      </div>
+
+      {/* Component bars */}
+      <div className="mt-4 space-y-2">
+        {components.map((c) => {
+          const barColor = c.value >= 70 ? '#6EE7B7' : c.value >= 40 ? '#FDE68A' : '#F87171';
+          return (
+            <div key={c.label}>
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[10px]" style={{ color: 'rgba(232,237,245,0.45)' }}>
+                  {c.label}
+                  <span className="ml-1" style={{ color: 'rgba(232,237,245,0.25)' }}>{c.weight}</span>
+                </span>
+                <span className="text-[10px] font-semibold" style={{ color: barColor }}>{c.value}</span>
+              </div>
+              <div className="h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <div
+                  className="h-1 rounded-full transition-all"
+                  style={{ width: `${c.value}%`, background: barColor }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Net Worth Card ──────────────────────────────────────────────────────────
+
+function NetWorthCard({ history }: { history: V2NetWorthPoint[] }) {
+  if (history.length === 0) return null;
+
+  const latest = history[history.length - 1];
+  const prev   = history.length > 1 ? history[history.length - 2] : null;
+  const delta  = prev ? latest.netWorth - prev.netWorth : 0;
+
+  const netWorths = history.map((h) => h.netWorth);
+  const minNW = Math.min(...netWorths);
+  const maxNW = Math.max(...netWorths);
+  const range = maxNW - minNW || 1;
+
+  const W = 400; const H = 48; const PAD = 2;
+  const toX = (i: number) => PAD + (i / (netWorths.length - 1)) * (W - PAD * 2);
+  const toY = (v: number) => PAD + (1 - (v - minNW) / range) * (H - PAD * 2);
+
+  const points = netWorths.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+  const areaPath =
+    `M ${toX(0)},${toY(netWorths[0])} ` +
+    netWorths.slice(1).map((v, i) => `L ${toX(i + 1)},${toY(v)}`).join(' ') +
+    ` L ${toX(netWorths.length - 1)},${H} L ${toX(0)},${H} Z`;
+
+  const isPositive = latest.netWorth >= 0;
+  const lineColor = isPositive ? '#6EE7B7' : '#F87171';
+
+  const fmt = (n: number) =>
+    (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const fmtAbs = (n: number) =>
+    (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(6,18,30,0.96)', border: '1px solid rgba(56,189,248,0.12)' }}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'rgba(232,237,245,0.35)' }}>
+            Net Worth
+          </div>
+          <div className="text-2xl font-bold tabular-nums" style={{ color: isPositive ? '#6EE7B7' : '#F87171' }}>
+            {fmtAbs(latest.netWorth)}
+          </div>
+          {delta !== 0 && (
+            <div className="text-[11px] mt-0.5 font-medium" style={{ color: delta >= 0 ? '#6EE7B7' : '#F87171' }}>
+              {fmt(delta)} since yesterday
+            </div>
+          )}
+        </div>
+        <div className="text-right text-xs space-y-0.5" style={{ color: 'rgba(232,237,245,0.45)' }}>
+          <div>Assets <span className="font-semibold" style={{ color: '#6EE7B7' }}>{fmtAbs(latest.assets)}</span></div>
+          <div>Liabilities <span className="font-semibold" style={{ color: '#F87171' }}>{fmtAbs(latest.liabilities)}</span></div>
+        </div>
+      </div>
+
+      {/* Sparkline */}
+      {history.length > 1 && (
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 48, display: 'block' }}>
+          <path d={areaPath} fill={`${lineColor}12`} />
+          <polyline points={points} fill="none" stroke={lineColor} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      )}
+
+      <div className="mt-1 text-[9px]" style={{ color: 'rgba(232,237,245,0.25)' }}>
+        Last {history.length} day{history.length !== 1 ? 's' : ''}
+      </div>
+    </div>
+  );
+}
+
+// ─── Income Sources Card ──────────────────────────────────────────────────────
+
+function IncomeSourcesCard({
+  sources,
+  onMutate,
+}: {
+  sources: V2IncomeSource[];
+  onMutate?: () => void;
+}) {
+  const [pending, setPending] = useState<Record<string, string>>({});   // id → action
+  const [adjusting, setAdjusting] = useState<string | null>(null);       // id being interval-edited
+
+  if (sources.length === 0) return null;
+
+  const fmt = (n: number) =>
+    '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const totalMonthly = sources
+    .filter((src) => src.confirmed || true)   // show all in total
+    .reduce((s, src) => {
+      const mult = src.interval === 'weekly' ? 4.33 : src.interval === 'biweekly' ? 2.167 : 1;
+      return s + src.amount * mult;
+    }, 0);
+
+  async function doAction(id: string, action: string, interval?: string) {
+    setPending((p) => ({ ...p, [id]: action }));
+    try {
+      await fetch('/api/v2/finance/income-sources', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action, ...(interval ? { interval } : {}) }),
+      });
+      onMutate?.();
+    } finally {
+      setPending((p) => { const n = { ...p }; delete n[id]; return n; });
+      setAdjusting(null);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(6,18,30,0.93)', border: '1px solid rgba(110,231,183,0.15)' }}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Income Sources</h2>
+        <span className="text-xs ml-auto" style={{ color: 'rgba(232,237,245,0.40)' }}>
+          ~{fmt(totalMonthly)}/mo detected
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {sources.map((src) => {
+          const isBusy = pending[src.id];
+          return (
+            <div
+              key={src.id}
+              className="rounded-2xl px-3 py-2.5"
+              style={{
+                background: src.confirmed ? 'rgba(110,231,183,0.06)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${src.confirmed ? 'rgba(110,231,183,0.15)' : 'rgba(255,255,255,0.07)'}`,
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium truncate" style={{ color: '#E8EDF5' }}>{src.source}</p>
+                    {src.confirmed && (
+                      <span className="text-[9px] rounded-full px-1.5 py-0.5 flex-shrink-0"
+                        style={{ background: 'rgba(110,231,183,0.15)', color: '#6EE7B7' }}>
+                        confirmed
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'rgba(232,237,245,0.45)' }}>
+                    {src.interval} · last seen {fmtDate(src.lastSeen)}
+                  </p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-semibold" style={{ color: '#6EE7B7' }}>{fmt(src.amount)}</p>
+                  {src.nextPayday && (
+                    <p className="text-[10px]" style={{ color: 'rgba(110,231,183,0.55)' }}>
+                      next {fmtDate(src.nextPayday)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Action row */}
+              {adjusting === src.id ? (
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px]" style={{ color: 'rgba(232,237,245,0.45)' }}>Set interval:</span>
+                  {(['weekly', 'biweekly', 'monthly'] as const).map((iv) => (
+                    <button
+                      key={iv}
+                      disabled={!!isBusy}
+                      onClick={() => doAction(src.id, 'adjust-interval', iv)}
+                      className="text-[10px] rounded-full px-2 py-0.5 capitalize transition-opacity hover:opacity-80"
+                      style={{
+                        background: iv === src.interval ? 'rgba(110,231,183,0.20)' : 'rgba(255,255,255,0.08)',
+                        border: iv === src.interval ? '1px solid rgba(110,231,183,0.35)' : '1px solid rgba(255,255,255,0.12)',
+                        color: iv === src.interval ? '#6EE7B7' : 'rgba(232,237,245,0.60)',
+                        cursor: isBusy ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {iv}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setAdjusting(null)}
+                    className="text-[10px] ml-auto"
+                    style={{ color: 'rgba(232,237,245,0.35)', cursor: 'pointer' }}
+                  >
+                    cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2 flex items-center gap-1.5">
+                  {!src.confirmed && (
+                    <button
+                      disabled={!!isBusy}
+                      onClick={() => doAction(src.id, 'confirm')}
+                      className="text-[10px] rounded-full px-2 py-0.5 transition-opacity hover:opacity-80"
+                      style={{
+                        background: 'rgba(110,231,183,0.10)',
+                        border: '1px solid rgba(110,231,183,0.25)',
+                        color: '#6EE7B7',
+                        cursor: isBusy ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {isBusy === 'confirm' ? '…' : 'Confirm'}
+                    </button>
+                  )}
+                  <button
+                    disabled={!!isBusy}
+                    onClick={() => setAdjusting(src.id)}
+                    className="text-[10px] rounded-full px-2 py-0.5 transition-opacity hover:opacity-80"
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: 'rgba(232,237,245,0.55)',
+                      cursor: isBusy ? 'wait' : 'pointer',
+                    }}
+                  >
+                    Adjust interval
+                  </button>
+                  <button
+                    disabled={!!isBusy}
+                    onClick={() => doAction(src.id, 'ignore')}
+                    className="text-[10px] rounded-full px-2 py-0.5 transition-opacity hover:opacity-80 ml-auto"
+                    style={{
+                      background: 'rgba(248,113,113,0.06)',
+                      border: '1px solid rgba(248,113,113,0.15)',
+                      color: '#FCA5A5',
+                      cursor: isBusy ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {isBusy === 'ignore' ? '…' : 'Ignore'}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Subscriptions Card ───────────────────────────────────────────────────────
+
+function SubscriptionsCard({
+  subscriptions,
+  highlightCluster,
+}: {
+  subscriptions: V2Subscription[];
+  highlightCluster?: string | null;
+}) {
+  if (subscriptions.length === 0) return null;
+
+  const fmt = (n: number) =>
+    '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+
+  // Simple cluster keyword check (mirrors subscriptionOverlapDetector)
+  const CLUSTER_KEYWORDS: Record<string, string[]> = {
+    'AI Assistants':    ['chatgpt','openai','claude','anthropic','gemini','copilot','perplexity','grok'],
+    'Video Streaming':  ['netflix','hulu','max','hbo','disney','paramount','peacock','apple tv','youtube premium'],
+    'Music Streaming':  ['spotify','apple music','tidal','amazon music','deezer'],
+    'Cloud Storage':    ['dropbox','google drive','google one','icloud','onedrive','box'],
+    'Project Management': ['notion','asana','monday','linear','basecamp','trello','clickup'],
+    'Password Managers':  ['1password','lastpass','bitwarden','dashlane'],
+    'VPN Services':       ['nordvpn','expressvpn','mullvad','protonvpn','surfshark'],
+    'Design & Creative':  ['figma','adobe','canva','sketch','framer','webflow'],
+  };
+
+  function inCluster(merchant: string, cluster: string): boolean {
+    const kws = CLUSTER_KEYWORDS[cluster] ?? [];
+    const norm = merchant.toLowerCase();
+    return kws.some((kw) => norm.includes(kw));
+  }
+
+  const totalMonthly = subscriptions.reduce((s, sub) => s + sub.monthlyEquivalent, 0);
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(6,18,30,0.93)', border: '1px solid rgba(167,139,250,0.15)' }}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Subscriptions</h2>
+        <span
+          className="text-xs rounded-full px-2 py-0.5 ml-1"
+          style={{ background: 'rgba(167,139,250,0.12)', color: '#C4B5FD' }}
+        >
+          {subscriptions.length}
+        </span>
+        <span className="text-xs ml-auto" style={{ color: 'rgba(232,237,245,0.40)' }}>
+          ${totalMonthly.toFixed(0)}/mo total
+        </span>
+      </div>
+
+      <div className="space-y-1">
+        {/* Header row */}
+        <div
+          className="grid text-[10px] uppercase tracking-wider pb-1.5 border-b"
+          style={{
+            gridTemplateColumns: '1fr 72px 72px 80px 80px',
+            color: 'rgba(232,237,245,0.30)',
+            borderColor: 'rgba(255,255,255,0.06)',
+          }}
+        >
+          <span>Service</span>
+          <span className="text-right">Amount</span>
+          <span className="text-right">Interval</span>
+          <span className="text-right">Monthly</span>
+          <span className="text-right">Next charge</span>
+        </div>
+
+        {subscriptions.map((sub) => {
+          const isHighlighted =
+            highlightCluster ? inCluster(sub.merchant, highlightCluster) : false;
+          return (
+            <div
+              key={sub.id}
+              className="grid items-center py-1.5 rounded-lg px-1 -mx-1 transition-colors"
+              style={{
+                gridTemplateColumns: '1fr 72px 72px 80px 80px',
+                background: isHighlighted ? 'rgba(253,211,77,0.07)' : undefined,
+                outline: isHighlighted ? '1px solid rgba(253,211,77,0.20)' : undefined,
+              }}
+            >
+              <div className="min-w-0">
+                <span className="text-sm font-medium truncate block" style={{ color: '#E8EDF5' }}>
+                  {sub.merchant}
+                </span>
+                {sub.category && (
+                  <span className="text-[10px]" style={{ color: 'rgba(232,237,245,0.40)' }}>{sub.category}</span>
+                )}
+              </div>
+              <span className="text-right text-sm" style={{ color: 'rgba(232,237,245,0.70)' }}>
+                {fmt(sub.amount)}
+              </span>
+              <span className="text-right text-xs capitalize" style={{ color: 'rgba(232,237,245,0.45)' }}>
+                {sub.interval}
+              </span>
+              <span className="text-right text-sm font-semibold" style={{ color: '#C4B5FD' }}>
+                {fmt(sub.monthlyEquivalent)}
+              </span>
+              <span className="text-right text-xs" style={{ color: 'rgba(232,237,245,0.45)' }}>
+                {fmtDate(sub.nextChargeDate)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer total */}
+      <div
+        className="flex justify-between items-center pt-3 mt-2 text-sm font-semibold border-t"
+        style={{ borderColor: 'rgba(255,255,255,0.06)', color: '#E8EDF5' }}
+      >
+        <span style={{ color: 'rgba(232,237,245,0.50)' }}>Total monthly</span>
+        <span style={{ color: '#C4B5FD' }}>${totalMonthly.toFixed(2)}</span>
+      </div>
+    </div>
+  );
 }
 
 function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
@@ -309,6 +1025,9 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   UNUSUAL_CHARGE: 'Unusual Charge',
   SUBSCRIPTION_PRICE_CHANGE: 'Price Increase',
   CATEGORY_SPIKE: 'Spending Spike',
+  LOW_CASH_FORECAST: 'Cash Flow Alert',
+  INCOME_SCHEDULE_DETECTED: 'Income Schedule',
+  SUBSCRIPTION_OVERLAP: 'Subscription Overlap',
   ALERT: 'Alert',
 };
 
@@ -319,11 +1038,22 @@ const PRIORITY_STYLES: Record<string, { dot: string; label: string }> = {
   low:      { dot: 'rgba(232,237,245,0.35)', label: 'Low' },
 };
 
-// Anomaly event types get a warning tint in the feed
+// Anomaly event types get a warning (orange) tint in the feed
 const ANOMALY_EVENT_TYPES = new Set([
   'UNUSUAL_CHARGE',
   'SUBSCRIPTION_PRICE_CHANGE',
   'CATEGORY_SPIKE',
+  'LOW_CASH_FORECAST',
+]);
+
+// Cost-saving opportunity events get a yellow/amber tint
+const SAVINGS_EVENT_TYPES = new Set([
+  'SUBSCRIPTION_OVERLAP',
+]);
+
+// Income events get a green tint (positive signal)
+const INCOME_EVENT_TYPES = new Set([
+  'INCOME_SCHEDULE_DETECTED',
 ]);
 
 function eventSummary(event: V2FinanceEvent): string {
@@ -352,6 +1082,23 @@ function eventSummary(event: V2FinanceEvent): string {
     case 'CATEGORY_SPIKE': {
       const cat = String(p.categoryName ?? '');
       return `${cat.charAt(0).toUpperCase() + cat.slice(1)} — $${Number(p.thisWeekSpend ?? 0).toFixed(0)} this week vs avg $${Number(p.avgWeeklySpend ?? 0).toFixed(0)} (${p.multiplier}×)`;
+    }
+    case 'LOW_CASH_FORECAST': {
+      const low = Number(p.lowestBalance ?? 0);
+      const date = String(p.lowestDate ?? '');
+      const threshold = Number(p.threshold ?? 1000);
+      const dateStr = date ? ` on ${new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '';
+      return `Projected balance $${low.toLocaleString('en-US', { minimumFractionDigits: 0 })}${dateStr} — below $${threshold.toLocaleString()} threshold`;
+    }
+    case 'INCOME_SCHEDULE_DETECTED': {
+      const cap = (s: unknown) => String(s ?? '').replace(/\b\w/g, (c) => c.toUpperCase());
+      return `${cap(p.employer)} — $${Number(p.amount ?? 0).toFixed(2)}/${p.interval ?? 'recurring'} detected`;
+    }
+    case 'SUBSCRIPTION_OVERLAP': {
+      const services = Array.isArray(p.services) ? (p.services as string[]) : [];
+      const cost = Number(p.monthlyCost ?? 0);
+      const cluster = String(p.clusterName ?? 'Services');
+      return `${cluster}: ${services.join(', ')} — $${cost.toFixed(0)}/mo combined`;
     }
     default:
       return event.type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -419,9 +1166,11 @@ function SubscriptionActions({
 function ActionFeed({
   events,
   onResolve,
+  onHighlightCluster,
 }: {
   events: V2FinanceEvent[];
   onResolve: (id: string) => Promise<void>;
+  onHighlightCluster?: (cluster: string | null) => void;
 }) {
   const [resolving, setResolving] = useState<Set<string>>(new Set());
 
@@ -458,17 +1207,23 @@ function ActionFeed({
           const isResolving = resolving.has(event.id);
           const isSubscriptionEvent = event.type === 'SUBSCRIPTION_DETECTED';
           const isAnomalyEvent      = ANOMALY_EVENT_TYPES.has(event.type);
+          const isIncomeEvent       = INCOME_EVENT_TYPES.has(event.type);
+          const isSavingsEvent      = SAVINGS_EVENT_TYPES.has(event.type);
 
           return (
             <div
               key={event.id}
               className="rounded-2xl px-4 py-3 space-y-2"
               style={{
-                background: isSubscriptionEvent ? 'rgba(74,222,128,0.05)'
-                  : isAnomalyEvent              ? 'rgba(251,146,60,0.05)'
+                background:
+                  isSubscriptionEvent || isIncomeEvent ? 'rgba(74,222,128,0.05)'
+                  : isSavingsEvent  ? 'rgba(253,211,77,0.05)'
+                  : isAnomalyEvent  ? 'rgba(251,146,60,0.05)'
                   : 'rgba(255,255,255,0.06)',
-                border: isSubscriptionEvent ? '1px solid rgba(74,222,128,0.15)'
-                  : isAnomalyEvent           ? '1px solid rgba(251,146,60,0.20)'
+                border:
+                  isSubscriptionEvent || isIncomeEvent ? '1px solid rgba(74,222,128,0.15)'
+                  : isSavingsEvent  ? '1px solid rgba(253,211,77,0.20)'
+                  : isAnomalyEvent  ? '1px solid rgba(251,146,60,0.20)'
                   : '1px solid rgba(255,255,255,0.09)',
               }}
             >
@@ -527,6 +1282,28 @@ function ActionFeed({
               {isSubscriptionEvent && (
                 <SubscriptionActions event={event} onDone={() => handleResolve(event.id)} />
               )}
+
+              {/* Overlap — Review subscriptions action */}
+              {event.type === 'SUBSCRIPTION_OVERLAP' && (
+                <button
+                  onClick={() => {
+                    const cluster = (event.payload as Record<string, unknown>).clusterName as string | undefined;
+                    onHighlightCluster?.(cluster ?? null);
+                    setTimeout(() => {
+                      document.getElementById('subscriptions-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 50);
+                  }}
+                  className="text-xs rounded-xl px-3 py-1.5 font-medium transition-opacity hover:opacity-80"
+                  style={{
+                    background: 'rgba(253,211,77,0.10)',
+                    border: '1px solid rgba(253,211,77,0.25)',
+                    color: '#FDE68A',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Review subscriptions ↓
+                </button>
+              )}
             </div>
           );
         })}
@@ -543,6 +1320,7 @@ export default function FinancePage() {
   const [emeraldStatus, setEmeraldStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [showAllPayables, setShowAllPayables] = useState(false);
   const [exportedFlash, setExportedFlash] = useState(false);
+  const [highlightCluster, setHighlightCluster] = useState<string | null>(null);
 
   const payables = data?.payables ?? [];
   const transactions = data?.transactions ?? [];
@@ -652,15 +1430,50 @@ export default function FinancePage() {
     { label: 'Export Statement', live: true, onClick: handleExport },
   ];
 
+  // ── Derived display helpers ────────────────────────────────────────────────
+  const updatedAgo = useMemo(() => {
+    if (!data?.generatedAt) return null;
+    const diffMs = Date.now() - new Date(data.generatedAt).getTime();
+    const secs = Math.floor(diffMs / 1000);
+    if (secs < 10)  return 'just now';
+    if (secs < 60)  return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60)  return `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs} hr ago`;
+  }, [data?.generatedAt]);
+
   return (
     <div className="space-y-5">
       {/* Heading */}
-      <div>
-        <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Finance</h1>
-        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-          Financial intelligence under Emerald&apos;s stewardship
-        </p>
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Finance</h1>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Financial intelligence under Emerald&apos;s stewardship
+          </p>
+        </div>
+        {updatedAgo && (
+          <span className="text-[11px] pb-0.5" style={{ color: 'rgba(232,237,245,0.30)' }}>
+            Updated {updatedAgo}
+          </span>
+        )}
       </div>
+
+      {/* Partial system status banner */}
+      {data?.systemStatus === 'partial' && (
+        <div
+          className="flex items-center gap-2.5 rounded-2xl px-4 py-2.5 text-xs"
+          style={{
+            background: 'rgba(251,146,60,0.06)',
+            border: '1px solid rgba(251,146,60,0.18)',
+            color: 'rgba(253,186,116,0.85)',
+          }}
+        >
+          <AlertCircle size={12} style={{ flexShrink: 0, opacity: 0.8 }} />
+          Some financial insights are temporarily unavailable. Core data is unaffected.
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         {/* Left column */}
@@ -670,7 +1483,11 @@ export default function FinancePage() {
           <MerchantCategorizer merchants={pendingMerchants} onCategorized={mutate} />
 
           {/* Action Feed */}
-          <ActionFeed events={events} onResolve={handleResolveEvent} />
+          <ActionFeed
+            events={events}
+            onResolve={handleResolveEvent}
+            onHighlightCluster={setHighlightCluster}
+          />
 
           {/* Holdings */}
           <div
@@ -845,6 +1662,16 @@ export default function FinancePage() {
             </div>
           </div>
 
+          {/* Income Sources */}
+          {(data?.incomeSources ?? []).length > 0 && (
+            <IncomeSourcesCard sources={data!.incomeSources} onMutate={mutate} />
+          )}
+
+          {/* Cash Flow Forecast */}
+          {data?.forecast && data.forecast.days.length > 0 && (
+            <CashFlowForecastCard forecast={data.forecast} />
+          )}
+
           {/* Budget Overview */}
           {(data?.budget ?? []).length > 0 && (
             <div
@@ -907,6 +1734,14 @@ export default function FinancePage() {
             </div>
           )}
 
+          {/* Subscriptions */}
+          <div id="subscriptions-card">
+            <SubscriptionsCard
+              subscriptions={data?.subscriptions ?? []}
+              highlightCluster={highlightCluster}
+            />
+          </div>
+
           {/* Financial Plans */}
           {allPlans.length > 0 && (
             <div
@@ -925,6 +1760,16 @@ export default function FinancePage() {
 
         {/* Right column */}
         <div className="space-y-5">
+
+          {/* Finance Health Score */}
+          {data?.healthScore && (
+            <FinanceHealthCard health={data.healthScore} />
+          )}
+
+          {/* Net Worth */}
+          {(data?.netWorthHistory ?? []).length > 0 && (
+            <NetWorthCard history={data!.netWorthHistory} />
+          )}
 
           {/* Alerts */}
           <div
