@@ -481,7 +481,7 @@ function DispatchPageInner() {
               <textarea
                 className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
                 rows={4}
-                placeholder="Campaign objective, context, constraints"
+                placeholder="Objective + resources: paste Figma URLs, repo links, docs, or any context the agent will need to execute tasks"
                 value={campaignDescription}
                 onChange={(e) => setCampaignDescription(e.target.value)}
               />
