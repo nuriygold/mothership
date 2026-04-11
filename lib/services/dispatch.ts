@@ -166,13 +166,12 @@ export async function generateDispatchPlans(campaignId: string) {
   });
 
   const prompt = [
-    'You are planning a dispatch campaign.',
+    'Break this goal into a concise numbered action item list.',
     `Goal: ${campaign.title}`,
     campaign.description ? `Context: ${campaign.description}` : null,
-    'Return strict JSON only.',
-    'Schema:',
-    '{"plans":[{"name":"Plan A","tasks":[{"key":"task-1","title":"Short title","description":"Optional detail","deps":["task-0"]}],"estimated_cost_cents":0,"estimated_duration_seconds":0}]}',
-    'Include 3 alternative plans. Dependencies must reference keys in the same plan.',
+    'Return strict JSON only. No markdown, no explanation.',
+    'Schema: {"plans":[{"name":"Action Plan","tasks":[{"key":"task-1","title":"Do X","description":"Brief detail or null","deps":[]}]}]}',
+    'Rules: 3–8 tasks. Keys must be unique (task-1, task-2, …). deps must reference keys in this list or be empty. Return exactly ONE plan.',
   ]
     .filter(Boolean)
     .join('\n');
@@ -182,11 +181,18 @@ export async function generateDispatchPlans(campaignId: string) {
       text: prompt,
       agentId: 'emerald',
       sessionKey: `dispatch-plan:${campaignId}`,
+      timeoutMs: 90_000,
     });
 
-    const parsed = JSON.parse(extractJson(result.output || ''));
-    if (!parsed || !Array.isArray(parsed.plans) || parsed.plans.length === 0) {
-      throw new Error('Planner did not return a usable plan set');
+    const rawJson = extractJson(result.output || '');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      throw new Error(`Planner returned invalid JSON: ${result.output?.slice(0, 200)}`);
+    }
+    if (!parsed || !Array.isArray((parsed as RawPlanEnvelope).plans) || (parsed as RawPlanEnvelope).plans.length === 0) {
+      throw new Error(`Planner did not return a usable plan. Got: ${result.output?.slice(0, 200)}`);
     }
 
     const latestPlan = normalizePlanEnvelope(parsed as RawPlanEnvelope);
