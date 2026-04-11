@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
   try {
     const contentType = req.headers.get('content-type') || 'audio/ogg';
-    const audioBuffer = Buffer.from(await req.arrayBuffer());
+    const audioBuffer = await req.arrayBuffer();
 
     const endpoint = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=simple`;
 
