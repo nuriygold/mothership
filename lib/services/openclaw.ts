@@ -50,7 +50,7 @@ export function modelForOpenClaw(agentId?: string) {
   return resolvedAgent === 'main' ? 'openclaw/main' : `openclaw/${resolvedAgent}`;
 }
 
-export async function dispatchToOpenClaw(input: DispatchInput) {
+export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: number }) {
   const gateway = process.env.OPENCLAW_GATEWAY;
   const token = process.env.OPENCLAW_TOKEN;
   const defaultAgent = agentForKey();
@@ -76,7 +76,7 @@ export async function dispatchToOpenClaw(input: DispatchInput) {
       ...(input.sessionKey ? { 'x-openclaw-session-key': input.sessionKey } : {}),
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(input.timeoutMs ?? 30_000),
   });
 
   if (!res.ok || !res.body) {
