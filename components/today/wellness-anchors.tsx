@@ -304,26 +304,24 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
                 border: `1.5px solid ${a.todayActive ? a.text : 'transparent'}`,
                 boxShadow: a.todayActive ? `0 2px 8px rgba(0,0,0,0.08)` : 'none',
               }}>
-              {/* Yesterday — read-only (left on desktop, top on mobile) */}
-              <div className="flex flex-col items-center gap-0.5 py-2 px-1 flex-1 opacity-60"
-                style={{ background: a.ydayActive ? a.bg : 'var(--muted)' }}>
-                <span className="text-[7px] font-semibold uppercase tracking-wide opacity-50"
+              {/* Yesterday — read-only */}
+              <div className="flex flex-col items-center gap-0.5 py-2 px-1 flex-1 opacity-55"
+                style={{ background: a.ydayActive ? a.bg : 'rgba(0,0,0,0.05)' }}>
+                <span className="text-[7px] font-semibold uppercase tracking-wide"
                   style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>Yday</span>
                 <Icon className="w-3.5 h-3.5" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }} />
                 <span className="text-[9px] font-semibold leading-tight"
                   style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
                 <div style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.ydaySub}</div>
               </div>
-
-              {/* Divider — horizontal on mobile, vertical on desktop */}
+              {/* Divider */}
               <div className="h-px w-full sm:h-auto sm:w-px"
-                style={{ background: a.todayActive ? a.text : 'var(--border)', opacity: 0.3 }} />
-
-              {/* Today — interactive (right on desktop, bottom on mobile) */}
+                style={{ background: a.todayActive ? a.text : 'rgba(0,0,0,0.1)', opacity: 0.3 }} />
+              {/* Today — interactive */}
               <button onClick={a.onTap}
                 className="flex flex-col items-center gap-0.5 py-2 px-1 transition-all hover:brightness-95 active:scale-95 flex-1"
                 style={{ background: a.todayActive ? a.bg : 'var(--muted)' }}>
-                <span className="text-[7px] font-semibold uppercase tracking-wide opacity-50"
+                <span className="text-[7px] font-semibold uppercase tracking-wide"
                   style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>Today</span>
                 <Icon className="w-3.5 h-3.5" style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }} />
                 <span className="text-[9px] font-semibold leading-tight"

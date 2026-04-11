@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Mothership (Next.js)",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["/Users/claw/mothership-main/node_modules/.bin/next", "dev"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
   ]
