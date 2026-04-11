@@ -61,6 +61,18 @@ function saveWellness(s: WellnessState) {
   try { localStorage.setItem(wellnessKey(), JSON.stringify(s)); } catch { /**/ }
 }
 
+// Tracks the last values Oura reported, so we can detect when Oura has new data.
+// Oura only wins for a field when its value changes from what it last reported.
+// User edits are preserved as long as Oura's value stays the same.
+interface OuraCache { steps: number; workout: boolean; }
+function ouraKey() { return `oura-cache-${easternDateString(0)}`; }
+function loadOuraCache(): OuraCache | null {
+  try { const s = localStorage.getItem(ouraKey()); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function saveOuraCache(c: OuraCache) {
+  try { localStorage.setItem(ouraKey(), JSON.stringify(c)); } catch { /**/ }
+}
+
 async function fetchFromSupabase(date: string): Promise<WellnessState | null> {
   const { data, error } = await supabase
     .from('wellness_logs')
@@ -103,24 +115,35 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
     Promise.all([
       fetchFromSupabase(tdate),
       fetchFromSupabase(ydate),
-      fetch(`/api/oura/today`).then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
+      fetch(`/api/oura/today?date=${tdate}`).then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
       fetch(`/api/oura/today?date=${ydate}`).then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
     ]).then(([remote, remoteYesterday, ouraData, ouraYday]) => {
       setOura(ouraData);
       setOuraYesterday(ouraYday);
 
-      // Today
+      // Today — newest data wins:
+      // Oura only overwrites a field when its value changed from what it last reported.
+      // User manual edits are preserved as long as Oura's reported value stays the same.
       const base = remote ?? local;
-      const merged: WellnessState = {
-        ...base,
-        ...(ouraData?.connected ? { steps: ouraData.steps, workout: ouraData.workout } : {}),
-      };
+      const cache = loadOuraCache();
+      const merged: WellnessState = { ...base };
+      if (ouraData?.connected) {
+        if (ouraData.steps !== cache?.steps) merged.steps = ouraData.steps;
+        if (ouraData.workout !== cache?.workout) merged.workout = ouraData.workout;
+        saveOuraCache({ steps: ouraData.steps, workout: ouraData.workout });
+      }
       setW(merged);
       saveWellness(merged);
       if (ouraData?.connected) void syncToSupabase(merged);
 
-      // Yesterday (read-only)
-      const ybase = remoteYesterday ?? WELLNESS_DEFAULT;
+      // Yesterday (read-only) — Oura always wins, no user edits possible
+      const ylocal = (() => {
+        try {
+          const s = localStorage.getItem(`wellness-${ydate}`);
+          return s ? { ...WELLNESS_DEFAULT, ...JSON.parse(s) } : null;
+        } catch { return null; }
+      })();
+      const ybase = remoteYesterday ?? ylocal ?? WELLNESS_DEFAULT;
       const ymerged: WellnessState = {
         ...ybase,
         ...(ouraYday?.connected ? { steps: ouraYday.steps, workout: ouraYday.workout } : {}),
