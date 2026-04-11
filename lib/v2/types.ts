@@ -182,6 +182,16 @@ export type V2FinancePlan = {
   updatedAt: string | null;
 };
 
+export type V2FinanceEvent = {
+  id: string;
+  type: string;
+  source: string;
+  payload: Record<string, unknown>;
+  priority: 'low' | 'normal' | 'high' | 'critical';
+  resolved: boolean;
+  createdAt: string;
+};
+
 export type V2FinanceOverviewFeed = {
   accounts: Array<{
     id: string;
@@ -204,6 +214,27 @@ export type V2FinanceOverviewFeed = {
     handledByBot: string;
   }>;
   plans: V2FinancePlan[];
+  events: V2FinanceEvent[];
+  merchants: {
+    total: number;
+    uncategorized: number;
+    pendingCategorization: Array<{
+      id: string;
+      merchantName: string;
+      transactionCount: number;
+      lastSeen: string;
+    }>;
+  };
+  budget: Array<{
+    id: string;
+    name: string;
+    monthlyTarget: number;
+    emoji: string | null;
+    spent: number;
+    remaining: number;
+    percentUsed: number;
+    status: 'green' | 'yellow' | 'red';
+  }>;
 };
 
 export type V2ActivityItem = {

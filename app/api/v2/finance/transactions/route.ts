@@ -1,5 +1,6 @@
 import { ensureV2Authorized } from '@/lib/v2/auth';
 import { prisma } from '@/lib/prisma';
+import { createFinanceEvent } from '@/lib/finance/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,15 @@ export async function POST(req: Request) {
         },
       }),
     ]);
+
+    createFinanceEvent('TRANSACTION_DETECTED', 'transactions', {
+      account: account.name,
+      amount: normalizedAmount,
+      description,
+      category: category ?? 'General',
+      handledByBot,
+      priority: 'low',
+    }).catch(() => {});
 
     return Response.json({ transaction }, { status: 201 });
   } catch (error) {

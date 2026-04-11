@@ -1,5 +1,6 @@
 import { ensureV2Authorized } from '@/lib/v2/auth';
 import { prisma } from '@/lib/prisma';
+import { createFinanceEvent } from '@/lib/finance/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,13 @@ export async function POST(req: Request) {
         status: 'pending',
       },
     });
+
+    createFinanceEvent('BILL_DUE', 'payables', {
+      vendor: payable.vendor,
+      amount: payable.amount,
+      dueDate: payable.dueDate ? payable.dueDate.toISOString().slice(0, 10) : null,
+      priority: 'normal',
+    }).catch(() => {});
 
     return Response.json({ payable }, { status: 201 });
   } catch (error) {
