@@ -89,16 +89,20 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
   let output = '';
   let done = false;
   let error: string | null = null;
+  let buffer = '';
 
   try {
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       if (readerDone) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean);
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      // Keep the last (potentially incomplete) line in the buffer
+      buffer = lines.pop() ?? '';
       for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const dataStr = line.slice(5).trim();
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const dataStr = trimmed.slice(5).trim();
         if (dataStr === '[DONE]') {
           done = true;
           break;
