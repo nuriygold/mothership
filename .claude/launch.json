@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Mothership (Next.js)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/Users/claw/mothership-main/node_modules/.bin/next", "dev"],
+      "port": 3000
+    }
+  ]
+}
