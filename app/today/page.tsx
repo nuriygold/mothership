@@ -508,10 +508,9 @@ export default function TodayPage() {
       {/* ── Daily Anchors ── */}
       <WellnessAnchors onAllComplete={handleAnchorAllComplete} />
 
-      <div className="grid gap-4 max-sm:mx-3 md:grid-cols-[1fr_1fr]">
+      <div className="grid gap-4 max-sm:mx-3 md:grid-cols-2">
         {/* ── Left: Today's Timeline ── */}
-        <div className="space-y-4">
-          <Card>
+        <Card>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
@@ -539,6 +538,15 @@ export default function TodayPage() {
               ) : (
                 <>
                   {mergedTimeline.map((entry, idx) => {
+                    const prevEntry = idx > 0 ? mergedTimeline[idx - 1] : null;
+                    const prevTime = prevEntry
+                      ? (prevEntry._calEvent ? (prevEntry as { startTime: string }).startTime : (prevEntry as V2DashboardTimelineItem).time)
+                      : null;
+                    const thisTime = entry._calEvent
+                      ? (entry as { startTime: string }).startTime
+                      : (entry as V2DashboardTimelineItem).time;
+                    const showTime = thisTime !== prevTime;
+
                     if (entry._calEvent) {
                       // ── Calendar event row ──
                       const calEntry = entry as { _calEvent: true; id: string; title: string; startTime: string; endTime: string | null; startDate: string; meetingUrl: string | null; location: string | null; status: 'done' | 'current' | 'upcoming' };
@@ -563,7 +571,7 @@ export default function TodayPage() {
                             }}>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-sm font-semibold w-16 flex-shrink-0" style={{ color: 'var(--color-sky-text)' }}>
+                                <span className="text-sm font-semibold w-16 flex-shrink-0" style={{ color: 'var(--color-sky-text)', opacity: showTime ? 1 : 0 }}>
                                   {calEntry.startTime}
                                 </span>
                                 <div className="min-w-0">
@@ -625,7 +633,7 @@ export default function TodayPage() {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 min-w-0">
                               <span className="text-sm font-semibold w-16 flex-shrink-0"
-                                style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)' }}>
+                                style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)', opacity: showTime ? 1 : 0 }}>
                                 {taskEntry.time}
                               </span>
                               <div className="min-w-0">
@@ -705,92 +713,8 @@ export default function TodayPage() {
             </div>
           </Card>
 
-          {/* ── Quick Actions ── */}
-          <Card>
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
-              <CardTitle>Quick Actions</CardTitle>
-            </div>
-            <CardSubtitle>Fast paths to create, approve, dispatch, and celebrate</CardSubtitle>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <Link href="/tasks" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-lavender)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(123,104,238,0.2)' }}>
-                  <Plus className="w-5 h-5" style={{ color: '#4A3DAA' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>New Task</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-lavender-text)' }}>Create and assign work to any bot</p>
-                </div>
-              </Link>
-
-              <Link href="/activity" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,200,0.15)' }}>
-                  <ListChecks className="w-5 h-5" style={{ color: 'var(--color-sky-text)' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Approve Queue</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-sky-text)' }}>Clear all pending approvals</p>
-                </div>
-              </Link>
-
-              <Link href="/ruby" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-pink, #fce7f3)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(190,24,93,0.12)' }}>
-                  <Sparkles className="w-5 h-5" style={{ color: '#be185d' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Ask Ruby</p>
-                  <p className="text-[11px]" style={{ color: '#9d174d' }}>Drafts, replies, and writing help</p>
-                </div>
-              </Link>
-
-              <Link href="/dispatch" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-mint)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,120,0.15)' }}>
-                  <Rocket className="w-5 h-5" style={{ color: 'var(--color-mint-text)' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Dispatch</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-mint-text)' }}>Launch campaigns via Dispatch-Bot</p>
-                </div>
-              </Link>
-
-              <Link href="/email" className="rounded-2xl p-4 flex flex-col gap-2 transition-opacity hover:opacity-85" style={{ background: 'var(--color-sky)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,150,200,0.15)' }}>
-                  <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-sky-text)' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Draft Reply</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-sky-text)' }}>Ruby writes your urgent response</p>
-                </div>
-              </Link>
-
-              <button
-                onClick={() => setShowTrophy(true)}
-                className="rounded-2xl p-4 flex flex-col gap-2 text-left transition-opacity hover:opacity-85 relative"
-                style={{ background: 'var(--color-lemon)', border: '1px solid rgba(0,0,0,0.04)' }}
-              >
-                {completedTitles.length > 0 && (
-                  <span
-                    className="absolute top-3 right-3 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold"
-                    style={{ background: '#B45309', color: '#FFFFFF' }}
-                  >
-                    {completedTitles.length}
-                  </span>
-                )}
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(180,83,9,0.15)' }}>
-                  <Trophy className="w-5 h-5" style={{ color: '#B45309' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#0F1B35' }}>Trophy Collection</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-lemon-text)' }}>Daily wins &amp; completions</p>
-                </div>
-              </button>
-            </div>
-          </Card>
-        </div>
-
         {/* ── Right: Top Priorities (drag source) ── */}
-        <div className="space-y-4">
-          <Card>
+        <Card>
             <div className="flex items-center gap-2">
               <Star className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
               <CardTitle>Top Priorities</CardTitle>
@@ -844,7 +768,7 @@ export default function TodayPage() {
                             onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
                         )}
                         <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
-                          style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+                          style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}
                           onClick={() => handleTakeAction(item)}>
                           Take Action
                         </button>
@@ -854,9 +778,56 @@ export default function TodayPage() {
                 })
               )}
             </div>
-          </Card>
-        </div>
+        </Card>
       </div>
+
+      {/* ── Quick Actions ── */}
+      <Card className="max-sm:mx-3">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
+          <CardTitle>Quick Actions</CardTitle>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <Link href="/tasks" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            <Plus className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>New Task</span>
+          </Link>
+          <Link href="/activity" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            <ListChecks className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Approve Queue</span>
+          </Link>
+          <Link href="/ruby" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            <Sparkles className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Ask Ruby</span>
+          </Link>
+          <Link href="/dispatch" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            <Rocket className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Dispatch</span>
+          </Link>
+          <Link href="/email" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Draft Reply</span>
+          </Link>
+          <button onClick={() => setShowTrophy(true)}
+            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95 relative"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            {completedTitles.length > 0 && (
+              <span className="absolute top-2 right-2 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold"
+                style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
+                {completedTitles.length}
+              </span>
+            )}
+            <Trophy className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Trophy</span>
+          </button>
+        </div>
+      </Card>
+
       {/* ── Stress Card ── */}
       {ouraToday?.connected && ouraToday.stressSummary && (
         <div className="max-sm:mx-3">
