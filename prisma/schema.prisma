@@ -450,3 +450,31 @@ model Payable {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model FinanceEvent {
+  id        String   @id @default(cuid())
+  type      String
+  source    String
+  payload   Json
+  priority  String   @default("normal")
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model BudgetCategory {
+  id            String  @id @default(cuid())
+  name          String  @unique
+  monthlyTarget Float
+  emoji         String?
+}
+
+model MerchantProfile {
+  id               String   @id @default(cuid())
+  merchantName     String   @unique
+  defaultCategory  String?
+  isSubscription   Boolean  @default(false)
+  billingInterval  String?
+  subscriptionConfirmed Boolean @default(false)
+  transactionCount Int      @default(0)
+  lastSeen         DateTime @default(now())
+}

@@ -351,6 +351,10 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
   let payables: any[] = [];
   let transactions: any[] = [];
   let plans: any[] = [];
+  let events: any[] = [];
+  let merchantTotal = 0;
+  let merchantsUncategorized: any[] = [];
+  let budgetRows: any[] = [];
   // Get all datasets independently
   await Promise.all([
     (async () => {
@@ -391,6 +395,43 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       } catch (error) {
         console.error('[finance_adapter:plans]', error);
         plans = [];
+      }
+    })(),
+    (async () => {
+      try {
+        events = await prisma.financeEvent.findMany({
+          where: { resolved: false },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        });
+      } catch (error) {
+        console.error('[finance_adapter:events]', error);
+        events = [];
+      }
+    })(),
+    (async () => {
+      try {
+        [merchantTotal, merchantsUncategorized] = await Promise.all([
+          prisma.merchantProfile.count(),
+          prisma.merchantProfile.findMany({
+            where: { defaultCategory: null },
+            orderBy: { transactionCount: 'desc' },
+            take: 10,
+          }),
+        ]);
+      } catch (error) {
+        console.error('[finance_adapter:merchants]', error);
+      }
+    })(),
+    (async () => {
+      try {
+        const { calculateBudget, checkBudgetThresholds } = await import('@/lib/finance/budget');
+        budgetRows = await calculateBudget();
+        // Fire-and-forget threshold check — emits events if needed
+        checkBudgetThresholds().catch(() => {});
+      } catch (error) {
+        console.error('[finance_adapter:budget]', error);
+        budgetRows = [];
       }
     })(),
   ]);
@@ -444,6 +485,26 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       handledByBot: transaction.handledByBot,
     })),
     plans: mappedPlans,
+    events: events.map((event) => ({
+      id: event.id,
+      type: event.type,
+      source: event.source,
+      payload: event.payload ?? {},
+      priority: (event.priority ?? 'normal') as 'low' | 'normal' | 'high' | 'critical',
+      resolved: event.resolved,
+      createdAt: new Date(event.createdAt).toISOString(),
+    })),
+    merchants: {
+      total: merchantTotal,
+      uncategorized: merchantsUncategorized.length,
+      pendingCategorization: merchantsUncategorized.map((m) => ({
+        id: m.id,
+        merchantName: m.merchantName,
+        transactionCount: m.transactionCount,
+        lastSeen: new Date(m.lastSeen).toISOString(),
+      })),
+    },
+    budget: budgetRows,
   };
 }
 
