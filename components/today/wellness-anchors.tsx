@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
-import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap, Pill } from 'lucide-react';
+import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap, Pill, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { OuraTodayData } from '@/lib/oura';
 
@@ -103,6 +103,7 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
   const [celebrate, setCelebrate] = useState(false);
   const [oura, setOura] = useState<OuraTodayData | null>(null);
   const [ouraYesterday, setOuraYesterday] = useState<OuraTodayData | null>(null);
+  const [ouraRefreshing, setOuraRefreshing] = useState(false);
   const celebrateTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -115,26 +116,15 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
     Promise.all([
       fetchFromSupabase(tdate),
       fetchFromSupabase(ydate),
-      fetch(`/api/oura/today?date=${tdate}`).then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
+      // Yesterday Oura is read-only (no user edits possible) — safe to auto-fetch
       fetch(`/api/oura/today?date=${ydate}`).then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
-    ]).then(([remote, remoteYesterday, ouraData, ouraYday]) => {
-      setOura(ouraData);
+    ]).then(([remote, remoteYesterday, ouraYday]) => {
       setOuraYesterday(ouraYday);
 
-      // Today — newest data wins:
-      // Oura only overwrites a field when its value changed from what it last reported.
-      // User manual edits are preserved as long as Oura's reported value stays the same.
+      // Today — use saved data only; Oura sync is manual via the refresh button
       const base = remote ?? local;
-      const cache = loadOuraCache();
-      const merged: WellnessState = { ...base };
-      if (ouraData?.connected) {
-        if (ouraData.steps !== cache?.steps) merged.steps = ouraData.steps;
-        if (ouraData.workout !== cache?.workout) merged.workout = ouraData.workout;
-        saveOuraCache({ steps: ouraData.steps, workout: ouraData.workout });
-      }
-      setW(merged);
-      saveWellness(merged);
-      if (ouraData?.connected) void syncToSupabase(merged);
+      setW(base);
+      saveWellness(base);
 
       // Yesterday (read-only) — Oura always wins, no user edits possible
       const ylocal = (() => {
@@ -151,6 +141,31 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       setYw(ymerged);
     });
   }, []);
+
+  async function refreshFromOura() {
+    setOuraRefreshing(true);
+    try {
+      const tdate = todayDate();
+      const ouraData = await fetch(`/api/oura/today?date=${tdate}`)
+        .then((r) => r.json() as Promise<OuraTodayData>)
+        .catch(() => null);
+      setOura(ouraData);
+      if (ouraData?.connected) {
+        setW((prev) => {
+          const cache = loadOuraCache();
+          const merged = { ...prev };
+          if (ouraData.steps !== cache?.steps) merged.steps = ouraData.steps;
+          if (ouraData.workout !== cache?.workout) merged.workout = ouraData.workout;
+          saveOuraCache({ steps: ouraData.steps, workout: ouraData.workout });
+          saveWellness(merged);
+          void syncToSupabase(merged);
+          return merged;
+        });
+      }
+    } finally {
+      setOuraRefreshing(false);
+    }
+  }
 
   useEffect(() => () => clearTimeout(celebrateTimer.current), []);
 
@@ -292,7 +307,19 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
             </p>
           </div>
         </div>
-        {celebrate && <span className="text-lg animate-bounce">🎉</span>}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void refreshFromOura()}
+            disabled={ouraRefreshing}
+            title="Sync Oura ring data"
+            className="flex items-center gap-1 rounded-xl px-2 py-1 text-[10px] transition-opacity hover:opacity-80 active:scale-95"
+            style={{ color: 'var(--muted-foreground)', background: 'rgba(0,0,0,0.05)', opacity: ouraRefreshing ? 0.5 : 1 }}
+          >
+            <Zap className="w-3 h-3" />
+            <RefreshCw className={`w-3 h-3 ${ouraRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+          {celebrate && <span className="text-lg animate-bounce">🎉</span>}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
