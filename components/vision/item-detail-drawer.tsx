@@ -377,7 +377,7 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
-                Emerald's Take
+                Emerald&apos;s Take
               </h3>
               {suggestionState !== 'thinking' && (
                 <button
@@ -399,7 +399,7 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
             {suggestionState === 'thinking' && <EmeraldThinking />}
             {suggestionState === 'error' && (
               <p className="text-xs" style={{ color: '#E53E3E' }}>
-                Couldn't reach Emerald. Try again.
+                Couldn&apos;t reach Emerald. Try again.
               </p>
             )}
             {suggestionState === 'done' && suggestions.length > 0 && (
