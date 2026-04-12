@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
@@ -54,8 +54,23 @@ export function JarvisCard() {
   const [result, setResult] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Fix 4: stop mic and audio on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (audioRef.current) {
+        audioRef.current.pause();
+        if (audioRef.current.src) URL.revokeObjectURL(audioRef.current.src);
+      }
+    };
+  }, []);
 
   const sttMutation = useMutation({
     mutationFn: transcribeAzure,
@@ -76,7 +91,11 @@ export function JarvisCard() {
       const url = URL.createObjectURL(blob);
       if (audioRef.current) {
         audioRef.current.src = url;
+        // Fix 3: revoke the blob URL once playback ends to avoid memory leak
+        audioRef.current.onended = () => URL.revokeObjectURL(url);
         await audioRef.current.play();
+      } else {
+        URL.revokeObjectURL(url);
       }
       return true;
     },
@@ -86,20 +105,22 @@ export function JarvisCard() {
     },
   });
 
+  // Fix 2: removed mutation-level onSuccess — the mutate() call-site handler below is the single source of truth
   const openClawMutation = useMutation({
     mutationFn: dispatchOpenClaw,
-    onSuccess: (payload) => setResult(payload?.result?.output ?? 'Dispatched.'),
   });
 
   const startRecording = async () => {
     setVoiceTranscript('');
     setVoiceError('');
     setVoiceStatus('Requesting mic...');
+    setResult(null); // Fix 5: clear stale result before new request
     audioChunksRef.current = [];
 
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
     } catch (err) {
       const name = err instanceof Error ? err.name : '';
       const isDenied = name === 'NotAllowedError' || name === 'PermissionDeniedError';
@@ -125,6 +146,7 @@ export function JarvisCard() {
     };
     recorder.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
       setVoiceStatus('Transcribing...');
       const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
       try {
