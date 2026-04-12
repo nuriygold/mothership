@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@prisma/client';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
@@ -277,6 +278,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
         data: {
           campaignId,
           title,
+          key: typeof task.key === 'string' ? task.key.trim() : null,
           description: typeof task.description === 'string' ? task.description.trim() : null,
           dependencies: asStringArray(task.dependencies),
           status: DispatchTaskStatus.PLANNED,
@@ -761,16 +763,35 @@ export async function runDispatchCampaign(campaignId: string) {
 
   const results: Array<{ taskId: string; status: string; error?: string }> = [];
 
+  // Build a key → task map so dependency strings can be resolved
+  const keyToTask = new Map(pending.filter((t) => t.key).map((t) => [t.key!, t]));
+  // Track which keys finished successfully
+  const doneKeys = new Set<string>();
+
   for (const task of pending) {
+    const deps = Array.isArray(task.dependencies) ? (task.dependencies as string[]) : [];
+    // A task is blocked if any of its dependency keys exist in the map but haven't completed
+    const blockedByFailure = deps.some((dep) => keyToTask.has(dep) && !doneKeys.has(dep));
+
+    if (blockedByFailure) {
+      await prisma.dispatchTask.update({
+        where: { id: task.id },
+        data: { status: DispatchTaskStatus.CANCELED },
+      });
+      results.push({ taskId: task.id, status: 'CANCELED' });
+      continue;
+    }
+
     try {
       await executeDispatchTask(task.id);
+      if (task.key) doneKeys.add(task.key);
       results.push({ taskId: task.id, status: 'DONE' });
     } catch (error) {
       results.push({ taskId: task.id, status: 'FAILED', error: String(error) });
     }
   }
 
-  const allDone = results.every((r) => r.status === 'DONE');
+  const allDone = results.every((r) => r.status === 'DONE' || r.status === 'CANCELED');
   const anyFailed = results.some((r) => r.status === 'FAILED');
   const finalStatus = allDone
     ? DispatchCampaignStatus.COMPLETED
@@ -783,18 +804,40 @@ export async function runDispatchCampaign(campaignId: string) {
     data: { status: finalStatus },
   });
 
+  const doneCnt = results.filter((r) => r.status === 'DONE').length;
+  const failedCnt = results.filter((r) => r.status === 'FAILED').length;
+  const canceledCnt = results.filter((r) => r.status === 'CANCELED').length;
+
   await prisma.auditEvent.create({
     data: {
       entityType: 'dispatch_campaign',
       entityId: campaignId,
       eventType: 'campaign.run.completed',
-      metadata: {
-        finalStatus,
-        done: results.filter((r) => r.status === 'DONE').length,
-        failed: results.filter((r) => r.status === 'FAILED').length,
-      },
+      metadata: { finalStatus, done: doneCnt, failed: failedCnt, canceled: canceledCnt },
     },
   });
+
+  // Fire campaign-completion webhook (non-fatal)
+  if (campaign.callbackUrl) {
+    try {
+      const payload = JSON.stringify({
+        campaignId,
+        finalStatus,
+        done: doneCnt,
+        failed: failedCnt,
+        canceled: canceledCnt,
+        timestamp: new Date().toISOString(),
+      });
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (campaign.callbackSecret) {
+        const sig = createHmac('sha256', campaign.callbackSecret).update(payload).digest('hex');
+        headers['x-dispatch-signature'] = `sha256=${sig}`;
+      }
+      await fetch(campaign.callbackUrl, { method: 'POST', headers, body: payload });
+    } catch {
+      // Non-fatal — webhook failure never blocks campaign
+    }
+  }
 
   return { campaignId, finalStatus, results };
 }
