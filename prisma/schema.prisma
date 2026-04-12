@@ -613,8 +613,19 @@ model VisionTaskLink {
   taskId       String
   createdAt    DateTime @default(now())
 
-  visionItem VisionItem @relation(fields: [visionItemId], references: [id], onDelete: Cascade)
+ visionItem VisionItem @relation(fields: [visionItemId], references: [id], onDelete: Cascade)
   task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([visionItemId, taskId])
+  @@index([taskId])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
 
   @@unique([visionItemId, taskId])
   @@index([taskId])
