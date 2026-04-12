@@ -16,6 +16,7 @@ import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
 import { StressCard } from '@/components/today/stress-card';
+import { JarvisCard } from '@/components/voice/jarvis-card';
 import type { OuraTodayData } from '@/lib/oura';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
@@ -827,6 +828,11 @@ export default function TodayPage() {
           </button>
         </div>
       </Card>
+
+      {/* ── Voice (Jarvis) ── */}
+      <div className="max-sm:mx-3">
+        <JarvisCard />
+      </div>
 
       {/* ── Stress Card ── */}
       {ouraToday?.connected && ouraToday.stressSummary && (
