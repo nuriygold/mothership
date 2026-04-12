@@ -26,6 +26,7 @@ type DispatchTask = {
   output?: string | null;
   reviewOutput?: string | null;
   errorMessage?: string | null;
+  toolTurns?: number | null;
 };
 
 type DispatchPlan = {
@@ -826,6 +827,7 @@ function DispatchPageInner() {
                           <span>
                             Priority {task.priority}
                             {task.dependencies?.length ? ` • Depends on ${task.dependencies.join(', ')}` : ''}
+                            {task.toolTurns != null ? ` • ${task.toolTurns} tool turns` : ''}
                           </span>
                           {task.taskPoolIssueUrl && (
                             <a
