@@ -11,6 +11,7 @@ import {
   Activity,
   Sparkles,
   Send,
+  Telescope,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -27,6 +28,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/finance': DollarSign,
   '/activity': Activity,
   '/ruby': Sparkles,
+  '/vision': Telescope,
   '/dispatch': Send,
 };
 

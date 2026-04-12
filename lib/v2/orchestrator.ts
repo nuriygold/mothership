@@ -8,6 +8,7 @@ import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
 import { prisma } from '@/lib/prisma';
+import { getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
 import type {
   BotRouteKey,
   SystemHealthSnapshot,
@@ -30,6 +31,11 @@ import type {
   V2TaskItem,
   V2TasksFeed,
   V2TodayFeed,
+  V2VisionBoardFeed,
+  V2VisionItem,
+  V2VisionLinkedCampaign,
+  V2VisionLinkedFinancePlan,
+  V2VisionPillar,
 } from '@/lib/v2/types';
 
 type PredictiveActionState = {
@@ -555,7 +561,24 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     healthScore = null;
   }
 
-  const mappedPlans = plans.map((plan) => {
+  // Build vision link lookup for finance plans
+  const planIds = plans.map((p: { id: string }) => p.id);
+  let visionPlanLinkMap = new Map<string, string>(); // financePlanId → visionItemTitle
+  if (planIds.length > 0) {
+    try {
+      const visionLinks = await prisma.visionFinancePlanLink.findMany({
+        where: { financePlanId: { in: planIds } },
+        include: { visionItem: { select: { title: true } } },
+      });
+      for (const link of visionLinks) {
+        visionPlanLinkMap.set(link.financePlanId, link.visionItem.title);
+      }
+    } catch {
+      // non-fatal — vision badge is optional
+    }
+  }
+
+  const mappedPlans = plans.map((plan: any) => {
     const progressPercent = plan.currentValue != null && plan.targetValue != null && plan.targetValue !== 0
       ? Math.min(100, Math.round((plan.currentValue / plan.targetValue) * 100))
       : null;
@@ -576,6 +599,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       progressPercent,
       notes: plan.notes,
       updatedAt: plan.updatedAt?.toISOString?.() ?? null,
+      visionItemTitle: visionPlanLinkMap.get(plan.id) ?? null,
     };
   });
 
@@ -982,4 +1006,171 @@ export function markDraftSent(emailId: string): void {
   sentDrafts.add(emailId);
   rubyDraftStore.delete(emailId);
   pendingRubyDrafts.delete(emailId);
+}
+
+// ---------------------------------------------------------------------------
+// Vision Board Feed
+// ---------------------------------------------------------------------------
+export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
+  const board = await getOrCreateVisionBoard();
+  const pillars = await listVisionPillars(board.id);
+
+  // Collect all linked IDs in one pass
+  const allCampaignIds = [
+    ...new Set(
+      pillars.flatMap((p) =>
+        p.items.flatMap((i) => i.campaignLinks.map((l) => l.campaignId))
+      )
+    ),
+  ];
+  const allPlanIds = [
+    ...new Set(
+      pillars.flatMap((p) =>
+        p.items.flatMap((i) => i.financePlanLinks.map((l) => l.financePlanId))
+      )
+    ),
+  ];
+
+  // Batch fetch campaigns, plans, and task counts
+  const [campaigns, plans, taskGroupCounts] = await Promise.all([
+    allCampaignIds.length
+      ? prisma.dispatchCampaign.findMany({ where: { id: { in: allCampaignIds } } })
+      : Promise.resolve([]),
+    allPlanIds.length
+      ? prisma.financePlan.findMany({ where: { id: { in: allPlanIds } } })
+      : Promise.resolve([]),
+    allCampaignIds.length
+      ? prisma.dispatchTask.groupBy({
+          by: ['campaignId'],
+          where: { campaignId: { in: allCampaignIds } },
+          _count: { id: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const doneTaskCounts = allCampaignIds.length
+    ? await prisma.dispatchTask.groupBy({
+        by: ['campaignId'],
+        where: { campaignId: { in: allCampaignIds }, status: 'DONE' },
+        _count: { id: true },
+      })
+    : [];
+
+  // Build lookup maps
+  const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
+  const planMap = new Map(plans.map((p) => [p.id, p]));
+  const totalTaskMap = new Map(taskGroupCounts.map((g) => [g.campaignId, g._count.id]));
+  const doneTaskMap = new Map(doneTaskCounts.map((g) => [g.campaignId, g._count.id]));
+
+  function campaignProgress(campaignId: string): number {
+    const campaign = campaignMap.get(campaignId);
+    if (!campaign) return 0;
+    if (campaign.status === 'COMPLETED') return 100;
+    const total = totalTaskMap.get(campaignId) ?? 0;
+    if (total === 0) return 0;
+    const done = doneTaskMap.get(campaignId) ?? 0;
+    return Math.round((done / total) * 100);
+  }
+
+  function planProgress(planId: string): number | null {
+    const plan = planMap.get(planId);
+    if (!plan) return null;
+    if (plan.currentValue == null || plan.targetValue == null || plan.targetValue === 0)
+      return null;
+    return Math.min(100, Math.round((plan.currentValue / plan.targetValue) * 100));
+  }
+
+  function itemOverallProgress(
+    linkedCampaigns: V2VisionLinkedCampaign[],
+    linkedPlans: V2VisionLinkedFinancePlan[]
+  ): number {
+    const all: number[] = [
+      ...linkedCampaigns.map((c) => c.progressPercent),
+      ...linkedPlans.map((p) => p.progressPercent ?? 0),
+    ];
+    if (all.length === 0) return 0;
+    return Math.round(all.reduce((a, b) => a + b, 0) / all.length);
+  }
+
+  // Map pillars to feed shape
+  const mappedPillars: V2VisionPillar[] = pillars.map((pillar) => {
+    const items: V2VisionItem[] = pillar.items.map((item) => {
+      const linkedCampaigns: V2VisionLinkedCampaign[] = item.campaignLinks
+        .map((link) => {
+          const c = campaignMap.get(link.campaignId);
+          if (!c) return null;
+          return {
+            id: c.id,
+            title: c.title,
+            status: c.status,
+            progressPercent: campaignProgress(c.id),
+            taskCount: totalTaskMap.get(c.id) ?? 0,
+          };
+        })
+        .filter((x): x is V2VisionLinkedCampaign => x !== null);
+
+      const linkedFinancePlans: V2VisionLinkedFinancePlan[] = item.financePlanLinks
+        .map((link) => {
+          const p = planMap.get(link.financePlanId);
+          if (!p) return null;
+          return {
+            id: p.id,
+            title: p.title,
+            type: p.type,
+            status: p.status,
+            progressPercent: planProgress(p.id),
+            targetDate: p.targetDate ? p.targetDate.toISOString() : null,
+          };
+        })
+        .filter((x): x is V2VisionLinkedFinancePlan => x !== null);
+
+      const overallProgressPercent = itemOverallProgress(linkedCampaigns, linkedFinancePlans);
+
+      return {
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        status: item.status,
+        targetDate: item.targetDate ? item.targetDate.toISOString() : null,
+        imageEmoji: item.imageEmoji,
+        notes: item.notes,
+        sortOrder: item.sortOrder,
+        linkedCampaigns,
+        linkedFinancePlans,
+        overallProgressPercent,
+        emeraldSuggestions: [], // populated on-demand via SSE
+      };
+    });
+
+    return {
+      id: pillar.id,
+      label: pillar.label,
+      emoji: pillar.emoji,
+      color: pillar.color,
+      sortOrder: pillar.sortOrder,
+      items,
+      itemCount: items.length,
+      activeCount: items.filter((i) => i.status === 'ACTIVE').length,
+      achievedCount: items.filter((i) => i.status === 'ACHIEVED').length,
+    };
+  });
+
+  // Summary counts
+  const allItems = mappedPillars.flatMap((p) => p.items);
+  const summary = {
+    totalItems: allItems.length,
+    activeItems: allItems.filter((i) => i.status === 'ACTIVE').length,
+    achievedItems: allItems.filter((i) => i.status === 'ACHIEVED').length,
+    dreamingItems: allItems.filter((i) => i.status === 'DREAMING').length,
+    totalLinkedCampaigns: allCampaignIds.length,
+    totalLinkedPlans: allPlanIds.length,
+  };
+
+  return {
+    boardId: board.id,
+    title: board.title,
+    pillars: mappedPillars,
+    summary,
+    generatedAt: new Date().toISOString(),
+  };
 }

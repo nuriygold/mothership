@@ -25,6 +25,7 @@ const navItems = [
   { label: 'Finance', href: '/finance' },
   { label: 'Activity (Log)', href: '/activity' },
   { label: 'Ruby', href: '/ruby' },
+  { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
 ];
 

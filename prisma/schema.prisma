@@ -270,6 +270,7 @@ model DispatchCampaign {
   latestPlanCreatedAt DateTime?
   approvedPlanName    String?
   approvedPlanAt      DateTime?
+  visionItemId        String?
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
@@ -502,4 +503,91 @@ model IncomeSource {
   confirmed    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// ─── Vision Board ──────────────────────────────────────────────────────────────
+
+enum VisionPillarColor {
+  MINT
+  LAVENDER
+  PEACH
+  SKY
+  PINK
+  LEMON
+}
+
+enum VisionItemStatus {
+  DREAMING
+  ACTIVE
+  ACHIEVED
+  ON_HOLD
+}
+
+model VisionBoard {
+  id          String         @id @default(uuid())
+  title       String         @default("My Vision")
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  pillars     VisionPillar[]
+}
+
+model VisionPillar {
+  id        String            @id @default(uuid())
+  boardId   String
+  label     String
+  emoji     String?
+  color     VisionPillarColor @default(LAVENDER)
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  board VisionBoard  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  items VisionItem[]
+
+  @@index([boardId, sortOrder])
+}
+
+model VisionItem {
+  id               String                  @id @default(uuid())
+  pillarId         String
+  title            String
+  description      String?
+  status           VisionItemStatus        @default(DREAMING)
+  targetDate       DateTime?
+  imageEmoji       String?
+  notes            String?
+  sortOrder        Int                     @default(0)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  pillar           VisionPillar            @relation(fields: [pillarId], references: [id], onDelete: Cascade)
+  campaignLinks    VisionCampaignLink[]
+  financePlanLinks VisionFinancePlanLink[]
+
+  @@index([pillarId, sortOrder])
+}
+
+model VisionCampaignLink {
+  id           String     @id @default(uuid())
+  visionItemId String
+  campaignId   String
+  createdAt    DateTime   @default(now())
+
+  visionItem VisionItem @relation(fields: [visionItemId], references: [id], onDelete: Cascade)
+
+  @@unique([visionItemId, campaignId])
+  @@index([campaignId])
+}
+
+model VisionFinancePlanLink {
+  id            String     @id @default(uuid())
+  visionItemId  String
+  financePlanId String
+  createdAt     DateTime   @default(now())
+
+  visionItem VisionItem @relation(fields: [visionItemId], references: [id], onDelete: Cascade)
+
+  @@unique([visionItemId, financePlanId])
+  @@index([financePlanId])
 }
