@@ -43,7 +43,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
         // Dispatch to Emerald via OpenClaw and parse the response
         const { dispatchToOpenClaw } = await import('@/lib/services/openclaw');
-        const raw = await dispatchToOpenClaw('emerald', prompt);
+        const raw = await dispatchToOpenClaw({ text: prompt, agentId: 'emerald' });
 
         // Extract JSON from the response
         const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
