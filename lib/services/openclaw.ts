@@ -1,3 +1,5 @@
+import type { ToolDef } from '@/lib/tools/registry';
+
 type DispatchInput = {
   text: string;
   agentId?: string;
@@ -138,6 +140,75 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
     agentId,
     output: output.trim(),
   };
+}
+
+const TOOL_CALL_RE = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+
+function parseToolCalls(text: string): Array<{ name: string; args: Record<string, unknown> }> {
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  let match: RegExpExecArray | null;
+  TOOL_CALL_RE.lastIndex = 0;
+  while ((match = TOOL_CALL_RE.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1].trim()) as { name?: string; args?: Record<string, unknown> };
+      if (typeof parsed.name === 'string') {
+        calls.push({ name: parsed.name, args: parsed.args ?? {} });
+      }
+    } catch {
+      // ignore malformed tool call blocks
+    }
+  }
+  return calls;
+}
+
+export async function dispatchWithTools(input: {
+  text: string;
+  agentId?: string;
+  sessionKey: string;
+  tools: ToolDef[];
+  maxTurns?: number;
+  timeoutMs?: number;
+}): Promise<{ agentId: string; output: string; turns: number }> {
+  const maxTurns = input.maxTurns ?? 6;
+  const toolMap = new Map(input.tools.map((t) => [t.name, t]));
+  let currentText = input.text;
+  let lastResult: { agentId: string; output: string } | null = null;
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    lastResult = await dispatchToOpenClaw({
+      text: currentText,
+      agentId: input.agentId,
+      sessionKey: input.sessionKey,
+      timeoutMs: input.timeoutMs,
+    });
+
+    const toolCalls = parseToolCalls(lastResult.output);
+    if (!toolCalls.length) {
+      // No tool calls — agent is done
+      return { ...lastResult, turns: turn + 1 };
+    }
+
+    // Execute all tool calls sequentially and collect results
+    const resultParts: string[] = [];
+    for (const call of toolCalls) {
+      const tool = toolMap.get(call.name);
+      if (!tool) {
+        resultParts.push(`<tool_result name="${call.name}">Unknown tool: ${call.name}</tool_result>`);
+        continue;
+      }
+      try {
+        const result = await tool.execute(call.args);
+        resultParts.push(`<tool_result name="${call.name}">${result}</tool_result>`);
+      } catch (err) {
+        resultParts.push(`<tool_result name="${call.name}">Error: ${String(err)}</tool_result>`);
+      }
+    }
+
+    currentText = resultParts.join('\n') + '\nContinue with your task using the tool results above.';
+  }
+
+  // Reached maxTurns — return whatever we have
+  return { agentId: lastResult?.agentId ?? (input.agentId ?? 'main'), output: lastResult?.output ?? '', turns: maxTurns };
 }
 
 export async function checkGateway(): Promise<{ ok: boolean; reason: string }> {
