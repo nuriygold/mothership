@@ -23,6 +23,7 @@ type DispatchTask = {
   dependencies?: string[] | null;
   taskPoolIssueNumber?: number | null;
   taskPoolIssueUrl?: string | null;
+  output?: string | null;
 };
 
 type DispatchPlan = {
@@ -750,6 +751,16 @@ function DispatchPageInner() {
                           </a>
                         )}
                       </div>
+                      {task.output && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-[11px] text-slate-400 hover:text-slate-300">
+                            View agent output
+                          </summary>
+                          <pre className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-[var(--background)] p-2 text-[11px] text-slate-300">
+                            {task.output}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   ))}
                   {!selectedCampaign.tasks.length && (
