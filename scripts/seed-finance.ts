@@ -2,9 +2,9 @@
  * Finance Seed Script
  *
  * Seeds real financial data into the database:
- *   - 12 Accounts  (checking, savings, investment, credit)
- *   -  6 Payables  (mortgages, HVAC, storage, contractors)
- *   -  5 FinancePlans
+ *   - 10 Accounts  (checking, investment, credit, loan, income)
+ *   -  5 Payables  (mortgages, HVAC, storage, contractor)
+ *   -  4 FinancePlans
  *
  * All operations use upsert logic — safe to re-run.
  *   Accounts  matched by: name
@@ -165,43 +165,42 @@ async function upsertPlan(data: {
 
 const ACCOUNTS = [
   // ── Checking ──────────────────────────────────────────────────────────────
-  { name: 'Business Checking …5359',         type: 'checking',   balance:    240.69 },
-  { name: 'Business Checking …4340',         type: 'checking',   balance:      7.73 },
-  { name: 'Operating Account …4529',         type: 'checking',   balance:    201.43 },
-  { name: 'Everyday Checking …8221',         type: 'checking',   balance:    822.81 },
-  { name: 'Chase Total Checking …0551',      type: 'checking',   balance:     74.83 },
-  { name: 'Capital One 360 Checking …0801',  type: 'checking',   balance:      4.95 },
-  // ── Savings ───────────────────────────────────────────────────────────────
-  { name: 'Capital One 360 Savings …1189',   type: 'savings',    balance:      0.00 },
-  { name: 'HSA',                             type: 'savings',    balance:     84.18 },
+  { name: 'Primary Checking',                type: 'checking',   balance:   4549.00 },
   // ── Investment ────────────────────────────────────────────────────────────
-  { name: 'Betterment',                      type: 'investment', balance:   3066.45 },
+  { name: 'Betterment',                      type: 'investment', balance:   2383.00 },
+  { name: 'Robinhood',                       type: 'investment', balance:    100.00 },
   // ── Credit ────────────────────────────────────────────────────────────────
-  { name: 'Wells Fargo Active Cash …9910',   type: 'credit',     balance:  -1361.96 },
-  { name: 'Chase Freedom Unlimited …3948',   type: 'credit',     balance: -19371.59 },
-  { name: 'Capital One Quicksilver …9311',   type: 'credit',     balance:  -8862.63 },
+  { name: 'Chase Credit Card',               type: 'credit',     balance: -19371.00 },
+  { name: 'Capital One Credit Card',         type: 'credit',     balance:  -8862.00 },
+  { name: 'Apple Card',                      type: 'credit',     balance:  -4596.00 },
+  { name: 'Wells Fargo Credit Card',         type: 'credit',     balance:  -1457.00 },
+  // ── Loans ─────────────────────────────────────────────────────────────────
+  { name: 'Freedom Mortgage (Clairmont)',    type: 'loan',       balance: -287804.00 },
+  { name: 'Planet Home Lending (Peters)',    type: 'loan',       balance: -216664.00 },
+  // ── Income ────────────────────────────────────────────────────────────────
+  { name: 'Rental Property Cashflow',        type: 'income',     balance:   2500.00 },
 ];
 
 const PAYABLES = [
   {
-    vendor: 'Planet Home Mortgage (Peters)',
+    vendor: 'Planet Home Lending',
     amount: 2120.75,
     dueDate: new Date('2026-05-01'),
-    description: 'Second mortgage — CURRENT. Balance ~$216,664. Rate 6.0%. Must stay perfect.',
+    description: 'Mortgage payment — 322 Peters St SW Unit 5. CURRENT. Must stay perfect.',
     status: 'pending',
   },
   {
-    vendor: 'Freedom Mortgage (Clairmont)',
-    amount: 21537.80,
-    dueDate: null,
-    description: 'Primary mortgage — DELINQUENT 198 days as of Mar 18. In loss-mitigation review. Amount to bring current: $21,537.80. Monthly payment ~$2,622.77. Loan balance ~$287,804. Rate 4.625%. April payment likely not required while under review. Resolution expected within days.',
-    status: 'overdue',
+    vendor: 'Freedom Mortgage',
+    amount: 2622.77,
+    dueDate: new Date('2026-05-01'),
+    description: 'Mortgage payment — 2459 Clairmont Rd NE. In loss-mitigation review. Delinquency: $21,537.80. Do NOT pay delinquency directly — wait for deferral/modification decision.',
+    status: 'pending',
   },
   {
     vendor: 'HVAC Condenser',
     amount: 2000.00,
     dueDate: null,
-    description: 'Capital need — purchase and install condenser. Budget ~$2,000.',
+    description: '2.5 ton R-410A condenser purchase for rental property. Budget ~$2,000.',
     status: 'pending',
   },
   {
@@ -209,13 +208,6 @@ const PAYABLES = [
     amount: 120.00,
     dueDate: new Date('2026-04-19'),
     description: 'Monthly storage unit fee — unit must be cleared before this date',
-    status: 'pending',
-  },
-  {
-    vendor: 'Social Media Manager',
-    amount: 1500.00,
-    dueDate: new Date('2026-04-10'),
-    description: 'Contractor invoice — pay and pause contract',
     status: 'pending',
   },
   {
@@ -250,77 +242,53 @@ const PLANS = [
     title: 'Cash Flow Stabilization',
     type: 'BUDGET' as PlanType,
     status: 'ACTIVE' as PlanStatus,
-    goal: 'Stabilize monthly cash flow while Freedom Mortgage loss-mitigation resolves',
-    currentValue: 6000,
-    targetValue: 10000,
+    goal: 'Increase liquid cash and reduce short-term financial pressure',
+    currentValue: 4503.07,
+    targetValue: 5000,
     unit: 'USD',
     startDate: new Date('2026-04-01'),
     targetDate: new Date('2026-09-30'),
     managedByBot: 'emerald',
     milestones: [
-      { label: 'Freedom Mortgage mitigation decision received' },
-      { label: 'HVAC condenser installed' },
-      { label: 'PTO cash-out received (June, ~100 hrs)' },
-      { label: 'Planet Home mortgage current through Q3' },
-      { label: 'Credit card minimums automated' },
+      { label: 'Liquidate storage unit items' },
+      { label: 'Install HVAC condenser for rental property' },
+      { label: 'Pause unnecessary contractor expenses' },
+      { label: 'PTO payout received (June)' },
+      { label: 'Cash buffer reaches $7k', targetValue: 7000 },
+      { label: 'Cash buffer reaches $10k', targetValue: 10000 },
     ],
     notes:
-      'Income: Salary ~$7k/mo net + Rent $2,500/mo (lease through Dec 2028). ' +
-      'Cash ~$6k. Next paycheck ~$3,250. ' +
-      'Priority order: Planet Home ($2,120) → HVAC fund ($800–1,000) → credit minimums → living expenses. ' +
-      'Freedom Mortgage in loss-mitigation — do NOT pay $21,537 directly, wait for deferral/modification decision. ' +
-      'PTO: 100 hrs submitted, June payroll. Projected remaining ~60+ hrs. ' +
-      'Credit exposure: $29,596 (Chase Freedom $19,372 | CapOne $8,863 | WF $1,362).',
+      'Approx liquid cash now ~$4.5k. Rental income $2,500/mo stable through Dec 2028. ' +
+      'Freedom Mortgage in loss mitigation review (~$21,537 delinquency). ' +
+      'Primary credit exposure remains Chase Freedom Unlimited (~$19k) and Capital One (~$8.8k).',
   },
   {
-    title: 'Freedom Mortgage Resolution',
-    type: 'DEBT_PAYOFF' as PlanType,
-    status: 'ACTIVE' as PlanStatus,
-    goal: 'Resolve Freedom Mortgage delinquency through loss-mitigation (deferral or modification)',
-    currentValue: 0,
-    targetValue: 1,
-    unit: 'decision',
-    startDate: new Date('2026-03-18'),
-    targetDate: new Date('2026-05-01'),
-    managedByBot: 'emerald',
-    milestones: [
-      { label: 'Loss-mitigation application submitted' },
-      { label: 'Servicer decision received (deferral or modification)' },
-      { label: 'Agreement signed' },
-      { label: 'First payment under new terms made' },
-    ],
-    notes:
-      'Primary mortgage on Clairmont property. Delinquent since Sept 1, 2025 (198 days as of Mar 18). ' +
-      'Loan balance ~$287,804. Rate 4.625%. Monthly payment ~$2,622.77. ' +
-      'In active loss-mitigation review — April payment likely not required during review. ' +
-      'Do NOT attempt to pay $21,537 delinquency directly. Resolution comes through servicer agreement. ' +
-      'Rental income $2,500/mo through Dec 2028 supports future financing.',
-  },
-  {
-    title: 'HVAC Condenser Installation',
+    title: 'Mortgage Stabilization',
     type: 'CUSTOM' as PlanType,
     status: 'ACTIVE' as PlanStatus,
-    goal: 'Purchase and install HVAC condenser',
-    currentValue: 0,
-    targetValue: 2000,
-    unit: 'USD',
+    goal: 'Maintain Planet Home mortgage current while resolving Freedom Mortgage loss mitigation outcome',
+    currentValue: 1,
+    targetValue: 3,
+    unit: 'milestones',
     startDate: new Date('2026-04-12'),
-    targetDate: new Date('2026-05-31'),
+    targetDate: new Date('2026-07-01'),
     managedByBot: 'emerald',
     milestones: [
-      { label: 'Get 2–3 quotes' },
-      { label: 'Fund secured ($2,000)' },
-      { label: 'Installation scheduled' },
-      { label: 'Installation complete' },
+      { label: 'Loss mitigation review decision received' },
+      { label: 'Install HVAC condenser at rental property' },
+      { label: 'Maintain Planet mortgage current for 90 days' },
     ],
-    notes: 'Capital need. Budget ~$2,000. Fund from next paycheck cycle ($800–1,000 per check).',
+    notes:
+      'Planet Home mortgage ($2,120/mo) is current. Freedom Mortgage ($2,622/mo) currently under review ' +
+      'with expected response within ~5–7 days. Strategy is to protect the performing loan while ' +
+      'negotiating modification or deferral on the delinquent loan.',
   },
   {
     title: 'Finance System Implementation',
     type: 'CUSTOM' as PlanType,
     status: 'ACTIVE' as PlanStatus,
     goal: 'Populate the Mothership finance dashboard with structured real-world data',
-    currentValue: 0,
+    currentValue: 1,
     targetValue: 4,
     unit: 'milestones',
     startDate: new Date('2026-04-10'),
