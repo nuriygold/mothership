@@ -1096,33 +1096,31 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
   const mappedPillars: V2VisionPillar[] = pillars.map((pillar) => {
     const items: V2VisionItem[] = pillar.items.map((item) => {
       const linkedCampaigns: V2VisionLinkedCampaign[] = item.campaignLinks
-        .map((link) => {
+        .flatMap((link) => {
           const c = campaignMap.get(link.campaignId);
-          if (!c) return null;
-          return {
+          if (!c) return [];
+          return [{
             id: c.id,
             title: c.title,
-            status: c.status,
+            status: c.status as string,
             progressPercent: campaignProgress(c.id),
             taskCount: totalTaskMap.get(c.id) ?? 0,
-          };
-        })
-        .filter((x): x is V2VisionLinkedCampaign => x !== null);
+          }];
+        });
 
       const linkedFinancePlans: V2VisionLinkedFinancePlan[] = item.financePlanLinks
-        .map((link) => {
+        .flatMap((link) => {
           const p = planMap.get(link.financePlanId);
-          if (!p) return null;
-          return {
+          if (!p) return [];
+          return [{
             id: p.id,
             title: p.title,
-            type: p.type,
-            status: p.status,
+            type: p.type as string,
+            status: p.status as string,
             progressPercent: planProgress(p.id),
             targetDate: p.targetDate ? p.targetDate.toISOString() : null,
-          };
-        })
-        .filter((x): x is V2VisionLinkedFinancePlan => x !== null);
+          }];
+        });
 
       const overallProgressPercent = itemOverallProgress(linkedCampaigns, linkedFinancePlans);
 
