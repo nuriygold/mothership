@@ -83,6 +83,8 @@ enum DispatchCampaignStatus {
   DRAFT
   PLANNING
   READY
+  QUEUED
+  SCHEDULED
   EXECUTING
   PAUSED
   COMPLETED
@@ -273,6 +275,8 @@ model DispatchCampaign {
   approvedPlanName    String?
   approvedPlanAt      DateTime?
   visionItemId        String?
+  queuedAt            DateTime?
+  scheduledAt         DateTime?
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
@@ -288,7 +292,14 @@ model DispatchTask {
   dependencies     Json?
   toolRequirements Json?
   status           DispatchTaskStatus @default(PLANNED)
-  startedAt        DateTime?
+  agentId              String?
+  output               String?
+  reviewOutput         String?
+  errorMessage         String?
+  toolTurns            Int?
+  taskPoolIssueNumber  Int?
+  taskPoolIssueUrl     String?
+  startedAt            DateTime?
   completedAt      DateTime?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt

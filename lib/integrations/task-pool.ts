@@ -409,6 +409,24 @@ export async function listTaskPoolActivityEvents(limit = 50): Promise<TaskPoolAc
   }));
 }
 
+async function ensureTaskPoolLabel(owner: string, repo: string, token: string, name: string, color: string): Promise<void> {
+  try {
+    await fetch(`https://api.github.com/repos/${owner}/${repo}/labels`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name, color }),
+    });
+    // 201 = created, 422 = already exists — both are fine; ignore everything else silently
+  } catch {
+    // Non-fatal: label creation failure never blocks issue creation
+  }
+}
+
 export async function createTaskPoolIssue(input: {
   title: string;
   description?: string;
@@ -425,6 +443,9 @@ export async function createTaskPoolIssue(input: {
   const domain = input.workflowId?.startsWith('tpw_')
     ? input.workflowId.replace(/^tpw_/, '').replace(/-/g, '_')
     : 'ops';
+
+  // Ensure the domain label exists in the repo before attaching it to an issue
+  await ensureTaskPoolLabel(owner, repo, token, `domain:${domain}`, '0075ca');
 
   const priorityLabel =
     input.priority === TaskPriority.CRITICAL
@@ -460,6 +481,55 @@ export async function createTaskPoolIssue(input: {
   if (!response.ok) return null;
   const issue = (await response.json()) as GitHubIssue;
   return toTaskPoolTask(issue);
+}
+
+export async function closeTaskPoolIssueWithOutput(input: {
+  issueNumber: number;
+  output: string;
+  agentId?: string | null;
+  campaignId?: string | null;
+}): Promise<boolean> {
+  const { owner, repo, token } = getConfig();
+  if (!token) {
+    logTaskPoolEvent('warn', 'close_issue_skipped', { reason: 'GITHUB_TOKEN not configured' });
+    return false;
+  }
+
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${input.issueNumber}`;
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+    'Content-Type': 'application/json',
+  };
+
+  // Fetch current body so we can append rather than overwrite
+  const issueRes = await fetch(baseUrl, { headers, cache: 'no-store' });
+  if (!issueRes.ok) return false;
+  const issue = (await issueRes.json()) as GitHubIssue;
+
+  const outputSection = [
+    '',
+    '---',
+    '',
+    '## Agent Output',
+    `**Bot:** ${input.agentId ?? 'unknown'}`,
+    `**Completed:** ${new Date().toISOString().split('T')[0]}`,
+    '',
+    '```',
+    input.output.slice(0, 60_000), // guard against oversized payloads
+    '```',
+  ].join('\n');
+
+  const newBody = `${issue.body ?? ''}${outputSection}`;
+
+  // Append output + close in parallel
+  const [bodyRes, stateRes] = await Promise.all([
+    fetch(baseUrl, { method: 'PATCH', headers, body: JSON.stringify({ body: newBody }) }),
+    fetch(baseUrl, { method: 'PATCH', headers, body: JSON.stringify({ state: 'closed' }) }),
+  ]);
+
+  return bodyRes.ok && stateRes.ok;
 }
 
 function statusToLabel(status: TaskStatus) {

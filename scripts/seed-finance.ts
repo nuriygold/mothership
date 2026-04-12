@@ -2,9 +2,9 @@
  * Finance Seed Script
  *
  * Seeds real financial data into the database:
- *   - 12 Accounts  (checking, savings, investment, credit)
- *   -  4 Payables  (mortgage, storage, contractors)
- *   -  3 FinancePlans
+ *   - 10 Accounts  (checking, investment, credit, loan, income)
+ *   -  5 Payables  (mortgages, HVAC, storage, contractor)
+ *   -  4 FinancePlans
  *
  * All operations use upsert logic — safe to re-run.
  *   Accounts  matched by: name
@@ -165,29 +165,42 @@ async function upsertPlan(data: {
 
 const ACCOUNTS = [
   // ── Checking ──────────────────────────────────────────────────────────────
-  { name: 'Business Checking …5359',         type: 'checking',   balance:    240.69 },
-  { name: 'Business Checking …4340',         type: 'checking',   balance:      7.73 },
-  { name: 'Operating Account …4529',         type: 'checking',   balance:    201.43 },
-  { name: 'Everyday Checking …8221',         type: 'checking',   balance:    822.81 },
-  { name: 'Chase Total Checking …0551',      type: 'checking',   balance:     74.83 },
-  { name: 'Capital One 360 Checking …0801',  type: 'checking',   balance:      4.95 },
-  // ── Savings ───────────────────────────────────────────────────────────────
-  { name: 'Capital One 360 Savings …1189',   type: 'savings',    balance:      0.00 },
-  { name: 'HSA',                             type: 'savings',    balance:     84.18 },
+  { name: 'Primary Checking',                type: 'checking',   balance:   4549.00 },
   // ── Investment ────────────────────────────────────────────────────────────
-  { name: 'Betterment',                      type: 'investment', balance:   3066.45 },
+  { name: 'Betterment',                      type: 'investment', balance:   2383.00 },
+  { name: 'Robinhood',                       type: 'investment', balance:    100.00 },
   // ── Credit ────────────────────────────────────────────────────────────────
-  { name: 'Wells Fargo Active Cash …9910',   type: 'credit',     balance:  -1361.96 },
-  { name: 'Chase Freedom Unlimited …3948',   type: 'credit',     balance: -19371.59 },
-  { name: 'Capital One Quicksilver …9311',   type: 'credit',     balance:  -8862.63 },
+  { name: 'Chase Credit Card',               type: 'credit',     balance: -19371.00 },
+  { name: 'Capital One Credit Card',         type: 'credit',     balance:  -8862.00 },
+  { name: 'Apple Card',                      type: 'credit',     balance:  -4596.00 },
+  { name: 'Wells Fargo Credit Card',         type: 'credit',     balance:  -1457.00 },
+  // ── Loans ─────────────────────────────────────────────────────────────────
+  { name: 'Freedom Mortgage (Clairmont)',    type: 'loan',       balance: -287804.00 },
+  { name: 'Planet Home Lending (Peters)',    type: 'loan',       balance: -216664.00 },
+  // ── Income ────────────────────────────────────────────────────────────────
+  { name: 'Rental Property Cashflow',        type: 'income',     balance:   2500.00 },
 ];
 
 const PAYABLES = [
   {
-    vendor: 'Mortgage',
-    amount: 2700.00,
+    vendor: 'Planet Home Lending',
+    amount: 2120.75,
     dueDate: new Date('2026-05-01'),
-    description: 'Monthly mortgage payment',
+    description: 'Mortgage payment — 322 Peters St SW Unit 5. CURRENT. Must stay perfect.',
+    status: 'pending',
+  },
+  {
+    vendor: 'Freedom Mortgage',
+    amount: 2622.77,
+    dueDate: new Date('2026-05-01'),
+    description: 'Mortgage payment — 2459 Clairmont Rd NE. In loss-mitigation review. Delinquency: $21,537.80. Do NOT pay delinquency directly — wait for deferral/modification decision.',
+    status: 'pending',
+  },
+  {
+    vendor: 'HVAC Condenser',
+    amount: 2000.00,
+    dueDate: null,
+    description: '2.5 ton R-410A condenser purchase for rental property. Budget ~$2,000.',
     status: 'pending',
   },
   {
@@ -195,13 +208,6 @@ const PAYABLES = [
     amount: 120.00,
     dueDate: new Date('2026-04-19'),
     description: 'Monthly storage unit fee — unit must be cleared before this date',
-    status: 'pending',
-  },
-  {
-    vendor: 'Social Media Manager',
-    amount: 1500.00,
-    dueDate: new Date('2026-04-10'),
-    description: 'Contractor invoice — pay and pause contract',
     status: 'pending',
   },
   {
@@ -237,7 +243,7 @@ const PLANS = [
     type: 'BUDGET' as PlanType,
     status: 'ACTIVE' as PlanStatus,
     goal: 'Increase liquid cash and reduce short-term financial pressure',
-    currentValue: 1352,
+    currentValue: 4503.07,
     targetValue: 5000,
     unit: 'USD',
     startDate: new Date('2026-04-01'),
@@ -245,20 +251,44 @@ const PLANS = [
     managedByBot: 'emerald',
     milestones: [
       { label: 'Liquidate storage unit items' },
-      { label: 'Evaluate HSA and Betterment balances' },
-      { label: 'Reduce unnecessary contractor expenses' },
+      { label: 'Install HVAC condenser for rental property' },
+      { label: 'Pause unnecessary contractor expenses' },
+      { label: 'PTO payout received (June)' },
+      { label: 'Cash buffer reaches $7k', targetValue: 7000 },
+      { label: 'Cash buffer reaches $10k', targetValue: 10000 },
     ],
     notes:
-      'Current liquid cash: $1,352. Credit exposure: $29,596. ' +
-      'Chase Freedom Unlimited ($19,372) is the dominant liability at 65% of total debt. ' +
-      'Capital One Quicksilver ($8,863) accounts for another 30%.',
+      'Approx liquid cash now ~$4.5k. Rental income $2,500/mo stable through Dec 2028. ' +
+      'Freedom Mortgage in loss mitigation review (~$21,537 delinquency). ' +
+      'Primary credit exposure remains Chase Freedom Unlimited (~$19k) and Capital One (~$8.8k).',
+  },
+  {
+    title: 'Mortgage Stabilization',
+    type: 'CUSTOM' as PlanType,
+    status: 'ACTIVE' as PlanStatus,
+    goal: 'Maintain Planet Home mortgage current while resolving Freedom Mortgage loss mitigation outcome',
+    currentValue: 1,
+    targetValue: 3,
+    unit: 'milestones',
+    startDate: new Date('2026-04-12'),
+    targetDate: new Date('2026-07-01'),
+    managedByBot: 'emerald',
+    milestones: [
+      { label: 'Loss mitigation review decision received' },
+      { label: 'Install HVAC condenser at rental property' },
+      { label: 'Maintain Planet mortgage current for 90 days' },
+    ],
+    notes:
+      'Planet Home mortgage ($2,120/mo) is current. Freedom Mortgage ($2,622/mo) currently under review ' +
+      'with expected response within ~5–7 days. Strategy is to protect the performing loan while ' +
+      'negotiating modification or deferral on the delinquent loan.',
   },
   {
     title: 'Finance System Implementation',
     type: 'CUSTOM' as PlanType,
     status: 'ACTIVE' as PlanStatus,
     goal: 'Populate the Mothership finance dashboard with structured real-world data',
-    currentValue: 0,
+    currentValue: 1,
     targetValue: 4,
     unit: 'milestones',
     startDate: new Date('2026-04-10'),
@@ -279,6 +309,40 @@ const PLANS = [
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // Delete any accounts/payables not in the current seed (keeps DB in sync)
+  const keepAccountNames = ACCOUNTS.map((a) => a.name);
+  const keepVendorNames  = PAYABLES.map((p) => p.vendor);
+  const keepPlanTitles   = PLANS.map((p) => p.title);
+
+  const staleAccounts = await prisma.account.findMany({
+    where: { name: { notIn: keepAccountNames } },
+    select: { id: true, name: true },
+  });
+  const stalePayables = await prisma.payable.findMany({
+    where: { vendor: { notIn: keepVendorNames } },
+    select: { id: true, vendor: true },
+  });
+  const stalePlans = await prisma.financePlan.findMany({
+    where: { title: { notIn: keepPlanTitles } },
+    select: { id: true, title: true },
+  });
+
+  if (staleAccounts.length || stalePayables.length || stalePlans.length) {
+    console.log('\n── Cleanup ───────────────────────────────────────');
+    for (const a of staleAccounts) {
+      await prisma.account.delete({ where: { id: a.id } });
+      console.log(`  [account] deleted  "${a.name}"`);
+    }
+    for (const p of stalePayables) {
+      await prisma.payable.delete({ where: { id: p.id } });
+      console.log(`  [payable] deleted  "${p.vendor}"`);
+    }
+    for (const p of stalePlans) {
+      await prisma.financePlan.delete({ where: { id: p.id } });
+      console.log(`  [plan]    deleted  "${p.title}"`);
+    }
+  }
+
   console.log('\n── Accounts ─────────────────────────────────────');
   for (const account of ACCOUNTS) {
     await upsertAccount(account);

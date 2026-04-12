@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown } from 'lucide-react';
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown, Info } from 'lucide-react';
+import { FinanceEventActionModal } from '@/components/finance/finance-event-action-modal';
 import type {
   V2FinanceOverviewFeed, V2FinancePlan, V2FinanceEvent,
   V2CashFlowForecast, V2PaydaySchedule,
@@ -1049,6 +1050,20 @@ const PRIORITY_STYLES: Record<string, { dot: string; label: string }> = {
   low:      { dot: 'rgba(232,237,245,0.35)', label: 'Low' },
 };
 
+const CATEGORY_TOOLTIPS: Record<string, string> = {
+  BUDGET_THRESHOLD:          'Spending in this category has reached the configured percentage of your monthly budget.',
+  SUBSCRIPTION_DETECTED:     'A recurring charge pattern was detected from this merchant.',
+  SUBSCRIPTION_OVERLAP:      'Multiple subscriptions were detected within the same service category.',
+  INCOME_SCHEDULE_DETECTED:  'A recurring income pattern was detected based on transaction timing.',
+  UNUSUAL_CHARGE:            'This transaction deviates significantly from your normal spending pattern.',
+  SUBSCRIPTION_PRICE_CHANGE: 'This subscription price increased beyond the expected threshold.',
+  CATEGORY_SPIKE:            'Spending in this category spiked significantly compared to your weekly average.',
+  BILL_DUE:                  'A payable with a known due date is approaching.',
+  LOW_CASH_FORECAST:         'Your projected balance is expected to fall below a safe threshold.',
+  TRANSACTION_DETECTED:      'A new financial transaction was detected in your connected accounts.',
+  FINANCIAL_EMAIL:           'A financial email requiring review was detected.',
+};
+
 // Anomaly event types get a warning (orange) tint in the feed
 const ANOMALY_EVENT_TYPES = new Set([
   'UNUSUAL_CHARGE',
@@ -1183,19 +1198,9 @@ function ActionFeed({
   onResolve: (id: string) => Promise<void>;
   onHighlightCluster?: (cluster: string | null) => void;
 }) {
-  const [resolving, setResolving] = useState<Set<string>>(new Set());
+  const [modalEvent, setModalEvent] = useState<V2FinanceEvent | null>(null);
 
   if (events.length === 0) return null;
-
-  async function handleResolve(id: string) {
-    setResolving((prev) => new Set(prev).add(id));
-    await onResolve(id);
-    setResolving((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
 
   return (
     <div
@@ -1212,113 +1217,97 @@ function ActionFeed({
           {events.length} pending
         </span>
       </div>
+
       <div className="space-y-2">
         {events.map((event) => {
-          const priority = PRIORITY_STYLES[event.priority] ?? PRIORITY_STYLES.normal;
-          const isResolving = resolving.has(event.id);
-          const isSubscriptionEvent = event.type === 'SUBSCRIPTION_DETECTED';
-          const isAnomalyEvent      = ANOMALY_EVENT_TYPES.has(event.type);
-          const isIncomeEvent       = INCOME_EVENT_TYPES.has(event.type);
-          const isSavingsEvent      = SAVINGS_EVENT_TYPES.has(event.type);
+          const priority        = PRIORITY_STYLES[event.priority] ?? PRIORITY_STYLES.normal;
+          const isSubscription  = event.type === 'SUBSCRIPTION_DETECTED';
+          const isAnomaly       = ANOMALY_EVENT_TYPES.has(event.type);
+          const isIncome        = INCOME_EVENT_TYPES.has(event.type);
+          const isSavings       = SAVINGS_EVENT_TYPES.has(event.type);
+          const tooltip         = CATEGORY_TOOLTIPS[event.type];
 
           return (
             <div
               key={event.id}
-              className="rounded-2xl px-4 py-3 space-y-2"
+              className="rounded-2xl px-4 py-3 space-y-3"
               style={{
                 background:
-                  isSubscriptionEvent || isIncomeEvent ? 'rgba(74,222,128,0.05)'
-                  : isSavingsEvent  ? 'rgba(253,211,77,0.05)'
-                  : isAnomalyEvent  ? 'rgba(251,146,60,0.05)'
+                  isSubscription || isIncome ? 'rgba(74,222,128,0.05)'
+                  : isSavings  ? 'rgba(253,211,77,0.05)'
+                  : isAnomaly  ? 'rgba(251,146,60,0.05)'
                   : 'rgba(255,255,255,0.06)',
                 border:
-                  isSubscriptionEvent || isIncomeEvent ? '1px solid rgba(74,222,128,0.15)'
-                  : isSavingsEvent  ? '1px solid rgba(253,211,77,0.20)'
-                  : isAnomalyEvent  ? '1px solid rgba(251,146,60,0.20)'
+                  isSubscription || isIncome ? '1px solid rgba(74,222,128,0.15)'
+                  : isSavings  ? '1px solid rgba(253,211,77,0.20)'
+                  : isAnomaly  ? '1px solid rgba(251,146,60,0.20)'
                   : '1px solid rgba(255,255,255,0.09)',
               }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <span
-                    className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
-                    style={{ background: priority.dot }}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-semibold" style={{ color: '#E8EDF5' }}>
-                        {EVENT_TYPE_LABELS[event.type] ?? event.type}
+              {/* Event header */}
+              <div className="flex items-start gap-2.5">
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
+                  style={{ background: priority.dot }}
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-semibold" style={{ color: '#E8EDF5' }}>
+                      {EVENT_TYPE_LABELS[event.type] ?? event.type}
+                    </span>
+                    {tooltip && (
+                      <span title={tooltip} className="cursor-help flex-shrink-0" style={{ color: 'rgba(232,237,245,0.30)' }}>
+                        <Info className="w-3 h-3" />
                       </span>
-                      <span
-                        className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
-                        style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.50)' }}
-                      >
-                        {event.source}
-                      </span>
-                    </div>
-                    <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(232,237,245,0.60)' }}>
-                      {eventSummary(event)}
-                    </p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'rgba(232,237,245,0.35)' }}>
-                      {new Date(event.createdAt).toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </p>
+                    )}
+                    <span
+                      className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.50)' }}
+                    >
+                      {event.source}
+                    </span>
                   </div>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(232,237,245,0.60)' }}>
+                    {eventSummary(event)}
+                  </p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(232,237,245,0.35)' }}>
+                    {new Date(event.createdAt).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
                 </div>
-
-                {/* Standard resolve — not used for subscriptions */}
-                {!isSubscriptionEvent && (
-                  <button
-                    onClick={() => handleResolve(event.id)}
-                    disabled={isResolving}
-                    className="flex-shrink-0 flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-semibold"
-                    style={{
-                      background: isResolving ? 'rgba(255,255,255,0.04)' : 'rgba(99,102,241,0.15)',
-                      color: isResolving ? 'rgba(232,237,245,0.30)' : '#818CF8',
-                      border: '1px solid rgba(99,102,241,0.25)',
-                      cursor: isResolving ? 'default' : 'pointer',
-                    }}
-                  >
-                    <CheckCircle2 className="w-3 h-3" />
-                    {isResolving ? '…' : 'Resolve'}
-                  </button>
-                )}
               </div>
 
-              {/* Subscription confirm/ignore row */}
-              {isSubscriptionEvent && (
-                <SubscriptionActions event={event} onDone={() => handleResolve(event.id)} />
-              )}
-
-              {/* Overlap — Review subscriptions action */}
-              {event.type === 'SUBSCRIPTION_OVERLAP' && (
-                <button
-                  onClick={() => {
-                    const cluster = (event.payload as Record<string, unknown>).clusterName as string | undefined;
-                    onHighlightCluster?.(cluster ?? null);
-                    setTimeout(() => {
-                      document.getElementById('subscriptions-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 50);
-                  }}
-                  className="text-xs rounded-xl px-3 py-1.5 font-medium transition-opacity hover:opacity-80"
-                  style={{
-                    background: 'rgba(253,211,77,0.10)',
-                    border: '1px solid rgba(253,211,77,0.25)',
-                    color: '#FDE68A',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Review subscriptions ↓
-                </button>
-              )}
+              {/* Take Action button */}
+              <button
+                onClick={() => setModalEvent(event)}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-85"
+                style={{
+                  background: 'rgba(99,102,241,0.18)',
+                  border: '1px solid rgba(99,102,241,0.28)',
+                  color: '#818CF8',
+                }}
+              >
+                <Zap className="w-3 h-3" />
+                Take Action
+              </button>
             </div>
           );
         })}
       </div>
+
+      {/* Action modal */}
+      {modalEvent && (
+        <FinanceEventActionModal
+          event={modalEvent}
+          onClose={() => setModalEvent(null)}
+          onResolve={onResolve}
+          onHighlightCluster={onHighlightCluster}
+        />
+      )}
     </div>
   );
 }
@@ -1552,6 +1541,7 @@ export default function FinancePage() {
 
           {/* Obligations */}
           <div
+            id="payables-card"
             className="rounded-3xl p-5"
             style={{ background: 'rgba(26,10,26,0.93)', border: '1px solid rgba(180,60,160,0.15)' }}
           >
@@ -1625,6 +1615,7 @@ export default function FinancePage() {
 
           {/* Transactions */}
           <div
+            id="transactions-card"
             className="rounded-3xl p-5"
             style={{ background: 'rgba(6,12,32,0.93)', border: '1px solid rgba(60,100,220,0.15)' }}
           >
@@ -1680,7 +1671,9 @@ export default function FinancePage() {
 
           {/* Cash Flow Forecast */}
           {data?.forecast && data.forecast.days.length > 0 && (
-            <CashFlowForecastCard forecast={data.forecast} />
+            <div id="cashflow-card">
+              <CashFlowForecastCard forecast={data.forecast} />
+            </div>
           )}
 
           {/* Budget Overview */}
