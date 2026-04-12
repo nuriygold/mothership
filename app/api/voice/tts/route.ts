@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 export async function POST(req: Request) {
   const key = process.env.AZURE_SPEECH_KEY;
   const region = process.env.AZURE_SPEECH_REGION;
@@ -21,7 +30,7 @@ export async function POST(req: Request) {
     const voiceName = voiceId || voice;
     const ssml = `<?xml version="1.0" encoding="UTF-8"?>
 <speak version="1.0" xml:lang="en-US">
-  <voice xml:lang="en-US" name="${voiceName}">${text}</voice>
+  <voice xml:lang="en-US" name="${voiceName}">${escapeXml(text)}</voice>
 </speak>`;
 
     const res = await fetch(endpoint, {
