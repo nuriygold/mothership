@@ -1105,6 +1105,45 @@ function eventSummary(event: V2FinanceEvent): string {
   }
 }
 
+type ResolveActionConfig = { label: string; color: string; textColor: string; border: string };
+
+function getResolveActions(event: V2FinanceEvent): {
+  primary: ResolveActionConfig;
+  secondary?: { label: string };
+} {
+  const green  = { color: 'rgba(74,222,128,0.15)',  textColor: '#4ADE80',              border: '1px solid rgba(74,222,128,0.25)' };
+  const amber  = { color: 'rgba(251,146,60,0.15)',   textColor: '#FB923C',              border: '1px solid rgba(251,146,60,0.25)' };
+  const indigo = { color: 'rgba(99,102,241,0.15)',   textColor: '#818CF8',              border: '1px solid rgba(99,102,241,0.25)' };
+  const muted  = { color: 'rgba(255,255,255,0.06)',  textColor: 'rgba(232,237,245,0.40)', border: '1px solid rgba(255,255,255,0.09)' };
+
+  switch (event.type) {
+    case 'BILL_DUE':
+      return { primary: { label: 'Mark Paid',    ...green  }, secondary: { label: 'Dismiss'      } };
+    case 'FINANCIAL_EMAIL':
+      return { primary: { label: 'Handled',      ...green  }, secondary: { label: 'Not Relevant' } };
+    case 'TRANSACTION_DETECTED':
+      return { primary: { label: 'Looks Right',  ...green  } };
+    case 'UNUSUAL_CHARGE':
+      return { primary: { label: 'Understood',   ...amber  }, secondary: { label: 'Dismiss'      } };
+    case 'SUBSCRIPTION_PRICE_CHANGE':
+      return { primary: { label: 'Accepted',     ...amber  }, secondary: { label: 'Dismiss'      } };
+    case 'CATEGORY_SPIKE':
+    case 'LOW_CASH_FORECAST':
+      return { primary: { label: 'On It',        ...amber  }, secondary: { label: 'Dismiss'      } };
+    case 'BUDGET_THRESHOLD':
+      return { primary: { label: 'Acknowledged', ...amber  }, secondary: { label: 'Dismiss'      } };
+    case 'INCOME_SCHEDULE_DETECTED':
+      return { primary: { label: 'Confirmed',    ...green  }, secondary: { label: 'Not Mine'     } };
+    case 'PAYMENT_MADE':
+      return { primary: { label: 'Got It',       ...indigo } };
+    case 'PLAN_MILESTONE':
+    case 'PLAN_PROGRESS':
+      return { primary: { label: 'Noted',        ...indigo } };
+    default:
+      return { primary: { label: 'Dismiss',      ...muted  } };
+  }
+}
+
 function SubscriptionActions({
   event,
   onDone,
@@ -1209,6 +1248,7 @@ function ActionFeed({
           const isAnomalyEvent      = ANOMALY_EVENT_TYPES.has(event.type);
           const isIncomeEvent       = INCOME_EVENT_TYPES.has(event.type);
           const isSavingsEvent      = SAVINGS_EVENT_TYPES.has(event.type);
+          const resolveActions      = getResolveActions(event);
 
           return (
             <div
@@ -1227,55 +1267,35 @@ function ActionFeed({
                   : '1px solid rgba(255,255,255,0.09)',
               }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <span
-                    className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
-                    style={{ background: priority.dot }}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-semibold" style={{ color: '#E8EDF5' }}>
-                        {EVENT_TYPE_LABELS[event.type] ?? event.type}
-                      </span>
-                      <span
-                        className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
-                        style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.50)' }}
-                      >
-                        {event.source}
-                      </span>
-                    </div>
-                    <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(232,237,245,0.60)' }}>
-                      {eventSummary(event)}
-                    </p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'rgba(232,237,245,0.35)' }}>
-                      {new Date(event.createdAt).toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </p>
+              <div className="flex items-start gap-3">
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
+                  style={{ background: priority.dot }}
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-semibold" style={{ color: '#E8EDF5' }}>
+                      {EVENT_TYPE_LABELS[event.type] ?? event.type}
+                    </span>
+                    <span
+                      className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.50)' }}
+                    >
+                      {event.source}
+                    </span>
                   </div>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(232,237,245,0.60)' }}>
+                    {eventSummary(event)}
+                  </p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(232,237,245,0.35)' }}>
+                    {new Date(event.createdAt).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
                 </div>
-
-                {/* Standard resolve — not used for subscriptions */}
-                {!isSubscriptionEvent && (
-                  <button
-                    onClick={() => handleResolve(event.id)}
-                    disabled={isResolving}
-                    className="flex-shrink-0 flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-semibold"
-                    style={{
-                      background: isResolving ? 'rgba(255,255,255,0.04)' : 'rgba(99,102,241,0.15)',
-                      color: isResolving ? 'rgba(232,237,245,0.30)' : '#818CF8',
-                      border: '1px solid rgba(99,102,241,0.25)',
-                      cursor: isResolving ? 'default' : 'pointer',
-                    }}
-                  >
-                    <CheckCircle2 className="w-3 h-3" />
-                    {isResolving ? '…' : 'Resolve'}
-                  </button>
-                )}
               </div>
 
               {/* Subscription confirm/ignore row */}
@@ -1283,26 +1303,57 @@ function ActionFeed({
                 <SubscriptionActions event={event} onDone={() => handleResolve(event.id)} />
               )}
 
-              {/* Overlap — Review subscriptions action */}
-              {event.type === 'SUBSCRIPTION_OVERLAP' && (
-                <button
-                  onClick={() => {
-                    const cluster = (event.payload as Record<string, unknown>).clusterName as string | undefined;
-                    onHighlightCluster?.(cluster ?? null);
-                    setTimeout(() => {
-                      document.getElementById('subscriptions-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 50);
-                  }}
-                  className="text-xs rounded-xl px-3 py-1.5 font-medium transition-opacity hover:opacity-80"
-                  style={{
-                    background: 'rgba(253,211,77,0.10)',
-                    border: '1px solid rgba(253,211,77,0.25)',
-                    color: '#FDE68A',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Review subscriptions ↓
-                </button>
+              {/* Action row — contextual per event type */}
+              {!isSubscriptionEvent && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {event.type === 'SUBSCRIPTION_OVERLAP' && (
+                    <button
+                      onClick={() => {
+                        const cluster = (event.payload as Record<string, unknown>).clusterName as string | undefined;
+                        onHighlightCluster?.(cluster ?? null);
+                        setTimeout(() => {
+                          document.getElementById('subscriptions-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 50);
+                      }}
+                      className="text-xs rounded-xl px-3 py-1.5 font-medium transition-opacity hover:opacity-80"
+                      style={{
+                        background: 'rgba(253,211,77,0.10)',
+                        border: '1px solid rgba(253,211,77,0.25)',
+                        color: '#FDE68A',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Review subscriptions ↓
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleResolve(event.id)}
+                    disabled={isResolving}
+                    className="flex items-center gap-1 text-xs rounded-xl px-3 py-1.5 font-medium transition-opacity hover:opacity-80 disabled:cursor-default"
+                    style={{
+                      background: isResolving ? 'rgba(255,255,255,0.04)' : resolveActions.primary.color,
+                      color: isResolving ? 'rgba(232,237,245,0.30)' : resolveActions.primary.textColor,
+                      border: isResolving ? '1px solid rgba(255,255,255,0.06)' : resolveActions.primary.border,
+                    }}
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    {isResolving ? '…' : resolveActions.primary.label}
+                  </button>
+                  {resolveActions.secondary && !isResolving && (
+                    <button
+                      onClick={() => handleResolve(event.id)}
+                      className="text-xs rounded-xl px-3 py-1.5 font-medium transition-opacity hover:opacity-80"
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: 'rgba(232,237,245,0.35)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {resolveActions.secondary.label}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           );
