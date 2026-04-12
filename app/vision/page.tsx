@@ -9,10 +9,15 @@ import { BoardSummaryBar } from '@/components/vision/board-summary-bar';
 import { ItemDetailDrawer } from '@/components/vision/item-detail-drawer';
 import { AddItemModal } from '@/components/vision/add-item-modal';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message ?? 'Failed to load vision board');
+  return json;
+};
 
 export default function VisionPage() {
-  const { data, isLoading, mutate } = useSWR<V2VisionBoardFeed>(
+  const { data, isLoading, error, mutate } = useSWR<V2VisionBoardFeed>(
     '/api/v2/vision/overview',
     fetcher,
     { refreshInterval: 30_000 }
@@ -42,6 +47,28 @@ export default function VisionPage() {
   function handleCloseModal() {
     setAddingToPillarId(null);
     setAddingToPillarLabel('');
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-4">
+        <VisionPageHeader onRefresh={() => mutate()} />
+        <div
+          className="rounded-3xl p-6 text-sm"
+          style={{ background: 'var(--muted)', border: '1px solid var(--card-border, rgba(100,130,200,0.18))' }}
+        >
+          <p className="font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+            Vision Board unavailable
+          </p>
+          <p style={{ color: 'var(--foreground)', opacity: 0.55 }}>
+            {error?.message ?? 'Could not load the vision board.'} The database migration may need to be applied:{' '}
+            <code className="rounded px-1" style={{ background: 'rgba(0,0,0,0.08)', fontSize: '11px' }}>
+              npx prisma migrate deploy
+            </code>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (isLoading || !data) {
