@@ -308,32 +308,44 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
   });
 
   // After transaction: publish each task to the GitHub task-pool
-  if (createdTaskIds.length && process.env.GITHUB_TOKEN) {
-    const createdTasks = await prisma.dispatchTask.findMany({
-      where: { id: { in: createdTaskIds } },
-      orderBy: { createdAt: 'asc' },
-    });
+  if (createdTaskIds.length) {
+    if (!process.env.GITHUB_TOKEN) {
+      console.warn(
+        JSON.stringify({
+          service: 'dispatch',
+          event: 'github_issue_creation_skipped',
+          reason: 'GITHUB_TOKEN not configured',
+          taskCount: createdTaskIds.length,
+          timestamp: new Date().toISOString(),
+        })
+      );
+    } else {
+      const createdTasks = await prisma.dispatchTask.findMany({
+        where: { id: { in: createdTaskIds } },
+        orderBy: { createdAt: 'asc' },
+      });
 
-    for (const task of createdTasks) {
-      try {
-        const issue = await createTaskPoolIssue({
-          title: `[Dispatch] ${task.title}`,
-          description: buildIssueBody(task, campaign),
-          priority: dispatchPriorityToTaskPriority(task.priority),
-          workflowId: 'tpw_dispatch',
-        });
-        if (issue) {
-          const issueNumber = parseInt(issue.id.replace('tpt_', ''), 10);
-          await prisma.dispatchTask.update({
-            where: { id: task.id },
-            data: {
-              taskPoolIssueNumber: isNaN(issueNumber) ? null : issueNumber,
-              taskPoolIssueUrl: issue.sourceUrl,
-            },
+      for (const task of createdTasks) {
+        try {
+          const issue = await createTaskPoolIssue({
+            title: `[Dispatch] ${task.title}`,
+            description: buildIssueBody(task, campaign),
+            priority: dispatchPriorityToTaskPriority(task.priority),
+            workflowId: 'tpw_dispatch',
           });
+          if (issue) {
+            const issueNumber = parseInt(issue.id.replace('tpt_', ''), 10);
+            await prisma.dispatchTask.update({
+              where: { id: task.id },
+              data: {
+                taskPoolIssueNumber: isNaN(issueNumber) ? null : issueNumber,
+                taskPoolIssueUrl: issue.sourceUrl,
+              },
+            });
+          }
+        } catch {
+          // Non-fatal — dispatch continues even if GitHub is unreachable
         }
-      } catch {
-        // Non-fatal — dispatch continues even if GitHub is unreachable
       }
     }
   }
