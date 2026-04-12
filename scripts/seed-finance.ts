@@ -3,8 +3,8 @@
  *
  * Seeds real financial data into the database:
  *   - 12 Accounts  (checking, savings, investment, credit)
- *   -  4 Payables  (mortgage, storage, contractors)
- *   -  3 FinancePlans
+ *   -  6 Payables  (mortgages, HVAC, storage, contractors)
+ *   -  5 FinancePlans
  *
  * All operations use upsert logic — safe to re-run.
  *   Accounts  matched by: name
@@ -184,10 +184,24 @@ const ACCOUNTS = [
 
 const PAYABLES = [
   {
-    vendor: 'Mortgage',
-    amount: 2700.00,
+    vendor: 'Planet Home Mortgage (Peters)',
+    amount: 2120.75,
     dueDate: new Date('2026-05-01'),
-    description: 'Monthly mortgage payment',
+    description: 'Second mortgage — CURRENT. Balance ~$216,664. Rate 6.0%. Must stay perfect.',
+    status: 'pending',
+  },
+  {
+    vendor: 'Freedom Mortgage (Clairmont)',
+    amount: 21537.80,
+    dueDate: null,
+    description: 'Primary mortgage — DELINQUENT 198 days as of Mar 18. In loss-mitigation review. Amount to bring current: $21,537.80. Monthly payment ~$2,622.77. Loan balance ~$287,804. Rate 4.625%. April payment likely not required while under review. Resolution expected within days.',
+    status: 'overdue',
+  },
+  {
+    vendor: 'HVAC Condenser',
+    amount: 2000.00,
+    dueDate: null,
+    description: 'Capital need — purchase and install condenser. Budget ~$2,000.',
     status: 'pending',
   },
   {
@@ -236,22 +250,70 @@ const PLANS = [
     title: 'Cash Flow Stabilization',
     type: 'BUDGET' as PlanType,
     status: 'ACTIVE' as PlanStatus,
-    goal: 'Increase liquid cash and reduce short-term financial pressure',
-    currentValue: 1352,
-    targetValue: 5000,
+    goal: 'Stabilize monthly cash flow while Freedom Mortgage loss-mitigation resolves',
+    currentValue: 6000,
+    targetValue: 10000,
     unit: 'USD',
     startDate: new Date('2026-04-01'),
     targetDate: new Date('2026-09-30'),
     managedByBot: 'emerald',
     milestones: [
-      { label: 'Liquidate storage unit items' },
-      { label: 'Evaluate HSA and Betterment balances' },
-      { label: 'Reduce unnecessary contractor expenses' },
+      { label: 'Freedom Mortgage mitigation decision received' },
+      { label: 'HVAC condenser installed' },
+      { label: 'PTO cash-out received (June, ~100 hrs)' },
+      { label: 'Planet Home mortgage current through Q3' },
+      { label: 'Credit card minimums automated' },
     ],
     notes:
-      'Current liquid cash: $1,352. Credit exposure: $29,596. ' +
-      'Chase Freedom Unlimited ($19,372) is the dominant liability at 65% of total debt. ' +
-      'Capital One Quicksilver ($8,863) accounts for another 30%.',
+      'Income: Salary ~$7k/mo net + Rent $2,500/mo (lease through Dec 2028). ' +
+      'Cash ~$6k. Next paycheck ~$3,250. ' +
+      'Priority order: Planet Home ($2,120) → HVAC fund ($800–1,000) → credit minimums → living expenses. ' +
+      'Freedom Mortgage in loss-mitigation — do NOT pay $21,537 directly, wait for deferral/modification decision. ' +
+      'PTO: 100 hrs submitted, June payroll. Projected remaining ~60+ hrs. ' +
+      'Credit exposure: $29,596 (Chase Freedom $19,372 | CapOne $8,863 | WF $1,362).',
+  },
+  {
+    title: 'Freedom Mortgage Resolution',
+    type: 'DEBT_PAYOFF' as PlanType,
+    status: 'ACTIVE' as PlanStatus,
+    goal: 'Resolve Freedom Mortgage delinquency through loss-mitigation (deferral or modification)',
+    currentValue: 0,
+    targetValue: 1,
+    unit: 'decision',
+    startDate: new Date('2026-03-18'),
+    targetDate: new Date('2026-05-01'),
+    managedByBot: 'emerald',
+    milestones: [
+      { label: 'Loss-mitigation application submitted' },
+      { label: 'Servicer decision received (deferral or modification)' },
+      { label: 'Agreement signed' },
+      { label: 'First payment under new terms made' },
+    ],
+    notes:
+      'Primary mortgage on Clairmont property. Delinquent since Sept 1, 2025 (198 days as of Mar 18). ' +
+      'Loan balance ~$287,804. Rate 4.625%. Monthly payment ~$2,622.77. ' +
+      'In active loss-mitigation review — April payment likely not required during review. ' +
+      'Do NOT attempt to pay $21,537 delinquency directly. Resolution comes through servicer agreement. ' +
+      'Rental income $2,500/mo through Dec 2028 supports future financing.',
+  },
+  {
+    title: 'HVAC Condenser Installation',
+    type: 'CUSTOM' as PlanType,
+    status: 'ACTIVE' as PlanStatus,
+    goal: 'Purchase and install HVAC condenser',
+    currentValue: 0,
+    targetValue: 2000,
+    unit: 'USD',
+    startDate: new Date('2026-04-12'),
+    targetDate: new Date('2026-05-31'),
+    managedByBot: 'emerald',
+    milestones: [
+      { label: 'Get 2–3 quotes' },
+      { label: 'Fund secured ($2,000)' },
+      { label: 'Installation scheduled' },
+      { label: 'Installation complete' },
+    ],
+    notes: 'Capital need. Budget ~$2,000. Fund from next paycheck cycle ($800–1,000 per check).',
   },
   {
     title: 'Finance System Implementation',
