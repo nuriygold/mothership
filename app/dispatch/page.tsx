@@ -24,6 +24,7 @@ type DispatchTask = {
   taskPoolIssueNumber?: number | null;
   taskPoolIssueUrl?: string | null;
   output?: string | null;
+  reviewOutput?: string | null;
 };
 
 type DispatchPlan = {
@@ -758,6 +759,16 @@ function DispatchPageInner() {
                           </summary>
                           <pre className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-[var(--background)] p-2 text-[11px] text-slate-300">
                             {task.output}
+                          </pre>
+                        </details>
+                      )}
+                      {task.reviewOutput && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[11px] text-sky-500 hover:text-sky-400">
+                            Emerald review
+                          </summary>
+                          <pre className="mt-2 whitespace-pre-wrap rounded-md border border-sky-900/40 bg-sky-950/30 p-2 text-[11px] text-sky-200">
+                            {task.reviewOutput}
                           </pre>
                         </details>
                       )}

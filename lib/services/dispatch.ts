@@ -485,6 +485,46 @@ export async function executeDispatchTask(taskId: string) {
       },
     });
 
+    // Peer-review pass — Emerald checks the primary bot's work
+    if (agentId !== 'emerald') {
+      try {
+        const reviewPrompt = [
+          `You are reviewing work produced by another AI agent for quality and accuracy.`,
+          ``,
+          `Campaign: ${task.campaign.title}`,
+          `Task: ${task.title}`,
+          task.description ? `Task description: ${task.description}` : null,
+          ``,
+          `Agent output to review:`,
+          `---`,
+          result.output,
+          `---`,
+          ``,
+          `Provide a concise review with:`,
+          `1. Quality score (1–10)`,
+          `2. What's strong about this output`,
+          `3. Any gaps, errors, or improvements needed`,
+          `4. Revised output if meaningful changes are warranted (otherwise say "Output is satisfactory")`,
+        ]
+          .filter((line) => line !== null)
+          .join('\n');
+
+        const review = await dispatchToOpenClaw({
+          text: reviewPrompt,
+          agentId: 'emerald',
+          sessionKey: `dispatch-review:${taskId}`,
+          timeoutMs: 90_000,
+        });
+
+        await prisma.dispatchTask.update({
+          where: { id: taskId },
+          data: { reviewOutput: review.output },
+        });
+      } catch {
+        // Non-fatal — review failure never blocks task completion
+      }
+    }
+
     // Close the linked GitHub issue and append agent output
     if (task.taskPoolIssueNumber) {
       closeTaskPoolIssueWithOutput({

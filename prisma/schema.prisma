@@ -291,6 +291,7 @@ model DispatchTask {
   status           DispatchTaskStatus @default(PLANNED)
   agentId              String?
   output               String?
+  reviewOutput         String?
   taskPoolIssueNumber  Int?
   taskPoolIssueUrl     String?
   startedAt            DateTime?
