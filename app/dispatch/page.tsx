@@ -21,6 +21,8 @@ type DispatchTask = {
   status: string;
   priority: number;
   dependencies?: string[] | null;
+  taskPoolIssueNumber?: number | null;
+  taskPoolIssueUrl?: string | null;
 };
 
 type DispatchPlan = {
@@ -732,10 +734,22 @@ function DispatchPageInner() {
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-slate-400">{task.description || 'No task description.'}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        Priority {task.priority}
-                        {task.dependencies?.length ? ` • Depends on ${task.dependencies.join(', ')}` : ''}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                        <span>
+                          Priority {task.priority}
+                          {task.dependencies?.length ? ` • Depends on ${task.dependencies.join(', ')}` : ''}
+                        </span>
+                        {task.taskPoolIssueUrl && (
+                          <a
+                            href={task.taskPoolIssueUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded bg-slate-800 px-1.5 py-0.5 text-sky-400 hover:text-sky-300"
+                          >
+                            #{task.taskPoolIssueNumber} ↗
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {!selectedCampaign.tasks.length && (

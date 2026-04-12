@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus, DispatchTaskStatus, Prisma } from '@prisma/client';
+import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@prisma/client';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
+import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 
 type RawPlanTask = {
   id?: string;
@@ -261,6 +262,8 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
   const selectedPlanName = typeof selected.name === 'string' ? selected.name : 'Plan A';
   const selectedTasks = Array.isArray(selected.tasks) ? (selected.tasks as Prisma.JsonArray) : [];
 
+  const createdTaskIds: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     await tx.dispatchTask.deleteMany({ where: { campaignId } });
 
@@ -269,7 +272,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
       const task = rawTask as Prisma.JsonObject;
       const title = typeof task.title === 'string' ? task.title.trim() : '';
       if (!title) continue;
-      await tx.dispatchTask.create({
+      const created = await tx.dispatchTask.create({
         data: {
           campaignId,
           title,
@@ -278,6 +281,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
           status: DispatchTaskStatus.PLANNED,
         },
       });
+      createdTaskIds.push(created.id);
     }
 
     await tx.dispatchCampaign.update({
@@ -302,6 +306,37 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
     });
   });
 
+  // After transaction: publish each task to the GitHub task-pool
+  if (createdTaskIds.length && process.env.GITHUB_TOKEN) {
+    const createdTasks = await prisma.dispatchTask.findMany({
+      where: { id: { in: createdTaskIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const task of createdTasks) {
+      try {
+        const issue = await createTaskPoolIssue({
+          title: `[Dispatch] ${task.title}`,
+          description: buildIssueBody(task, campaign),
+          priority: dispatchPriorityToTaskPriority(task.priority),
+          workflowId: 'tpw_dispatch',
+        });
+        if (issue) {
+          const issueNumber = parseInt(issue.id.replace('tpt_', ''), 10);
+          await prisma.dispatchTask.update({
+            where: { id: task.id },
+            data: {
+              taskPoolIssueNumber: isNaN(issueNumber) ? null : issueNumber,
+              taskPoolIssueUrl: issue.sourceUrl,
+            },
+          });
+        }
+      } catch {
+        // Non-fatal — dispatch continues even if GitHub is unreachable
+      }
+    }
+  }
+
   return getDispatchCampaign(campaignId);
 }
 
@@ -320,6 +355,30 @@ export async function setDispatchCampaignStatus(campaignId: string, status: Disp
   });
 
   return campaign;
+}
+
+// ── Task-pool helpers ─────────────────────────────────────────────────────────
+
+function dispatchPriorityToTaskPriority(priority: number): TaskPriority {
+  if (priority <= 1) return TaskPriority.CRITICAL;
+  if (priority === 2) return TaskPriority.HIGH;
+  if (priority >= 4) return TaskPriority.LOW;
+  return TaskPriority.MEDIUM;
+}
+
+function buildIssueBody(
+  task: { title: string; description?: string | null },
+  campaign: { id: string; title: string; description?: string | null }
+): string {
+  return [
+    `## Dispatch Campaign`,
+    `**Campaign:** ${campaign.title}`,
+    `**Campaign ID:** \`${campaign.id}\``,
+    '',
+    '---',
+    '',
+    task.description ?? task.title,
+  ].join('\n');
 }
 
 // ── Bot routing ──────────────────────────────────────────────────────────────
@@ -425,6 +484,18 @@ export async function executeDispatchTask(taskId: string) {
         metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0 },
       },
     });
+
+    // Close the linked GitHub issue and append agent output
+    if (task.taskPoolIssueNumber) {
+      closeTaskPoolIssueWithOutput({
+        issueNumber: task.taskPoolIssueNumber,
+        output: result.output ?? '',
+        agentId: result.agentId,
+        campaignId: task.campaignId,
+      }).catch(() => {
+        // Non-fatal
+      });
+    }
 
     return { taskId, status: 'DONE' as const, output: result.output };
   } catch (error) {
