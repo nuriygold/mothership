@@ -467,26 +467,47 @@ function DispatchPageInner() {
         </div>
 
         {selectedCampaign && (
-          <div className="mt-4 rounded-lg border border-border bg-panel p-3">
+          <div className="mt-4 space-y-3">
+
+            {/* ── Bot recommendation ── */}
+            <div className="rounded-lg border border-border bg-panel p-3">
+              <p className="text-sm font-semibold text-slate-900">Bot recommendation</p>
+              {recommendQuery.isLoading && (
+                <p className="mt-2 text-xs text-slate-400 animate-pulse">Analyzing tasks…</p>
+              )}
+              {recommendQuery.isError && (
+                <p className="mt-2 text-xs text-rose-400">{(recommendQuery.error as Error).message}</p>
+              )}
+              {recommendQuery.data && (
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Best fit:</span>
+                    <span className="rounded-full bg-sky-900/50 px-3 py-1 text-sm font-semibold text-sky-200">
+                      {recommendQuery.data.botName}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(recommendQuery.data.breakdown).map(([bot, count]) => (
+                      <span key={bot} className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
+                        {bot} ×{String(count)}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    based on {recommendQuery.data.taskCount} task{recommendQuery.data.taskCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Execute ── */}
+            <div className="rounded-lg border border-border bg-panel p-3">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-slate-900">Execute campaign</p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   Run all tasks now, add to the background queue, or schedule for a future time.
                 </p>
-                {recommendQuery.data && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="text-slate-400">Recommended bot:</span>
-                    <span className="rounded-full bg-sky-900/40 px-2 py-0.5 font-semibold text-sky-200">
-                      {recommendQuery.data.botName}
-                    </span>
-                    <span className="text-slate-500">
-                      ({Object.entries(recommendQuery.data.breakdown)
-                        .map(([bot, n]) => `${bot} ×${n}`)
-                        .join(', ')})
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="flex flex-wrap items-end gap-2">
@@ -542,6 +563,7 @@ function DispatchPageInner() {
             {runMutation.isError && (
               <p className="mt-2 text-xs text-rose-400">{(runMutation.error as Error).message}</p>
             )}
+            </div>
           </div>
         )}
 
