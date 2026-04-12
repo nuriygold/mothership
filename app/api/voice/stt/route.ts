@@ -32,8 +32,18 @@ export async function POST(req: Request) {
     }
 
     const json = await res.json();
-    const text = json?.DisplayText ?? json?.NBest?.[0]?.Display ?? '';
 
+    // Azure returns HTTP 200 even for recognition failures — check the status field.
+    const recognitionStatus = json?.RecognitionStatus as string | undefined;
+    if (recognitionStatus && recognitionStatus !== 'Success') {
+      console.error(JSON.stringify({ scope: 'stt', azureStatus: recognitionStatus, raw: json }));
+      return NextResponse.json(
+        { message: `Azure STT recognition failed: ${recognitionStatus}` },
+        { status: 422 }
+      );
+    }
+
+    const text = json?.DisplayText ?? json?.NBest?.[0]?.Display ?? '';
     return NextResponse.json({ text });
   } catch (err: any) {
     return NextResponse.json({ message: String(err?.message ?? err) }, { status: 500 });

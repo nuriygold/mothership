@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
 
 function getSupportedMimeType(): string {
+  // Prefer ogg/opus — explicitly supported by Azure STT REST API.
+  // webm/opus works in Chrome but Azure's simple REST endpoint rejects it.
   const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
     'audio/ogg;codecs=opus',
     'audio/ogg',
+    'audio/webm;codecs=opus',
+    'audio/webm',
     'audio/mp4',
   ];
   for (const type of types) {
