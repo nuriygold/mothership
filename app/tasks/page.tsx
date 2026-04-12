@@ -83,8 +83,19 @@ function TaskCard({ task, onRefresh }: { task: V2TaskItem; onRefresh: () => Prom
         </span>
       </div>
 
-      {/* Title */}
-      <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>{task.title}</p>
+      {/* Title + Vision badge */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>{task.title}</p>
+        {task.visionItemId && (
+          <a
+            href="/vision"
+            className="rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0 hover:opacity-80 transition-opacity"
+            style={{ background: '#E4E0FF', color: '#4A3DAA' }}
+          >
+            Vision ↗
+          </a>
+        )}
+      </div>
 
       {/* Metadata */}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>

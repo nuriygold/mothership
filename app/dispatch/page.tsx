@@ -48,6 +48,7 @@ type DispatchCampaign = {
   approvedPlanName?: string | null;
   latestPlan?: { plans?: DispatchPlan[] } | null;
   tasks: DispatchTask[];
+  visionItemId?: string | null;
 };
 
 async function fetchCommands(): Promise<CommandItem[]> {
@@ -465,7 +466,19 @@ function DispatchPageInner() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{campaign.title}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-slate-900">{campaign.title}</p>
+                        {campaign.visionItemId && (
+                          <a
+                            href="/vision"
+                            onClick={(e) => e.stopPropagation()}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80"
+                            style={{ background: '#E4E0FF', color: '#4A3DAA' }}
+                          >
+                            Vision ↗
+                          </a>
+                        )}
+                      </div>
                       <p className="mt-1 text-xs text-slate-500">{campaign.description || 'No description yet.'}</p>
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(campaign.status)}`}>

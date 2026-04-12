@@ -70,6 +70,7 @@ export type V2TaskItem = {
   taskId: string;
   status: 'Active' | 'Queued' | 'Blocked' | 'Done';
   title: string;
+  visionItemId?: string | null;
   metadata: {
     timeframe: string;
     dueAtISO: string | null; // raw ISO for sorting; null when no due date
@@ -180,6 +181,7 @@ export type V2FinancePlan = {
   progressPercent: number | null;
   notes: string | null;
   updatedAt: string | null;
+  visionItemTitle?: string | null;
 };
 
 export type V2FinanceEvent = {
@@ -339,4 +341,85 @@ export type V2ActivityFeed = {
   page: number;
   pageSize: number;
   hasMore: boolean;
+};
+
+// ─── Vision Board ──────────────────────────────────────────────────────────────
+
+export type VisionPillarColor = 'MINT' | 'LAVENDER' | 'PEACH' | 'SKY' | 'PINK' | 'LEMON';
+export type VisionItemStatus = 'DREAMING' | 'ACTIVE' | 'ACHIEVED' | 'ON_HOLD';
+
+export type V2VisionLinkedCampaign = {
+  id: string;
+  title: string;
+  status: string;
+  progressPercent: number;
+  taskCount: number;
+};
+
+export type V2VisionLinkedFinancePlan = {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  progressPercent: number | null;
+  targetDate: string | null;
+};
+
+export type V2VisionLinkedTask = {
+  id: string;
+  title: string;
+  status: 'Active' | 'Queued' | 'Blocked' | 'Done';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  dueAt: string | null;
+  assignedBot: string;
+};
+
+export type V2VisionEmeraldSuggestion = {
+  id: string;
+  text: string;
+  actionType: 'campaign' | 'finance_plan' | 'task' | 'note';
+};
+
+export type V2VisionItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: VisionItemStatus;
+  targetDate: string | null;
+  imageEmoji: string | null;
+  imageUrl: string | null;
+  notes: string | null;
+  sortOrder: number;
+  linkedCampaigns: V2VisionLinkedCampaign[];
+  linkedFinancePlans: V2VisionLinkedFinancePlan[];
+  linkedTasks: V2VisionLinkedTask[];
+  overallProgressPercent: number;
+  emeraldSuggestions: V2VisionEmeraldSuggestion[];
+};
+
+export type V2VisionPillar = {
+  id: string;
+  label: string;
+  emoji: string | null;
+  color: VisionPillarColor;
+  sortOrder: number;
+  items: V2VisionItem[];
+  itemCount: number;
+  activeCount: number;
+  achievedCount: number;
+};
+
+export type V2VisionBoardFeed = {
+  boardId: string;
+  title: string;
+  pillars: V2VisionPillar[];
+  summary: {
+    totalItems: number;
+    activeItems: number;
+    achievedItems: number;
+    dreamingItems: number;
+    totalLinkedCampaigns: number;
+    totalLinkedPlans: number;
+  };
+  generatedAt: string;
 };

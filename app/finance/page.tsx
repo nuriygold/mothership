@@ -786,7 +786,18 @@ function PlanProgressCard({ plan }: { plan: V2FinancePlan }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>{plan.title}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>{plan.title}</p>
+            {plan.visionItemTitle && (
+              <a
+                href="/vision"
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80"
+                style={{ background: '#E4E0FF', color: '#4A3DAA' }}
+              >
+                Vision ↗
+              </a>
+            )}
+          </div>
           {plan.goal && (
             <p className="text-xs mt-0.5" style={{ color: 'rgba(232,237,245,0.60)' }}>{plan.goal}</p>
           )}
