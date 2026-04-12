@@ -309,6 +309,40 @@ const PLANS = [
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // Delete any accounts/payables not in the current seed (keeps DB in sync)
+  const keepAccountNames = ACCOUNTS.map((a) => a.name);
+  const keepVendorNames  = PAYABLES.map((p) => p.vendor);
+  const keepPlanTitles   = PLANS.map((p) => p.title);
+
+  const staleAccounts = await prisma.account.findMany({
+    where: { name: { notIn: keepAccountNames } },
+    select: { id: true, name: true },
+  });
+  const stalePayables = await prisma.payable.findMany({
+    where: { vendor: { notIn: keepVendorNames } },
+    select: { id: true, vendor: true },
+  });
+  const stalePlans = await prisma.financePlan.findMany({
+    where: { title: { notIn: keepPlanTitles } },
+    select: { id: true, title: true },
+  });
+
+  if (staleAccounts.length || stalePayables.length || stalePlans.length) {
+    console.log('\n── Cleanup ───────────────────────────────────────');
+    for (const a of staleAccounts) {
+      await prisma.account.delete({ where: { id: a.id } });
+      console.log(`  [account] deleted  "${a.name}"`);
+    }
+    for (const p of stalePayables) {
+      await prisma.payable.delete({ where: { id: p.id } });
+      console.log(`  [payable] deleted  "${p.vendor}"`);
+    }
+    for (const p of stalePlans) {
+      await prisma.financePlan.delete({ where: { id: p.id } });
+      console.log(`  [plan]    deleted  "${p.title}"`);
+    }
+  }
+
   console.log('\n── Accounts ─────────────────────────────────────');
   for (const account of ACCOUNTS) {
     await upsertAccount(account);
