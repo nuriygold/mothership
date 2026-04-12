@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus, DispatchTaskStatus, Prisma } from '@prisma/client';
+import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@prisma/client';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
+import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 
 type RawPlanTask = {
   id?: string;
@@ -261,6 +262,8 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
   const selectedPlanName = typeof selected.name === 'string' ? selected.name : 'Plan A';
   const selectedTasks = Array.isArray(selected.tasks) ? (selected.tasks as Prisma.JsonArray) : [];
 
+  const createdTaskIds: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     await tx.dispatchTask.deleteMany({ where: { campaignId } });
 
@@ -269,7 +272,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
       const task = rawTask as Prisma.JsonObject;
       const title = typeof task.title === 'string' ? task.title.trim() : '';
       if (!title) continue;
-      await tx.dispatchTask.create({
+      const created = await tx.dispatchTask.create({
         data: {
           campaignId,
           title,
@@ -278,6 +281,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
           status: DispatchTaskStatus.PLANNED,
         },
       });
+      createdTaskIds.push(created.id);
     }
 
     await tx.dispatchCampaign.update({
@@ -302,6 +306,37 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
     });
   });
 
+  // After transaction: publish each task to the GitHub task-pool
+  if (createdTaskIds.length && process.env.GITHUB_TOKEN) {
+    const createdTasks = await prisma.dispatchTask.findMany({
+      where: { id: { in: createdTaskIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const task of createdTasks) {
+      try {
+        const issue = await createTaskPoolIssue({
+          title: `[Dispatch] ${task.title}`,
+          description: buildIssueBody(task, campaign),
+          priority: dispatchPriorityToTaskPriority(task.priority),
+          workflowId: 'tpw_dispatch',
+        });
+        if (issue) {
+          const issueNumber = parseInt(issue.id.replace('tpt_', ''), 10);
+          await prisma.dispatchTask.update({
+            where: { id: task.id },
+            data: {
+              taskPoolIssueNumber: isNaN(issueNumber) ? null : issueNumber,
+              taskPoolIssueUrl: issue.sourceUrl,
+            },
+          });
+        }
+      } catch {
+        // Non-fatal — dispatch continues even if GitHub is unreachable
+      }
+    }
+  }
+
   return getDispatchCampaign(campaignId);
 }
 
@@ -320,6 +355,30 @@ export async function setDispatchCampaignStatus(campaignId: string, status: Disp
   });
 
   return campaign;
+}
+
+// ── Task-pool helpers ─────────────────────────────────────────────────────────
+
+function dispatchPriorityToTaskPriority(priority: number): TaskPriority {
+  if (priority <= 1) return TaskPriority.CRITICAL;
+  if (priority === 2) return TaskPriority.HIGH;
+  if (priority >= 4) return TaskPriority.LOW;
+  return TaskPriority.MEDIUM;
+}
+
+function buildIssueBody(
+  task: { title: string; description?: string | null },
+  campaign: { id: string; title: string; description?: string | null }
+): string {
+  return [
+    `## Dispatch Campaign`,
+    `**Campaign:** ${campaign.title}`,
+    `**Campaign ID:** \`${campaign.id}\``,
+    '',
+    '---',
+    '',
+    task.description ?? task.title,
+  ].join('\n');
 }
 
 // ── Bot routing ──────────────────────────────────────────────────────────────
@@ -384,14 +443,14 @@ export async function recommendBotForCampaign(campaignId: string) {
   };
 }
 
-export async function executeDispatchTask(taskId: string) {
+export async function executeDispatchTask(taskId: string, agentIdOverride?: string) {
   const task = await prisma.dispatchTask.findUnique({
     where: { id: taskId },
     include: { campaign: true },
   });
   if (!task) throw new Error('Task not found');
 
-  const agentId = routeTaskToBot(task);
+  const agentId = agentIdOverride ?? routeTaskToBot(task);
 
   await prisma.dispatchTask.update({
     where: { id: taskId },
@@ -426,11 +485,65 @@ export async function executeDispatchTask(taskId: string) {
       },
     });
 
+    // Peer-review pass — Emerald checks the primary bot's work
+    if (agentId !== 'emerald') {
+      try {
+        const reviewPrompt = [
+          `You are reviewing work produced by another AI agent for quality and accuracy.`,
+          ``,
+          `Campaign: ${task.campaign.title}`,
+          `Task: ${task.title}`,
+          task.description ? `Task description: ${task.description}` : null,
+          ``,
+          `Agent output to review:`,
+          `---`,
+          result.output,
+          `---`,
+          ``,
+          `Provide a concise review with:`,
+          `1. Quality score (1–10)`,
+          `2. What's strong about this output`,
+          `3. Any gaps, errors, or improvements needed`,
+          `4. Revised output if meaningful changes are warranted (otherwise say "Output is satisfactory")`,
+        ]
+          .filter((line) => line !== null)
+          .join('\n');
+
+        const review = await dispatchToOpenClaw({
+          text: reviewPrompt,
+          agentId: 'emerald',
+          sessionKey: `dispatch-review:${taskId}`,
+          timeoutMs: 90_000,
+        });
+
+        await prisma.dispatchTask.update({
+          where: { id: taskId },
+          data: { reviewOutput: review.output },
+        });
+      } catch {
+        // Non-fatal — review failure never blocks task completion
+      }
+    }
+
+    // Close the linked GitHub issue and append agent output
+    if (task.taskPoolIssueNumber) {
+      closeTaskPoolIssueWithOutput({
+        issueNumber: task.taskPoolIssueNumber,
+        output: result.output ?? '',
+        agentId: result.agentId,
+        campaignId: task.campaignId,
+      }).catch(() => {
+        // Non-fatal
+      });
+    }
+
     return { taskId, status: 'DONE' as const, output: result.output };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
     await prisma.dispatchTask.update({
       where: { id: taskId },
-      data: { status: DispatchTaskStatus.FAILED, completedAt: new Date() },
+      data: { status: DispatchTaskStatus.FAILED, completedAt: new Date(), errorMessage },
     });
 
     await prisma.auditEvent.create({
@@ -438,12 +551,33 @@ export async function executeDispatchTask(taskId: string) {
         entityType: 'dispatch_task',
         entityId: taskId,
         eventType: 'task.failed',
-        metadata: { error: String(error) },
+        metadata: { error: errorMessage },
       },
     });
 
     throw error;
   }
+}
+
+export async function retryDispatchTask(taskId: string, agentIdOverride?: string) {
+  const task = await prisma.dispatchTask.findUnique({ where: { id: taskId } });
+  if (!task) throw new Error('Task not found');
+
+  await prisma.dispatchTask.update({
+    where: { id: taskId },
+    data: { status: DispatchTaskStatus.QUEUED, errorMessage: null, output: null, reviewOutput: null },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_task',
+      entityId: taskId,
+      eventType: 'task.retry',
+      metadata: { agentIdOverride: agentIdOverride ?? null },
+    },
+  });
+
+  return executeDispatchTask(taskId, agentIdOverride);
 }
 
 export async function runDispatchCampaign(campaignId: string) {

@@ -462,6 +462,55 @@ export async function createTaskPoolIssue(input: {
   return toTaskPoolTask(issue);
 }
 
+export async function closeTaskPoolIssueWithOutput(input: {
+  issueNumber: number;
+  output: string;
+  agentId?: string | null;
+  campaignId?: string | null;
+}): Promise<boolean> {
+  const { owner, repo, token } = getConfig();
+  if (!token) {
+    logTaskPoolEvent('warn', 'close_issue_skipped', { reason: 'GITHUB_TOKEN not configured' });
+    return false;
+  }
+
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${input.issueNumber}`;
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+    'Content-Type': 'application/json',
+  };
+
+  // Fetch current body so we can append rather than overwrite
+  const issueRes = await fetch(baseUrl, { headers, cache: 'no-store' });
+  if (!issueRes.ok) return false;
+  const issue = (await issueRes.json()) as GitHubIssue;
+
+  const outputSection = [
+    '',
+    '---',
+    '',
+    '## Agent Output',
+    `**Bot:** ${input.agentId ?? 'unknown'}`,
+    `**Completed:** ${new Date().toISOString().split('T')[0]}`,
+    '',
+    '```',
+    input.output.slice(0, 60_000), // guard against oversized payloads
+    '```',
+  ].join('\n');
+
+  const newBody = `${issue.body ?? ''}${outputSection}`;
+
+  // Append output + close in parallel
+  const [bodyRes, stateRes] = await Promise.all([
+    fetch(baseUrl, { method: 'PATCH', headers, body: JSON.stringify({ body: newBody }) }),
+    fetch(baseUrl, { method: 'PATCH', headers, body: JSON.stringify({ state: 'closed' }) }),
+  ]);
+
+  return bodyRes.ok && stateRes.ok;
+}
+
 function statusToLabel(status: TaskStatus) {
   switch (status) {
     case TaskStatus.DONE:

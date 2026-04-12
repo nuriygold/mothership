@@ -289,9 +289,13 @@ model DispatchTask {
   dependencies     Json?
   toolRequirements Json?
   status           DispatchTaskStatus @default(PLANNED)
-  agentId          String?
-  output           String?
-  startedAt        DateTime?
+  agentId              String?
+  output               String?
+  reviewOutput         String?
+  errorMessage         String?
+  taskPoolIssueNumber  Int?
+  taskPoolIssueUrl     String?
+  startedAt            DateTime?
   completedAt      DateTime?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt

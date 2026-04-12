@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import {
   enqueueDispatchCampaign,
   runDispatchCampaign,
@@ -30,10 +31,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ campaign });
     }
 
-    // mode === 'now': fire-and-forget so the HTTP response returns immediately
-    runDispatchCampaign(params.id).catch((err: unknown) => {
-      console.error(`[dispatch] Campaign ${params.id} run failed:`, err);
-    });
+    // mode === 'now': respond immediately, keep function alive on Vercel via waitUntil
+    waitUntil(
+      runDispatchCampaign(params.id).catch((err: unknown) => {
+        console.error(`[dispatch] Campaign ${params.id} run failed:`, err);
+      })
+    );
 
     return NextResponse.json({ ok: true, status: 'EXECUTING', message: 'Campaign execution started' });
   } catch (error) {
