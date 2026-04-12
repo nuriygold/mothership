@@ -293,6 +293,7 @@ model DispatchTask {
   output               String?
   reviewOutput         String?
   errorMessage         String?
+  toolTurns            Int?
   taskPoolIssueNumber  Int?
   taskPoolIssueUrl     String?
   startedAt            DateTime?

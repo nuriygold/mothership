@@ -204,6 +204,24 @@ async function retryDispatchTask(payload: { campaignId: string; taskId: string; 
   return body;
 }
 
+async function requestTaskReview(payload: { campaignId: string; taskId: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/review`, {
+    method: 'POST',
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to start review');
+  return body;
+}
+
+async function replanDispatchTask(payload: { campaignId: string; taskId: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/replan`, {
+    method: 'POST',
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to re-plan task');
+  return body;
+}
+
 function statusTone(status: string) {
   if (status === 'EXECUTING' || status === 'DONE' || status === 'COMPLETED') return 'bg-emerald-900/40 text-emerald-200';
   if (status === 'PAUSED' || status === 'FAILED') return 'bg-rose-900/40 text-rose-200';
@@ -361,6 +379,21 @@ function DispatchPageInner() {
 
   const retryTaskMutation = useMutation({
     mutationFn: retryDispatchTask,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+      await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
+    },
+  });
+
+  const reviewTaskMutation = useMutation({
+    mutationFn: requestTaskReview,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+    },
+  });
+
+  const replanTaskMutation = useMutation({
+    mutationFn: replanDispatchTask,
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
       await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
@@ -748,8 +781,11 @@ function DispatchPageInner() {
                 <div className="mt-3 rounded-lg bg-slate-900/50 p-2 space-y-2">
                   {selectedCampaign.tasks.map((task) => {
                     const isFailed = task.status === 'FAILED';
+                    const isDone = task.status === 'DONE';
                     const retryAgent = retryAgents[task.id] ?? 'main';
                     const isRetrying = retryTaskMutation.isLoading && (retryTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
+                    const isReplanning = replanTaskMutation.isLoading && (replanTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
+                    const isReviewing = reviewTaskMutation.isLoading && (reviewTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
                     return (
                       <div
                         key={task.id}
@@ -805,13 +841,29 @@ function DispatchPageInner() {
                                     agentId: retryAgent,
                                   })
                                 }
-                                disabled={isRetrying}
+                                disabled={isRetrying || isReplanning}
                               >
                                 {isRetrying ? 'Retrying…' : 'Retry task'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  replanTaskMutation.mutate({
+                                    campaignId: selectedCampaignId,
+                                    taskId: task.id,
+                                  })
+                                }
+                                disabled={isReplanning || isRetrying}
+                              >
+                                {isReplanning ? 'Re-planning…' : 'Re-plan task'}
                               </Button>
                             </div>
                             {retryTaskMutation.isError && (retryTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id && (
                               <p className="text-[11px] text-rose-400">{(retryTaskMutation.error as Error).message}</p>
+                            )}
+                            {replanTaskMutation.isError && (replanTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id && (
+                              <p className="text-[11px] text-rose-400">{(replanTaskMutation.error as Error).message}</p>
                             )}
                           </div>
                         )}
@@ -825,6 +877,26 @@ function DispatchPageInner() {
                               {task.output}
                             </pre>
                           </details>
+                        )}
+                        {isDone && task.output && !task.reviewOutput && (
+                          <div className="mt-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                reviewTaskMutation.mutate({
+                                  campaignId: selectedCampaignId,
+                                  taskId: task.id,
+                                })
+                              }
+                              disabled={isReviewing}
+                            >
+                              {isReviewing ? 'Requesting review…' : 'Request Emerald review'}
+                            </Button>
+                            {reviewTaskMutation.isError && (reviewTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id && (
+                              <p className="mt-1 text-[11px] text-rose-400">{(reviewTaskMutation.error as Error).message}</p>
+                            )}
+                          </div>
                         )}
                         {task.reviewOutput && (
                           <details className="mt-1">

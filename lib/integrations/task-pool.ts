@@ -409,6 +409,24 @@ export async function listTaskPoolActivityEvents(limit = 50): Promise<TaskPoolAc
   }));
 }
 
+async function ensureTaskPoolLabel(owner: string, repo: string, token: string, name: string, color: string): Promise<void> {
+  try {
+    await fetch(`https://api.github.com/repos/${owner}/${repo}/labels`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name, color }),
+    });
+    // 201 = created, 422 = already exists — both are fine; ignore everything else silently
+  } catch {
+    // Non-fatal: label creation failure never blocks issue creation
+  }
+}
+
 export async function createTaskPoolIssue(input: {
   title: string;
   description?: string;
@@ -425,6 +443,9 @@ export async function createTaskPoolIssue(input: {
   const domain = input.workflowId?.startsWith('tpw_')
     ? input.workflowId.replace(/^tpw_/, '').replace(/-/g, '_')
     : 'ops';
+
+  // Ensure the domain label exists in the repo before attaching it to an issue
+  await ensureTaskPoolLabel(owner, repo, token, `domain:${domain}`, '0075ca');
 
   const priorityLabel =
     input.priority === TaskPriority.CRITICAL

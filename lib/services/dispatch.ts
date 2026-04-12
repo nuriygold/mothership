@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@prisma/client';
-import { dispatchToOpenClaw } from '@/lib/services/openclaw';
+import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
+import { buildToolsBlock, getToolsForRequirements } from '@/lib/tools/registry';
 
 type RawPlanTask = {
   id?: string;
@@ -393,9 +394,15 @@ function routeTaskToBot(task: { title: string; description?: string | null }): s
 }
 
 function buildTaskPrompt(
-  task: { title: string; description?: string | null },
+  task: { title: string; description?: string | null; toolRequirements?: Prisma.JsonValue | null },
   campaign: { title: string; description?: string | null }
 ): string {
+  const requirements = Array.isArray(task.toolRequirements)
+    ? (task.toolRequirements as string[]).filter((r): r is string => typeof r === 'string')
+    : [];
+  const tools = getToolsForRequirements(requirements);
+  const toolsBlock = buildToolsBlock(tools);
+
   return [
     `Campaign goal: ${campaign.title}`,
     campaign.description ? `Context and resources: ${campaign.description}` : null,
@@ -403,6 +410,7 @@ function buildTaskPrompt(
     `Task: ${task.title}`,
     task.description ?? null,
     '',
+    toolsBlock || null,
     'Complete this task. Return your output directly — no meta-commentary.',
   ]
     .filter((line) => line !== null)
@@ -443,6 +451,168 @@ export async function recommendBotForCampaign(campaignId: string) {
   };
 }
 
+export async function replanDispatchTask(campaignId: string, taskId: string) {
+  const campaign = await prisma.dispatchCampaign.findUnique({
+    where: { id: campaignId },
+    include: { tasks: { orderBy: { createdAt: 'asc' } } },
+  });
+  if (!campaign) throw new Error('Campaign not found');
+
+  const failedTask = campaign.tasks.find((t) => t.id === taskId);
+  if (!failedTask) throw new Error('Task not found in campaign');
+
+  const doneTasks = campaign.tasks.filter((t) => t.status === DispatchTaskStatus.DONE);
+
+  const doneContext = doneTasks.length
+    ? doneTasks
+        .map((t) => `- ${t.title}: ${t.output?.slice(0, 300) ?? '(no output)'}`)
+        .join('\n')
+    : 'None yet.';
+
+  const prompt = [
+    `You are a task planner. A campaign is in progress and one task has failed.`,
+    ``,
+    `Campaign goal: ${campaign.title}`,
+    campaign.description ? `Context: ${campaign.description}` : null,
+    ``,
+    `Completed tasks so far:`,
+    doneContext,
+    ``,
+    `Failed task: ${failedTask.title}`,
+    failedTask.description ? `Description: ${failedTask.description}` : null,
+    failedTask.errorMessage ? `Error: ${failedTask.errorMessage}` : null,
+    ``,
+    `Propose a replacement task that achieves the same sub-goal via a different, more reliable approach.`,
+    `Return strict JSON only — no markdown, no explanation.`,
+    `Schema: {"title":"Verb + subject","description":"Full executable instruction with expected output format"}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const result = await dispatchToOpenClaw({
+    text: prompt,
+    agentId: 'emerald',
+    sessionKey: `dispatch-replan:${taskId}`,
+    timeoutMs: 60_000,
+  });
+
+  const rawJson = extractJson(result.output || '');
+  let parsed: { title?: string; description?: string };
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    throw new Error(`Planner returned invalid JSON: ${result.output?.slice(0, 200)}`);
+  }
+  const newTitle = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+  if (!newTitle) throw new Error('Planner did not return a usable task title');
+
+  const newTask = await prisma.$transaction(async (tx) => {
+    await tx.dispatchTask.update({
+      where: { id: taskId },
+      data: { status: DispatchTaskStatus.CANCELED },
+    });
+
+    return tx.dispatchTask.create({
+      data: {
+        campaignId,
+        title: newTitle,
+        description: typeof parsed.description === 'string' ? parsed.description.trim() : null,
+        priority: failedTask.priority,
+        dependencies: asStringArray(failedTask.dependencies),
+        status: DispatchTaskStatus.PLANNED,
+      },
+    });
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_task',
+      entityId: taskId,
+      eventType: 'task.replanned',
+      metadata: { replacedBy: newTask.id, newTitle },
+    },
+  });
+
+  // Publish replacement task to GitHub task-pool
+  if (process.env.GITHUB_TOKEN) {
+    try {
+      const issue = await createTaskPoolIssue({
+        title: `[Dispatch] ${newTask.title}`,
+        description: buildIssueBody(newTask, campaign),
+        priority: dispatchPriorityToTaskPriority(newTask.priority),
+        workflowId: 'tpw_dispatch',
+      });
+      if (issue) {
+        const issueNumber = parseInt(issue.id.replace('tpt_', ''), 10);
+        await prisma.dispatchTask.update({
+          where: { id: newTask.id },
+          data: {
+            taskPoolIssueNumber: isNaN(issueNumber) ? null : issueNumber,
+            taskPoolIssueUrl: issue.sourceUrl,
+          },
+        });
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return newTask;
+}
+
+export async function reviewDispatchTask(taskId: string): Promise<string | null> {
+  const task = await prisma.dispatchTask.findUnique({
+    where: { id: taskId },
+    include: { campaign: true },
+  });
+  if (!task) throw new Error('Task not found');
+  if (!task.output) throw new Error('Task has no output to review');
+
+  const reviewPrompt = [
+    `You are reviewing work produced by another AI agent for quality and accuracy.`,
+    ``,
+    `Campaign: ${task.campaign.title}`,
+    `Task: ${task.title}`,
+    task.description ? `Task description: ${task.description}` : null,
+    ``,
+    `Agent output to review:`,
+    `---`,
+    task.output,
+    `---`,
+    ``,
+    `Provide a concise review with:`,
+    `1. Quality score (1–10)`,
+    `2. What's strong about this output`,
+    `3. Any gaps, errors, or improvements needed`,
+    `4. Revised output if meaningful changes are warranted (otherwise say "Output is satisfactory")`,
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  const review = await dispatchToOpenClaw({
+    text: reviewPrompt,
+    agentId: 'emerald',
+    sessionKey: `dispatch-review:${taskId}`,
+    timeoutMs: 90_000,
+  });
+
+  await prisma.dispatchTask.update({
+    where: { id: taskId },
+    data: { reviewOutput: review.output },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_task',
+      entityId: taskId,
+      eventType: 'task.reviewed',
+      metadata: { triggered: 'manual' },
+    },
+  });
+
+  return review.output;
+}
+
 export async function executeDispatchTask(taskId: string, agentIdOverride?: string) {
   const task = await prisma.dispatchTask.findUnique({
     where: { id: taskId },
@@ -459,13 +629,23 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
 
   const prompt = buildTaskPrompt(task, task.campaign);
 
+  const taskToolRequirements = Array.isArray(task.toolRequirements)
+    ? (task.toolRequirements as string[]).filter((r): r is string => typeof r === 'string')
+    : [];
+  const resolvedTools = getToolsForRequirements(taskToolRequirements);
+
   try {
-    const result = await dispatchToOpenClaw({
-      text: prompt,
-      agentId,
-      sessionKey: `dispatch-task:${taskId}`,
-      timeoutMs: 120_000,
-    });
+    const result =
+      resolvedTools.length > 0
+        ? await dispatchWithTools({
+            text: prompt,
+            agentId,
+            sessionKey: `dispatch-task:${taskId}`,
+            tools: resolvedTools,
+            maxTurns: 6,
+            timeoutMs: 180_000,
+          })
+        : { ...(await dispatchToOpenClaw({ text: prompt, agentId, sessionKey: `dispatch-task:${taskId}`, timeoutMs: 120_000 })), turns: 1 };
 
     await prisma.dispatchTask.update({
       where: { id: taskId },
@@ -473,6 +653,7 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
         status: DispatchTaskStatus.DONE,
         output: result.output,
         completedAt: new Date(),
+        toolTurns: result.turns > 1 ? result.turns : null,
       },
     });
 
@@ -481,48 +662,15 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
         entityType: 'dispatch_task',
         entityId: taskId,
         eventType: 'task.done',
-        metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0 },
+        metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0, toolTurns: result.turns },
       },
     });
 
     // Peer-review pass — Emerald checks the primary bot's work
     if (agentId !== 'emerald') {
-      try {
-        const reviewPrompt = [
-          `You are reviewing work produced by another AI agent for quality and accuracy.`,
-          ``,
-          `Campaign: ${task.campaign.title}`,
-          `Task: ${task.title}`,
-          task.description ? `Task description: ${task.description}` : null,
-          ``,
-          `Agent output to review:`,
-          `---`,
-          result.output,
-          `---`,
-          ``,
-          `Provide a concise review with:`,
-          `1. Quality score (1–10)`,
-          `2. What's strong about this output`,
-          `3. Any gaps, errors, or improvements needed`,
-          `4. Revised output if meaningful changes are warranted (otherwise say "Output is satisfactory")`,
-        ]
-          .filter((line) => line !== null)
-          .join('\n');
-
-        const review = await dispatchToOpenClaw({
-          text: reviewPrompt,
-          agentId: 'emerald',
-          sessionKey: `dispatch-review:${taskId}`,
-          timeoutMs: 90_000,
-        });
-
-        await prisma.dispatchTask.update({
-          where: { id: taskId },
-          data: { reviewOutput: review.output },
-        });
-      } catch {
+      await reviewDispatchTask(taskId).catch(() => {
         // Non-fatal — review failure never blocks task completion
-      }
+      });
     }
 
     // Close the linked GitHub issue and append agent output
@@ -684,6 +832,39 @@ export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: 
   });
 
   return campaign;
+}
+
+// ── Queue / scheduler worker ─────────────────────────────────────────────────
+
+export async function processDispatchQueue(): Promise<{ processed: number; skipped: number }> {
+  const now = new Date();
+
+  const [queued, scheduled] = await Promise.all([
+    prisma.dispatchCampaign.findMany({
+      where: { status: DispatchCampaignStatus.QUEUED },
+      orderBy: { queuedAt: 'asc' },
+    }),
+    prisma.dispatchCampaign.findMany({
+      where: { status: DispatchCampaignStatus.SCHEDULED, scheduledAt: { lte: now } },
+      orderBy: { scheduledAt: 'asc' },
+    }),
+  ]);
+
+  const candidates = [...queued, ...scheduled];
+  let processed = 0;
+  let skipped = 0;
+
+  for (const campaign of candidates) {
+    try {
+      await runDispatchCampaign(campaign.id);
+      processed++;
+    } catch (err) {
+      console.error(`[dispatch:worker] Campaign ${campaign.id} failed:`, err);
+      skipped++;
+    }
+  }
+
+  return { processed, skipped };
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────
