@@ -85,14 +85,18 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       const es = new EventSource(`/api/v2/stream?channel=${encodeURIComponent(streamId)}`);
       eventSourceRef.current = es;
 
+      let settled = false;
+
       es.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
           if (data.type === 'emerald.suggestions') {
+            settled = true;
             setSuggestions(data.payload.suggestions ?? []);
             setSuggestionState('done');
             es.close();
           } else if (data.type === 'emerald.error') {
+            settled = true;
             setSuggestionState('error');
             es.close();
           }
@@ -102,13 +106,14 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       };
 
       es.onerror = () => {
+        settled = true;
         setSuggestionState('error');
         es.close();
       };
 
       // Timeout after 30s
       setTimeout(() => {
-        if (suggestionState === 'thinking') {
+        if (!settled) {
           setSuggestionState('error');
           es.close();
         }
