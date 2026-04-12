@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, Unlink, Zap, ChevronRight, ImageIcon, RefreshCw } from 'lucide-react';
+import { X, ExternalLink, Unlink, Zap, ChevronRight, ImageIcon, RefreshCw, Plus, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { V2VisionItem, V2VisionPillar, V2VisionEmeraldSuggestion, VisionItemStatus } from '@/lib/v2/types';
 import { ProgressRing } from './progress-ring';
@@ -34,6 +34,10 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
   const [dispatching, setDispatching] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [liveImageUrl, setLiveImageUrl] = useState<string | null>(item.imageUrl ?? null);
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
+  const [savingTask, setSavingTask] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Clean up SSE on unmount
@@ -69,6 +73,35 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       body: JSON.stringify({ financePlanId }),
     });
     onUpdated();
+  }
+
+  async function handleUnlinkTask(taskId: string) {
+    await fetch(`/api/v2/vision/items/${item.id}/link-task`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId }),
+    });
+    onUpdated();
+  }
+
+  async function handleCreateTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    setSavingTask(true);
+    try {
+      const res = await fetch(`/api/v2/vision/items/${item.id}/create-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTaskTitle.trim(), priority: newTaskPriority }),
+      });
+      if (res.ok) {
+        setNewTaskTitle('');
+        setAddingTask(false);
+        onUpdated();
+      }
+    } finally {
+      setSavingTask(false);
+    }
   }
 
   async function handleGetSuggestions() {
@@ -449,6 +482,129 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
               </div>
             </section>
           )}
+
+          {/* Linked tasks */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
+                Linked Tasks
+              </h3>
+              <button
+                onClick={() => setAddingTask((v) => !v)}
+                className="text-[11px] flex items-center gap-1 rounded-full px-2.5 py-1 transition-opacity hover:opacity-80"
+                style={{ background: `${colors.bg}`, color: colors.text }}
+              >
+                <Plus className="w-3 h-3" />
+                Add task
+              </button>
+            </div>
+
+            {item.linkedTasks.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {item.linkedTasks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between gap-2 rounded-xl p-3"
+                    style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {t.status === 'Done' && (
+                          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#0FC48A' }} />
+                        )}
+                        <p className={`text-sm font-medium truncate ${t.status === 'Done' ? 'line-through opacity-50' : ''}`} style={{ color: 'var(--foreground)' }}>
+                          {t.title}
+                        </p>
+                        <span
+                          className="text-[10px] rounded-full px-1.5 py-0.5 flex-shrink-0"
+                          style={{
+                            background: t.status === 'Active' ? 'rgba(0,217,255,0.12)' : t.status === 'Blocked' ? 'rgba(229,62,62,0.12)' : 'var(--card-border)',
+                            color: t.status === 'Active' ? '#00D9FF' : t.status === 'Blocked' ? '#E53E3E' : 'var(--foreground)',
+                          }}
+                        >
+                          {t.status}
+                        </span>
+                        <span className="text-[10px]" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
+                          {t.assignedBot}
+                        </span>
+                      </div>
+                      {t.dueAt && (
+                        <p className="text-[11px] mt-0.5" style={{ color: 'var(--foreground)', opacity: 0.4 }}>
+                          Due {new Date(t.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => router.push('/tasks')}
+                        className="w-7 h-7 rounded-full flex items-center justify-center transition-opacity hover:opacity-70"
+                        style={{ background: 'var(--card)' }}
+                        title="Open in Tasks"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" style={{ color: 'var(--foreground)', opacity: 0.5 }} />
+                      </button>
+                      <button
+                        onClick={() => handleUnlinkTask(t.id)}
+                        className="w-7 h-7 rounded-full flex items-center justify-center transition-opacity hover:opacity-70"
+                        style={{ background: 'var(--card)' }}
+                        title="Unlink"
+                      >
+                        <Unlink className="w-3.5 h-3.5" style={{ color: 'var(--foreground)', opacity: 0.5 }} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {addingTask && (
+              <form onSubmit={handleCreateTask} className="flex flex-col gap-2 rounded-xl p-3" style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="Task title…"
+                  className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+                  style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
+                />
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={newTaskPriority}
+                    onChange={(e) => setNewTaskPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')}
+                    className="flex-1 rounded-lg px-2 py-1.5 text-xs outline-none"
+                    style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
+                  >
+                    <option value="LOW">Low priority</option>
+                    <option value="MEDIUM">Medium priority</option>
+                    <option value="HIGH">High priority</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setAddingTask(false)}
+                    className="rounded-full px-3 py-1.5 text-xs transition-opacity hover:opacity-70"
+                    style={{ background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--card-border)' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingTask || !newTaskTitle.trim()}
+                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ background: colors.accent, color: '#fff' }}
+                  >
+                    {savingTask ? '…' : 'Add'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {item.linkedTasks.length === 0 && !addingTask && (
+              <p className="text-xs" style={{ color: 'var(--foreground)', opacity: 0.4 }}>
+                No tasks linked. Add a task to track granular actions toward this goal.
+              </p>
+            )}
+          </section>
 
           {/* Emerald suggestions */}
           <section>

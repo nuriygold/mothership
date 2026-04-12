@@ -70,6 +70,7 @@ export type V2TaskItem = {
   taskId: string;
   status: 'Active' | 'Queued' | 'Blocked' | 'Done';
   title: string;
+  visionItemId?: string | null;
   metadata: {
     timeframe: string;
     dueAtISO: string | null; // raw ISO for sorting; null when no due date
@@ -364,6 +365,15 @@ export type V2VisionLinkedFinancePlan = {
   targetDate: string | null;
 };
 
+export type V2VisionLinkedTask = {
+  id: string;
+  title: string;
+  status: 'Active' | 'Queued' | 'Blocked' | 'Done';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  dueAt: string | null;
+  assignedBot: string;
+};
+
 export type V2VisionEmeraldSuggestion = {
   id: string;
   text: string;
@@ -382,6 +392,7 @@ export type V2VisionItem = {
   sortOrder: number;
   linkedCampaigns: V2VisionLinkedCampaign[];
   linkedFinancePlans: V2VisionLinkedFinancePlan[];
+  linkedTasks: V2VisionLinkedTask[];
   overallProgressPercent: number;
   emeraldSuggestions: V2VisionEmeraldSuggestion[];
 };

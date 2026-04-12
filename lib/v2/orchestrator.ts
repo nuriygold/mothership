@@ -35,6 +35,7 @@ import type {
   V2VisionItem,
   V2VisionLinkedCampaign,
   V2VisionLinkedFinancePlan,
+  V2VisionLinkedTask,
   V2VisionPillar,
 } from '@/lib/v2/types';
 
@@ -235,6 +236,11 @@ function upsertAction(action: Omit<PredictiveActionState, 'id'>) {
 
 export async function getV2TasksFeed(): Promise<V2TasksFeed> {
   const tasks = (await listTasks()) as any[];
+
+  // Build taskId → visionItemId map for badge display
+  const visionLinks = await prisma.visionTaskLink.findMany();
+  const taskVisionMap = new Map(visionLinks.map((l) => [l.taskId, l.visionItemId]));
+
   const mapped: V2TaskItem[] = tasks.map((task) => {
     const route = routeForTask(task);
     const source =
@@ -250,6 +256,7 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
       taskId: String(task.id),
       status: mapTaskStatus(task.status as TaskStatus),
       title: task.title,
+      visionItemId: taskVisionMap.get(String(task.id)) ?? null,
       metadata: {
         timeframe,
         dueAtISO,
@@ -1030,9 +1037,16 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
       )
     ),
   ];
+  const allTaskIds = [
+    ...new Set(
+      pillars.flatMap((p) =>
+        p.items.flatMap((i) => i.taskLinks.map((l) => l.taskId))
+      )
+    ),
+  ];
 
-  // Batch fetch campaigns, plans, and task counts
-  const [campaigns, plans, taskGroupCounts] = await Promise.all([
+  // Batch fetch campaigns, plans, dispatch task counts, and linked tasks
+  const [campaigns, plans, taskGroupCounts, linkedTaskRecords] = await Promise.all([
     allCampaignIds.length
       ? prisma.dispatchCampaign.findMany({ where: { id: { in: allCampaignIds } } })
       : Promise.resolve([]),
@@ -1046,6 +1060,9 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
           _count: { id: true },
         })
       : Promise.resolve([]),
+    allTaskIds.length
+      ? prisma.task.findMany({ where: { id: { in: allTaskIds } } })
+      : Promise.resolve([]),
   ]);
 
   const doneTaskCounts = allCampaignIds.length
@@ -1058,6 +1075,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
 
   // Build lookup maps
   const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
+  const taskMap = new Map(linkedTaskRecords.map((t) => [t.id, t]));
   const planMap = new Map(plans.map((p) => [p.id, p]));
   const totalTaskMap = new Map(taskGroupCounts.map((g) => [g.campaignId, g._count.id]));
   const doneTaskMap = new Map(doneTaskCounts.map((g) => [g.campaignId, g._count.id]));
@@ -1082,12 +1100,17 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
 
   function itemOverallProgress(
     linkedCampaigns: V2VisionLinkedCampaign[],
-    linkedPlans: V2VisionLinkedFinancePlan[]
+    linkedPlans: V2VisionLinkedFinancePlan[],
+    linkedTasks: V2VisionLinkedTask[]
   ): number {
     const all: number[] = [
       ...linkedCampaigns.map((c) => c.progressPercent),
       ...linkedPlans.map((p) => p.progressPercent ?? 0),
     ];
+    if (linkedTasks.length > 0) {
+      const doneCount = linkedTasks.filter((t) => t.status === 'Done').length;
+      all.push(Math.round((doneCount / linkedTasks.length) * 100));
+    }
     if (all.length === 0) return 0;
     return Math.round(all.reduce((a, b) => a + b, 0) / all.length);
   }
@@ -1122,7 +1145,20 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
           }];
         });
 
-      const overallProgressPercent = itemOverallProgress(linkedCampaigns, linkedFinancePlans);
+      const linkedTasks: V2VisionLinkedTask[] = item.taskLinks.flatMap((link) => {
+        const t = taskMap.get(link.taskId);
+        if (!t) return [];
+        return [{
+          id: t.id,
+          title: t.title,
+          status: mapTaskStatus(t.status as TaskStatus),
+          priority: mapTaskPriority((t.priority as TaskPriority) || TaskPriority.MEDIUM),
+          dueAt: t.dueAt ? t.dueAt.toISOString() : null,
+          assignedBot: botNameForRoute(routeForTask(t)),
+        }];
+      });
+
+      const overallProgressPercent = itemOverallProgress(linkedCampaigns, linkedFinancePlans, linkedTasks);
 
       return {
         id: item.id,
@@ -1136,6 +1172,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
         sortOrder: item.sortOrder,
         linkedCampaigns,
         linkedFinancePlans,
+        linkedTasks,
         overallProgressPercent,
         emeraldSuggestions: [], // populated on-demand via SSE
       };

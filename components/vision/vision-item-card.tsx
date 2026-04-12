@@ -114,10 +114,11 @@ export function VisionItemCard({ item, pillarColor, onClick }: VisionItemCardPro
         </div>
 
         {/* Linked badges */}
-        {(item.linkedCampaigns.length > 0 || item.linkedFinancePlans.length > 0) && (
+        {(item.linkedCampaigns.length > 0 || item.linkedFinancePlans.length > 0 || item.linkedTasks.length > 0) && (
           <div className="flex flex-wrap gap-1 mt-1">
             <LinkedBadge type="campaign" count={item.linkedCampaigns.length} />
             <LinkedBadge type="finance_plan" count={item.linkedFinancePlans.length} />
+            <LinkedBadge type="task" count={item.linkedTasks.length} />
           </div>
         )}
 

@@ -1,17 +1,21 @@
 'use client';
 
 interface LinkedBadgeProps {
-  type: 'campaign' | 'finance_plan';
+  type: 'campaign' | 'finance_plan' | 'task';
   count: number;
   onClick?: () => void;
 }
 
+const CONFIG = {
+  campaign:     { icon: '▶', singular: 'campaign',   plural: 'campaigns'    },
+  finance_plan: { icon: '📈', singular: 'plan',       plural: 'plans'        },
+  task:         { icon: '✓',  singular: 'task',       plural: 'tasks'        },
+};
+
 export function LinkedBadge({ type, count, onClick }: LinkedBadgeProps) {
   if (count === 0) return null;
-  const label = type === 'campaign'
-    ? `${count} campaign${count !== 1 ? 's' : ''}`
-    : `${count} plan${count !== 1 ? 's' : ''}`;
-  const icon = type === 'campaign' ? '▶' : '📈';
+  const { icon, singular, plural } = CONFIG[type];
+  const label = `${count} ${count !== 1 ? plural : singular}`;
 
   return (
     <button

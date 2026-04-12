@@ -40,6 +40,7 @@ export async function listVisionPillars(boardId: string) {
         include: {
           campaignLinks: true,
           financePlanLinks: true,
+          taskLinks: true,
         },
       },
     },
@@ -265,5 +266,34 @@ export async function linkFinancePlanToItem(visionItemId: string, financePlanId:
 export async function unlinkFinancePlanFromItem(visionItemId: string, financePlanId: string) {
   return prisma.visionFinancePlanLink.deleteMany({
     where: { visionItemId, financePlanId },
+  });
+}
+
+export async function linkTaskToItem(visionItemId: string, taskId: string) {
+  const link = await prisma.visionTaskLink.upsert({
+    where: { visionItemId_taskId: { visionItemId, taskId } },
+    create: { visionItemId, taskId },
+    update: {},
+  });
+
+  await prisma.task.update({ where: { id: taskId }, data: { visionItemId } });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'vision_item',
+      entityId: visionItemId,
+      eventType: 'task_linked',
+      metadata: { taskId },
+    },
+  });
+
+  return link;
+}
+
+export async function unlinkTaskFromItem(visionItemId: string, taskId: string) {
+  await prisma.visionTaskLink.deleteMany({ where: { visionItemId, taskId } });
+  await prisma.task.updateMany({
+    where: { id: taskId, visionItemId },
+    data: { visionItemId: null },
   });
 }

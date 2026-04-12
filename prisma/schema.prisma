@@ -164,22 +164,24 @@ model Submission {
 }
 
 model Task {
-  id          String       @id @default(uuid())
-  workflowId  String?
-  title       String
-  description String?
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(MEDIUM)
-  ownerId     String?
-  assignee    String?
-  dueAt       DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String       @id @default(uuid())
+  workflowId   String?
+  title        String
+  description  String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  ownerId      String?
+  assignee     String?
+  dueAt        DateTime?
+  visionItemId String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  workflow Workflow? @relation(fields: [workflowId], references: [id])
-  owner    User?     @relation(fields: [ownerId], references: [id])
-  approvals Approval[]
-  run       Run?
+  workflow   Workflow?        @relation(fields: [workflowId], references: [id])
+  owner      User?            @relation(fields: [ownerId], references: [id])
+  approvals  Approval[]
+  run        Run?
+  visionLink VisionTaskLink[]
 }
 
 model Run {
@@ -565,6 +567,7 @@ model VisionItem {
   pillar           VisionPillar            @relation(fields: [pillarId], references: [id], onDelete: Cascade)
   campaignLinks    VisionCampaignLink[]
   financePlanLinks VisionFinancePlanLink[]
+  taskLinks        VisionTaskLink[]
 
   @@index([pillarId, sortOrder])
 }
@@ -591,4 +594,17 @@ model VisionFinancePlanLink {
 
   @@unique([visionItemId, financePlanId])
   @@index([financePlanId])
+}
+
+model VisionTaskLink {
+  id           String   @id @default(uuid())
+  visionItemId String
+  taskId       String
+  createdAt    DateTime @default(now())
+
+  visionItem VisionItem @relation(fields: [visionItemId], references: [id], onDelete: Cascade)
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([visionItemId, taskId])
+  @@index([taskId])
 }
