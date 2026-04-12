@@ -13,6 +13,10 @@
     "db:seed:staging": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "finance:ingest": "ts-node --project tsconfig.scripts.json scripts/ingest-finance-plan.ts",
     "finance:seed": "ts-node --project tsconfig.scripts.json scripts/seed-finance.ts",
+    "finance:update-balance": "ts-node --project tsconfig.scripts.json scripts/update-account-balance.ts",
+    "finance:mark-paid": "ts-node --project tsconfig.scripts.json scripts/mark-payable-paid.ts",
+    "finance:update-plan": "ts-node --project tsconfig.scripts.json scripts/update-plan-progress.ts",
+    "finance:ingest-csv": "ts-node --project tsconfig.scripts.json scripts/ingest-transactions-csv.ts",
     "test:v2:contracts": "node scripts/v2-contract-check.mjs",
     "test:v2:sse": "node scripts/v2-sse-load.mjs",
     "test:v2:idempotency": "node scripts/v2-idempotency-auth-check.mjs"
