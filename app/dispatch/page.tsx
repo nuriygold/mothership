@@ -466,7 +466,6 @@ function DispatchPageInner() {
           {selectedCampaign && (
             <div className="flex flex-wrap items-center gap-2">
               <Button
-                variant="outline"
                 onClick={() => planMutation.mutate(selectedCampaign.id)}
                 disabled={planMutation.isLoading}
               >
@@ -492,8 +491,7 @@ function DispatchPageInner() {
         </div>
 
         {selectedCampaign && (
-          <div className="mt-4 space-y-3">
-
+          <div className="mt-4">
             {/* ── Bot recommendation ── */}
             <div className="rounded-lg border border-border bg-panel p-3">
               <p className="text-sm font-semibold text-slate-900">Bot recommendation</p>
@@ -523,71 +521,6 @@ function DispatchPageInner() {
                   </span>
                 </div>
               )}
-            </div>
-
-            {/* ── Execute ── */}
-            <div className="rounded-lg border border-border bg-panel p-3">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Execute campaign</p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Run all tasks now, add to the background queue, or schedule for a future time.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] text-slate-400">Schedule date/time</label>
-                  <input
-                    type="datetime-local"
-                    className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
-                    value={scheduleAt}
-                    onChange={(e) => setScheduleAt(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'now' })}
-                  disabled={runMutation.isLoading || !selectedCampaign.tasks.length}
-                >
-                  {runMutation.isLoading && runMutation.variables?.mode === 'now' ? 'Starting…' : 'Run now'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'queue' })}
-                  disabled={runMutation.isLoading}
-                >
-                  {runMutation.isLoading && runMutation.variables?.mode === 'queue' ? 'Queuing…' : 'Add to queue'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    runMutation.mutate({
-                      campaignId: selectedCampaign.id,
-                      mode: 'schedule',
-                      scheduledAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
-                    })
-                  }
-                  disabled={runMutation.isLoading || !scheduleAt}
-                >
-                  {runMutation.isLoading && runMutation.variables?.mode === 'schedule' ? 'Scheduling…' : 'Schedule'}
-                </Button>
-              </div>
-            </div>
-            {runMutation.isSuccess && (
-              <p className="mt-2 text-xs text-emerald-400">
-                {runMutation.variables?.mode === 'now'
-                  ? 'Execution started — tasks are running in the background. Refresh progress to track status.'
-                  : runMutation.variables?.mode === 'queue'
-                  ? 'Campaign added to queue.'
-                  : 'Campaign scheduled.'}
-              </p>
-            )}
-            {runMutation.isError && (
-              <p className="mt-2 text-xs text-rose-400">{(runMutation.error as Error).message}</p>
-            )}
             </div>
           </div>
         )}
@@ -726,6 +659,71 @@ function DispatchPageInner() {
                     <p className="text-xs text-emerald-400">Task added to campaign.</p>
                   )}
                 </div>
+              </div>
+
+              {/* ── Execute campaign ── */}
+              <div className="rounded-lg border border-border bg-panel p-3">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Execute campaign</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Run all tasks now, add to the background queue, or schedule for a future time.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] text-slate-400">Schedule date/time</label>
+                      <input
+                        type="datetime-local"
+                        className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
+                        value={scheduleAt}
+                        onChange={(e) => setScheduleAt(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'now' })}
+                      disabled={runMutation.isLoading || !selectedCampaign.tasks.length}
+                    >
+                      {runMutation.isLoading && runMutation.variables?.mode === 'now' ? 'Starting…' : 'Run now'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'queue' })}
+                      disabled={runMutation.isLoading}
+                    >
+                      {runMutation.isLoading && runMutation.variables?.mode === 'queue' ? 'Queuing…' : 'Add to queue'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        runMutation.mutate({
+                          campaignId: selectedCampaign.id,
+                          mode: 'schedule',
+                          scheduledAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+                        })
+                      }
+                      disabled={runMutation.isLoading || !scheduleAt}
+                    >
+                      {runMutation.isLoading && runMutation.variables?.mode === 'schedule' ? 'Scheduling…' : 'Schedule'}
+                    </Button>
+                  </div>
+                </div>
+                {runMutation.isSuccess && (
+                  <p className="mt-2 text-xs text-emerald-400">
+                    {runMutation.variables?.mode === 'now'
+                      ? 'Execution started — tasks are running in the background. Refresh progress to track status.'
+                      : runMutation.variables?.mode === 'queue'
+                      ? 'Campaign added to queue.'
+                      : 'Campaign scheduled.'}
+                  </p>
+                )}
+                {runMutation.isError && (
+                  <p className="mt-2 text-xs text-rose-400">{(runMutation.error as Error).message}</p>
+                )}
               </div>
             </div>
 
