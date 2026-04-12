@@ -292,6 +292,7 @@ model DispatchTask {
   agentId              String?
   output               String?
   reviewOutput         String?
+  errorMessage         String?
   taskPoolIssueNumber  Int?
   taskPoolIssueUrl     String?
   startedAt            DateTime?

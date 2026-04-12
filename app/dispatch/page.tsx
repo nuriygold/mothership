@@ -25,6 +25,7 @@ type DispatchTask = {
   taskPoolIssueUrl?: string | null;
   output?: string | null;
   reviewOutput?: string | null;
+  errorMessage?: string | null;
 };
 
 type DispatchPlan = {
@@ -192,6 +193,17 @@ async function fetchBotRecommendation(campaignId: string) {
   return body as { recommended: string; botName: string; breakdown: Record<string, number>; taskCount: number };
 }
 
+async function retryDispatchTask(payload: { campaignId: string; taskId: string; agentId?: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/retry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: payload.agentId }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to retry task');
+  return body;
+}
+
 function statusTone(status: string) {
   if (status === 'EXECUTING' || status === 'DONE' || status === 'COMPLETED') return 'bg-emerald-900/40 text-emerald-200';
   if (status === 'PAUSED' || status === 'FAILED') return 'bg-rose-900/40 text-rose-200';
@@ -229,6 +241,7 @@ function DispatchPageInner() {
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
   const [scheduleAt, setScheduleAt] = useState('');
+  const [retryAgents, setRetryAgents] = useState<Record<string, string>>({});
   const campaignSectionRef = useRef<HTMLDivElement>(null);
 
   // Pre-fill campaign from query params (e.g. dispatched from Today page)
@@ -344,6 +357,14 @@ function DispatchPageInner() {
     queryFn: () => fetchBotRecommendation(selectedCampaignId),
     enabled: Boolean(selectedCampaignId),
     staleTime: 60_000,
+  });
+
+  const retryTaskMutation = useMutation({
+    mutationFn: retryDispatchTask,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+      await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
+    },
   });
 
   const availablePlans = selectedCampaign?.latestPlan?.plans ?? [];
@@ -726,56 +747,102 @@ function DispatchPageInner() {
 
               <div className="rounded-lg border border-border p-3">
                 <p className="text-sm font-semibold text-slate-900">Campaign tasks</p>
-                <div className="mt-3 space-y-2">
-                  {selectedCampaign.tasks.map((task) => (
-                    <div key={task.id} className="rounded-md border border-border px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm text-slate-100">{task.title}</p>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(task.status)}`}>
-                          {task.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-400">{task.description || 'No task description.'}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                        <span>
-                          Priority {task.priority}
-                          {task.dependencies?.length ? ` • Depends on ${task.dependencies.join(', ')}` : ''}
-                        </span>
-                        {task.taskPoolIssueUrl && (
-                          <a
-                            href={task.taskPoolIssueUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded bg-slate-800 px-1.5 py-0.5 text-sky-400 hover:text-sky-300"
-                          >
-                            #{task.taskPoolIssueNumber} ↗
-                          </a>
+                <div className="mt-3 rounded-lg bg-slate-900/50 p-2 space-y-2">
+                  {selectedCampaign.tasks.map((task) => {
+                    const isFailed = task.status === 'FAILED';
+                    const retryAgent = retryAgents[task.id] ?? 'main';
+                    const isRetrying = retryTaskMutation.isLoading && (retryTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
+                    return (
+                      <div
+                        key={task.id}
+                        className={`rounded-md border px-3 py-2 ${isFailed ? 'border-rose-800/60 bg-rose-950/20' : 'border-border bg-[var(--background)]'}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm text-slate-100">{task.title}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(task.status)}`}>
+                            {task.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">{task.description || 'No task description.'}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                          <span>
+                            Priority {task.priority}
+                            {task.dependencies?.length ? ` • Depends on ${task.dependencies.join(', ')}` : ''}
+                          </span>
+                          {task.taskPoolIssueUrl && (
+                            <a
+                              href={task.taskPoolIssueUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded bg-slate-800 px-1.5 py-0.5 text-sky-400 hover:text-sky-300"
+                            >
+                              #{task.taskPoolIssueNumber} ↗
+                            </a>
+                          )}
+                        </div>
+
+                        {/* ── Error + retry controls (FAILED tasks only) ── */}
+                        {isFailed && (
+                          <div className="mt-2 rounded-md border border-rose-800/40 bg-rose-950/30 p-2 space-y-2">
+                            {task.errorMessage && (
+                              <p className="text-[11px] text-rose-300">{task.errorMessage}</p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
+                                value={retryAgent}
+                                onChange={(e) => setRetryAgents((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                              >
+                                <option value="main">Adrian · main</option>
+                                <option value="ruby">Ruby · ruby</option>
+                                <option value="emerald">Emerald · emerald</option>
+                                <option value="adobe">Adobe · adobe</option>
+                              </select>
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  retryTaskMutation.mutate({
+                                    campaignId: selectedCampaignId,
+                                    taskId: task.id,
+                                    agentId: retryAgent,
+                                  })
+                                }
+                                disabled={isRetrying}
+                              >
+                                {isRetrying ? 'Retrying…' : 'Retry task'}
+                              </Button>
+                            </div>
+                            {retryTaskMutation.isError && (retryTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id && (
+                              <p className="text-[11px] text-rose-400">{(retryTaskMutation.error as Error).message}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {task.output && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-[11px] text-slate-400 hover:text-slate-300">
+                              View agent output
+                            </summary>
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-[var(--background)] p-2 text-[11px] text-slate-300">
+                              {task.output}
+                            </pre>
+                          </details>
+                        )}
+                        {task.reviewOutput && (
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-[11px] text-sky-500 hover:text-sky-400">
+                              Emerald review
+                            </summary>
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border border-sky-900/40 bg-sky-950/30 p-2 text-[11px] text-sky-200">
+                              {task.reviewOutput}
+                            </pre>
+                          </details>
                         )}
                       </div>
-                      {task.output && (
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-[11px] text-slate-400 hover:text-slate-300">
-                            View agent output
-                          </summary>
-                          <pre className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-[var(--background)] p-2 text-[11px] text-slate-300">
-                            {task.output}
-                          </pre>
-                        </details>
-                      )}
-                      {task.reviewOutput && (
-                        <details className="mt-1">
-                          <summary className="cursor-pointer text-[11px] text-sky-500 hover:text-sky-400">
-                            Emerald review
-                          </summary>
-                          <pre className="mt-2 whitespace-pre-wrap rounded-md border border-sky-900/40 bg-sky-950/30 p-2 text-[11px] text-sky-200">
-                            {task.reviewOutput}
-                          </pre>
-                        </details>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                   {!selectedCampaign.tasks.length && (
-                    <p className="text-sm text-slate-500">No tasks yet. Approve a generated plan or add tasks manually.</p>
+                    <p className="text-sm text-slate-500 px-1">No tasks yet. Approve a generated plan or add tasks manually.</p>
                   )}
                 </div>
               </div>

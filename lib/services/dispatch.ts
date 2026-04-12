@@ -443,14 +443,14 @@ export async function recommendBotForCampaign(campaignId: string) {
   };
 }
 
-export async function executeDispatchTask(taskId: string) {
+export async function executeDispatchTask(taskId: string, agentIdOverride?: string) {
   const task = await prisma.dispatchTask.findUnique({
     where: { id: taskId },
     include: { campaign: true },
   });
   if (!task) throw new Error('Task not found');
 
-  const agentId = routeTaskToBot(task);
+  const agentId = agentIdOverride ?? routeTaskToBot(task);
 
   await prisma.dispatchTask.update({
     where: { id: taskId },
@@ -539,9 +539,11 @@ export async function executeDispatchTask(taskId: string) {
 
     return { taskId, status: 'DONE' as const, output: result.output };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
     await prisma.dispatchTask.update({
       where: { id: taskId },
-      data: { status: DispatchTaskStatus.FAILED, completedAt: new Date() },
+      data: { status: DispatchTaskStatus.FAILED, completedAt: new Date(), errorMessage },
     });
 
     await prisma.auditEvent.create({
@@ -549,12 +551,33 @@ export async function executeDispatchTask(taskId: string) {
         entityType: 'dispatch_task',
         entityId: taskId,
         eventType: 'task.failed',
-        metadata: { error: String(error) },
+        metadata: { error: errorMessage },
       },
     });
 
     throw error;
   }
+}
+
+export async function retryDispatchTask(taskId: string, agentIdOverride?: string) {
+  const task = await prisma.dispatchTask.findUnique({ where: { id: taskId } });
+  if (!task) throw new Error('Task not found');
+
+  await prisma.dispatchTask.update({
+    where: { id: taskId },
+    data: { status: DispatchTaskStatus.QUEUED, errorMessage: null, output: null, reviewOutput: null },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_task',
+      entityId: taskId,
+      eventType: 'task.retry',
+      metadata: { agentIdOverride: agentIdOverride ?? null },
+    },
+  });
+
+  return executeDispatchTask(taskId, agentIdOverride);
 }
 
 export async function runDispatchCampaign(campaignId: string) {
