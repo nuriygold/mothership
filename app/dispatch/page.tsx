@@ -166,10 +166,34 @@ async function fetchDispatchProgress(campaignId: string) {
   return body;
 }
 
+async function runDispatchCampaign(payload: {
+  campaignId: string;
+  mode: 'now' | 'queue' | 'schedule';
+  scheduledAt?: string;
+}) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: payload.mode, scheduledAt: payload.scheduledAt }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? `Failed to ${payload.mode} campaign`);
+  return body;
+}
+
+async function fetchBotRecommendation(campaignId: string) {
+  const res = await fetch(`/api/dispatch/campaigns/${campaignId}/recommend`, { cache: 'no-store' });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to get recommendation');
+  return body as { recommended: string; botName: string; breakdown: Record<string, number>; taskCount: number };
+}
+
 function statusTone(status: string) {
-  if (status === 'EXECUTING' || status === 'DONE') return 'bg-emerald-900/40 text-emerald-200';
+  if (status === 'EXECUTING' || status === 'DONE' || status === 'COMPLETED') return 'bg-emerald-900/40 text-emerald-200';
   if (status === 'PAUSED' || status === 'FAILED') return 'bg-rose-900/40 text-rose-200';
   if (status === 'READY' || status === 'RUNNING') return 'bg-sky-900/40 text-sky-200';
+  if (status === 'QUEUED') return 'bg-amber-900/40 text-amber-200';
+  if (status === 'SCHEDULED') return 'bg-purple-900/40 text-purple-200';
   return 'bg-slate-800 text-slate-200';
 }
 
@@ -200,6 +224,7 @@ function DispatchPageInner() {
   const [taskPriority, setTaskPriority] = useState('3');
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
+  const [scheduleAt, setScheduleAt] = useState('');
   const campaignSectionRef = useRef<HTMLDivElement>(null);
 
   // Pre-fill campaign from query params (e.g. dispatched from Today page)
@@ -300,6 +325,21 @@ function DispatchPageInner() {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
     },
+  });
+
+  const runMutation = useMutation({
+    mutationFn: runDispatchCampaign,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+      await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
+    },
+  });
+
+  const recommendQuery = useQuery({
+    queryKey: ['dispatch-recommend', selectedCampaignId],
+    queryFn: () => fetchBotRecommendation(selectedCampaignId),
+    enabled: Boolean(selectedCampaignId),
+    staleTime: 60_000,
   });
 
   const availablePlans = selectedCampaign?.latestPlan?.plans ?? [];
@@ -425,6 +465,85 @@ function DispatchPageInner() {
             </div>
           )}
         </div>
+
+        {selectedCampaign && (
+          <div className="mt-4 rounded-lg border border-border bg-panel p-3">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Execute campaign</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Run all tasks now, add to the background queue, or schedule for a future time.
+                </p>
+                {recommendQuery.data && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-slate-400">Recommended bot:</span>
+                    <span className="rounded-full bg-sky-900/40 px-2 py-0.5 font-semibold text-sky-200">
+                      {recommendQuery.data.botName}
+                    </span>
+                    <span className="text-slate-500">
+                      ({Object.entries(recommendQuery.data.breakdown)
+                        .map(([bot, n]) => `${bot} ×${n}`)
+                        .join(', ')})
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">Schedule date/time</label>
+                  <input
+                    type="datetime-local"
+                    className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
+                    value={scheduleAt}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'now' })}
+                  disabled={runMutation.isLoading || !selectedCampaign.tasks.length}
+                >
+                  {runMutation.isLoading && runMutation.variables?.mode === 'now' ? 'Starting…' : 'Run now'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'queue' })}
+                  disabled={runMutation.isLoading}
+                >
+                  {runMutation.isLoading && runMutation.variables?.mode === 'queue' ? 'Queuing…' : 'Add to queue'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    runMutation.mutate({
+                      campaignId: selectedCampaign.id,
+                      mode: 'schedule',
+                      scheduledAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+                    })
+                  }
+                  disabled={runMutation.isLoading || !scheduleAt}
+                >
+                  {runMutation.isLoading && runMutation.variables?.mode === 'schedule' ? 'Scheduling…' : 'Schedule'}
+                </Button>
+              </div>
+            </div>
+            {runMutation.isSuccess && (
+              <p className="mt-2 text-xs text-emerald-400">
+                {runMutation.variables?.mode === 'now'
+                  ? 'Execution started — tasks are running in the background. Refresh progress to track status.'
+                  : runMutation.variables?.mode === 'queue'
+                  ? 'Campaign added to queue.'
+                  : 'Campaign scheduled.'}
+              </p>
+            )}
+            {runMutation.isError && (
+              <p className="mt-2 text-xs text-rose-400">{(runMutation.error as Error).message}</p>
+            )}
+          </div>
+        )}
 
         {selectedCampaign ? (
           <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">

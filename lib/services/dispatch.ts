@@ -322,6 +322,238 @@ export async function setDispatchCampaignStatus(campaignId: string, status: Disp
   return campaign;
 }
 
+// ── Bot routing ──────────────────────────────────────────────────────────────
+
+function routeTaskToBot(task: { title: string; description?: string | null }): string {
+  const haystack = `${task.title} ${task.description ?? ''}`.toLowerCase();
+  if (haystack.match(/analyz|audit|verif|diagnos|investigat|pattern|architecture|dashboard|finance|financial|budget|cash.?flow|debt|invest|ledger|invoice|expense|payment|bill|liquidity|forecast|leverage|reconcil/)) return 'emerald';
+  if (haystack.match(/email|reply|message|copy|comms|outreach|personal|social|relationship|schedule/)) return 'ruby';
+  if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
+  if (haystack.match(/automat|deploy|infrastructure|script|command|system|health|orchestrat|build|install|setup|run /)) return 'main';
+  return 'main';
+}
+
+function buildTaskPrompt(
+  task: { title: string; description?: string | null },
+  campaign: { title: string; description?: string | null }
+): string {
+  return [
+    `Campaign goal: ${campaign.title}`,
+    campaign.description ? `Context and resources: ${campaign.description}` : null,
+    '',
+    `Task: ${task.title}`,
+    task.description ?? null,
+    '',
+    'Complete this task. Return your output directly — no meta-commentary.',
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+}
+
+export async function recommendBotForCampaign(campaignId: string) {
+  const campaign = await prisma.dispatchCampaign.findUnique({
+    where: { id: campaignId },
+    include: { tasks: true },
+  });
+  if (!campaign) throw new Error('Campaign not found');
+
+  const tally: Record<string, number> = {};
+  const source = campaign.tasks.length
+    ? campaign.tasks
+    : [{ title: campaign.title, description: campaign.description }];
+
+  for (const item of source) {
+    const bot = routeTaskToBot(item);
+    tally[bot] = (tally[bot] ?? 0) + 1;
+  }
+
+  const recommended = Object.entries(tally).sort(([, a], [, b]) => b - a)[0]?.[0] ?? 'main';
+
+  const botNames: Record<string, string> = {
+    main: 'Adrian',
+    emerald: 'Emerald',
+    ruby: 'Ruby',
+    adobe: 'Adobe Pettaway',
+  };
+
+  return {
+    recommended,
+    botName: botNames[recommended] ?? recommended,
+    breakdown: tally,
+    taskCount: campaign.tasks.length,
+  };
+}
+
+export async function executeDispatchTask(taskId: string) {
+  const task = await prisma.dispatchTask.findUnique({
+    where: { id: taskId },
+    include: { campaign: true },
+  });
+  if (!task) throw new Error('Task not found');
+
+  const agentId = routeTaskToBot(task);
+
+  await prisma.dispatchTask.update({
+    where: { id: taskId },
+    data: { status: DispatchTaskStatus.RUNNING, agentId, startedAt: new Date() },
+  });
+
+  const prompt = buildTaskPrompt(task, task.campaign);
+
+  try {
+    const result = await dispatchToOpenClaw({
+      text: prompt,
+      agentId,
+      sessionKey: `dispatch-task:${taskId}`,
+      timeoutMs: 120_000,
+    });
+
+    await prisma.dispatchTask.update({
+      where: { id: taskId },
+      data: {
+        status: DispatchTaskStatus.DONE,
+        output: result.output,
+        completedAt: new Date(),
+      },
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        entityType: 'dispatch_task',
+        entityId: taskId,
+        eventType: 'task.done',
+        metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0 },
+      },
+    });
+
+    return { taskId, status: 'DONE' as const, output: result.output };
+  } catch (error) {
+    await prisma.dispatchTask.update({
+      where: { id: taskId },
+      data: { status: DispatchTaskStatus.FAILED, completedAt: new Date() },
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        entityType: 'dispatch_task',
+        entityId: taskId,
+        eventType: 'task.failed',
+        metadata: { error: String(error) },
+      },
+    });
+
+    throw error;
+  }
+}
+
+export async function runDispatchCampaign(campaignId: string) {
+  const campaign = await prisma.dispatchCampaign.findUnique({
+    where: { id: campaignId },
+    include: { tasks: { orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }] } },
+  });
+  if (!campaign) throw new Error('Campaign not found');
+
+  const pending = campaign.tasks.filter(
+    (t) => t.status !== DispatchTaskStatus.DONE && t.status !== DispatchTaskStatus.CANCELED
+  );
+  if (!pending.length) throw new Error('No executable tasks on this campaign');
+
+  await prisma.dispatchCampaign.update({
+    where: { id: campaignId },
+    data: { status: DispatchCampaignStatus.EXECUTING },
+  });
+
+  await prisma.dispatchTask.updateMany({
+    where: { campaignId, status: { in: [DispatchTaskStatus.PLANNED] } },
+    data: { status: DispatchTaskStatus.QUEUED },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_campaign',
+      entityId: campaignId,
+      eventType: 'campaign.run.started',
+      metadata: { taskCount: pending.length },
+    },
+  });
+
+  const results: Array<{ taskId: string; status: string; error?: string }> = [];
+
+  for (const task of pending) {
+    try {
+      await executeDispatchTask(task.id);
+      results.push({ taskId: task.id, status: 'DONE' });
+    } catch (error) {
+      results.push({ taskId: task.id, status: 'FAILED', error: String(error) });
+    }
+  }
+
+  const allDone = results.every((r) => r.status === 'DONE');
+  const anyFailed = results.some((r) => r.status === 'FAILED');
+  const finalStatus = allDone
+    ? DispatchCampaignStatus.COMPLETED
+    : anyFailed
+    ? DispatchCampaignStatus.PAUSED
+    : DispatchCampaignStatus.EXECUTING;
+
+  await prisma.dispatchCampaign.update({
+    where: { id: campaignId },
+    data: { status: finalStatus },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_campaign',
+      entityId: campaignId,
+      eventType: 'campaign.run.completed',
+      metadata: {
+        finalStatus,
+        done: results.filter((r) => r.status === 'DONE').length,
+        failed: results.filter((r) => r.status === 'FAILED').length,
+      },
+    },
+  });
+
+  return { campaignId, finalStatus, results };
+}
+
+export async function enqueueDispatchCampaign(campaignId: string) {
+  const campaign = await prisma.dispatchCampaign.update({
+    where: { id: campaignId },
+    data: { status: DispatchCampaignStatus.QUEUED, queuedAt: new Date() },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_campaign',
+      entityId: campaignId,
+      eventType: 'campaign.queued',
+    },
+  });
+
+  return campaign;
+}
+
+export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: Date) {
+  const campaign = await prisma.dispatchCampaign.update({
+    where: { id: campaignId },
+    data: { status: DispatchCampaignStatus.SCHEDULED, scheduledAt },
+  });
+
+  await prisma.auditEvent.create({
+    data: {
+      entityType: 'dispatch_campaign',
+      entityId: campaignId,
+      eventType: 'campaign.scheduled',
+      metadata: { scheduledAt: scheduledAt.toISOString() },
+    },
+  });
+
+  return campaign;
+}
+
+// ── Progress ─────────────────────────────────────────────────────────────────
+
 export async function getDispatchCampaignProgress(campaignId: string) {
   const tasks = await prisma.dispatchTask.findMany({
     where: { campaignId },
