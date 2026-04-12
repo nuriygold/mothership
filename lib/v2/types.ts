@@ -377,6 +377,7 @@ export type V2VisionItem = {
   status: VisionItemStatus;
   targetDate: string | null;
   imageEmoji: string | null;
+  imageUrl: string | null;
   notes: string | null;
   sortOrder: number;
   linkedCampaigns: V2VisionLinkedCampaign[];

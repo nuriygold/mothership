@@ -1131,6 +1131,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
         status: item.status,
         targetDate: item.targetDate ? item.targetDate.toISOString() : null,
         imageEmoji: item.imageEmoji,
+        imageUrl: item.imageUrl ?? null,
         notes: item.notes,
         sortOrder: item.sortOrder,
         linkedCampaigns,

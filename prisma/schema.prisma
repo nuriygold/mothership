@@ -556,6 +556,7 @@ model VisionItem {
   status           VisionItemStatus        @default(DREAMING)
   targetDate       DateTime?
   imageEmoji       String?
+  imageUrl         String?
   notes            String?
   sortOrder        Int                     @default(0)
   createdAt        DateTime                @default(now())

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, Unlink, Zap, ChevronRight } from 'lucide-react';
+import { X, ExternalLink, Unlink, Zap, ChevronRight, ImageIcon, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { V2VisionItem, V2VisionPillar, V2VisionEmeraldSuggestion, VisionItemStatus } from '@/lib/v2/types';
 import { ProgressRing } from './progress-ring';
@@ -32,6 +32,8 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
   const [suggestions, setSuggestions] = useState<V2VisionEmeraldSuggestion[]>([]);
   const [suggestionState, setSuggestionState] = useState<SuggestionState>('idle');
   const [dispatching, setDispatching] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [liveImageUrl, setLiveImageUrl] = useState<string | null>(item.imageUrl ?? null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Clean up SSE on unmount
@@ -120,6 +122,23 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       }, 30000);
     } catch {
       setSuggestionState('error');
+    }
+  }
+
+  async function handleGenerateImage() {
+    if (generatingImage) return;
+    setGeneratingImage(true);
+    try {
+      const res = await fetch(`/api/v2/vision/items/${item.id}/generate-image`, {
+        method: 'POST',
+      });
+      const json = await res.json();
+      if (res.ok && json.imageUrl) {
+        setLiveImageUrl(json.imageUrl);
+        onUpdated();
+      }
+    } finally {
+      setGeneratingImage(false);
     }
   }
 
@@ -238,6 +257,59 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
                 overall progress
               </p>
             </div>
+          </div>
+
+          {/* Vision image */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--card-border)' }}>
+            {liveImageUrl ? (
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={liveImageUrl}
+                  alt={item.title}
+                  className="w-full object-cover"
+                  style={{ height: '220px' }}
+                />
+                <button
+                  onClick={handleGenerateImage}
+                  disabled={generatingImage}
+                  className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(4px)' }}
+                >
+                  <RefreshCw className={`w-3 h-3 ${generatingImage ? 'animate-spin' : ''}`} />
+                  {generatingImage ? 'Generating…' : 'Regenerate'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleGenerateImage}
+                disabled={generatingImage}
+                className="w-full flex flex-col items-center justify-center gap-2 transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{
+                  height: '160px',
+                  background: `${colors.bg}`,
+                }}
+              >
+                {generatingImage ? (
+                  <>
+                    <div
+                      className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+                      style={{ borderColor: `${colors.accent} transparent transparent transparent` }}
+                    />
+                    <span className="text-xs font-medium" style={{ color: colors.text }}>
+                      Generating with Flux…
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-6 h-6" style={{ color: colors.accent }} />
+                    <span className="text-xs font-medium" style={{ color: colors.text }}>
+                      Generate image with Flux
+                    </span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Description */}
