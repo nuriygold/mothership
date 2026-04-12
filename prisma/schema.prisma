@@ -287,6 +287,7 @@ model DispatchTask {
   id               String             @id @default(uuid())
   campaignId       String
   title            String
+  key              String?
   description      String?
   priority         Int                @default(5)
   dependencies     Json?
@@ -627,5 +628,5 @@ model ChatMessage {
   content   String
   createdAt DateTime @default(now())
 
-  @@index([sessionId, createdAt])
+  @@index([sessionId, createdAt], map: "ChatMessage_sessionId_createdAt_idx")
 }

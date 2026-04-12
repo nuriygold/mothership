@@ -26,6 +26,7 @@ type DispatchTask = {
   output?: string | null;
   reviewOutput?: string | null;
   errorMessage?: string | null;
+  toolTurns?: number | null;
 };
 
 type DispatchPlan = {
@@ -626,6 +627,17 @@ function DispatchPageInner() {
                       </div>
                     </div>
                   ))}
+                  {approvePlanMutation.isSuccess && (
+                    <p className="mt-2 text-xs text-emerald-400">
+                      Plan approved — use <strong>Run now</strong> below to start execution,
+                      or <strong>Add to queue</strong> to run in the background.
+                    </p>
+                  )}
+                  {approvePlanMutation.isError && (
+                    <p className="mt-2 text-xs text-rose-400">
+                      {(approvePlanMutation.error as Error).message}
+                    </p>
+                  )}
                   {!availablePlans.length && !planMutation.isLoading && (
                     <p className="text-sm text-slate-500">No generated plans yet. Click &quot;Generate plan options&quot; to create options.</p>
                   )}
@@ -815,6 +827,7 @@ function DispatchPageInner() {
                           <span>
                             Priority {task.priority}
                             {task.dependencies?.length ? ` • Depends on ${task.dependencies.join(', ')}` : ''}
+                            {task.toolTurns != null ? ` • ${task.toolTurns} tool turns` : ''}
                           </span>
                           {task.taskPoolIssueUrl && (
                             <a
