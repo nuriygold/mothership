@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Mic } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Message = {
   id: string;
@@ -20,7 +22,13 @@ const RUBY_QUICK_PROMPTS = [
   'Make this more direct',
 ];
 
-const SESSION_KEY = `ruby-${Math.random().toString(36).slice(2)}`;
+const SLASH_COMMANDS: Record<string, string> = {
+  '/summary': 'Summarize our conversation so far in bullet points.',
+  '/todo':    'Extract all action items from our conversation as a numbered list.',
+  '/eli5':    "Explain the last response in very simple terms, like I'm 5.",
+  '/short':   'Give an ultra-concise, one-sentence answer to my last question.',
+  '/deep':    'Give a detailed, comprehensive explanation of the last topic.',
+};
 
 const BUTTERFLY_STYLE = `
 @keyframes ruby-butterfly-fly {
@@ -34,6 +42,25 @@ const BUTTERFLY_STYLE = `
 }
 .ruby-butterfly-fly { animation: ruby-butterfly-fly 0.65s ease-out forwards; }
 .ruby-send-exit     { animation: ruby-send-exit 0.3s ease-in forwards; }
+`;
+
+const MARKDOWN_STYLE = `
+.ruby-markdown { font-size: 0.875rem; line-height: 1.6; color: inherit; }
+.ruby-markdown p { margin: 0 0 0.4em 0; }
+.ruby-markdown p:last-child { margin-bottom: 0; }
+.ruby-markdown ul { list-style: disc; padding-left: 1.2em; margin: 0.3em 0; }
+.ruby-markdown ol { list-style: decimal; padding-left: 1.2em; margin: 0.3em 0; }
+.ruby-markdown li { margin-bottom: 0.15em; }
+.ruby-markdown strong { font-weight: 600; color: #be185d; }
+.ruby-markdown h1, .ruby-markdown h2, .ruby-markdown h3 { font-weight: 600; margin: 0.5em 0 0.25em 0; line-height: 1.3; }
+.ruby-markdown h1 { font-size: 1em; }
+.ruby-markdown h2 { font-size: 0.95em; }
+.ruby-markdown h3 { font-size: 0.9em; }
+.ruby-markdown code { font-family: ui-monospace, monospace; font-size: 0.8em; background: rgba(190,24,93,0.08); border-radius: 3px; padding: 0.1em 0.3em; }
+.ruby-markdown pre { background: rgba(190,24,93,0.06); border: 1px solid rgba(190,24,93,0.15); border-radius: 6px; padding: 0.6em 0.8em; overflow-x: auto; margin: 0.4em 0; }
+.ruby-markdown pre code { background: none; padding: 0; }
+.ruby-markdown blockquote { border-left: 3px solid #f9a8d4; padding-left: 0.6em; color: var(--muted-foreground); margin: 0.4em 0; }
+.ruby-markdown a { color: #be185d; text-decoration: underline; }
 `;
 
 export function LiveRuby({
@@ -56,19 +83,59 @@ export function LiveRuby({
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [butterfly, setButterfly] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Inject keyframes once
+  // Inject keyframes and markdown styles once
   useEffect(() => {
-    if (document.getElementById('ruby-butterfly-style')) return;
-    const s = document.createElement('style');
-    s.id = 'ruby-butterfly-style';
-    s.textContent = BUTTERFLY_STYLE;
-    document.head.appendChild(s);
+    if (!document.getElementById('ruby-butterfly-style')) {
+      const s = document.createElement('style');
+      s.id = 'ruby-butterfly-style';
+      s.textContent = BUTTERFLY_STYLE;
+      document.head.appendChild(s);
+    }
+    if (!document.getElementById('ruby-markdown-style')) {
+      const s = document.createElement('style');
+      s.id = 'ruby-markdown-style';
+      s.textContent = MARKDOWN_STYLE;
+      document.head.appendChild(s);
+    }
   }, []);
+
+  // Load or create stable sessionId from localStorage (SSR-safe)
+  useEffect(() => {
+    const KEY = 'ruby-session-id';
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(KEY, id);
+    }
+    setSessionId(id);
+  }, []);
+
+  // Load chat history from DB once sessionId is available
+  useEffect(() => {
+    if (!sessionId) return;
+    fetch(`/api/v2/ruby/messages?sessionId=${sessionId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const dbMessages: Array<{ id: string; role: string; content: string; createdAt: string }> =
+          data?.messages ?? [];
+        if (dbMessages.length === 0) return; // keep welcome message
+        setMessages(
+          dbMessages.map((m) => ({
+            id: m.id,
+            role: m.role === 'assistant' ? 'bot' : 'user',
+            text: m.content,
+            ts: new Date(m.createdAt),
+          }))
+        );
+      })
+      .catch(() => {}); // silently ignore — welcome message stays
+  }, [sessionId]);
 
   // Pre-fill from Gateway button
   useEffect(() => {
@@ -90,6 +157,9 @@ export function LiveRuby({
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
+    // Expand slash commands to their full prompts
+    const apiText = SLASH_COMMANDS[trimmed.toLowerCase()] ?? trimmed;
+
     setButterfly(true);
     setTimeout(() => setButterfly(false), 700);
 
@@ -107,7 +177,7 @@ export function LiveRuby({
       const res = await fetch('/api/v2/ruby/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: trimmed, sessionKey: SESSION_KEY }),
+        body: JSON.stringify({ text: apiText, sessionId }),
       });
 
       if (!res.ok || !res.body) throw new Error(`Ruby ${res.status}`);
@@ -159,7 +229,7 @@ export function LiveRuby({
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  }, [loading, sessionId]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -305,6 +375,18 @@ export function LiveRuby({
                     style={{ background: '#f9a8d4', animationDelay: '300ms' }}
                   />
                 </span>
+              ) : msg.role === 'bot' ? (
+                <div className="ruby-markdown">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.text}
+                  </ReactMarkdown>
+                  {msg.streaming && (
+                    <span
+                      className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse"
+                      style={{ background: '#f9a8d4' }}
+                    />
+                  )}
+                </div>
               ) : (
                 <>
                   {msg.text}
@@ -369,7 +451,7 @@ export function LiveRuby({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send(input)}
           placeholder={
-            recording ? 'Listening…' : transcribing ? 'Transcribing…' : 'Ask Ruby anything…'
+            recording ? 'Listening…' : transcribing ? 'Transcribing…' : 'Ask Ruby anything… (try /summary)'
           }
           disabled={isBusy}
           className="flex-1 rounded-2xl px-3 py-2 text-sm outline-none transition-all"

@@ -1,12 +1,17 @@
+import { prisma } from '@/lib/prisma';
 import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+const SYSTEM_PROMPT =
+  `You are Ruby, a warm and direct personal communication assistant.\n` +
+  `Response style: use bullet points, short lines, bold key terms, blank lines between sections, avoid dense paragraphs.`;
+
 export async function POST(req: Request) {
   const body = await req.json();
   const text = String(body?.text ?? '').trim();
-  const sessionKey = body?.sessionKey ? String(body.sessionKey) : undefined;
+  const sessionId = body?.sessionId ? String(body.sessionId).trim() : null;
 
   if (!text) {
     return new Response(JSON.stringify({ error: 'text is required' }), { status: 400 });
@@ -25,6 +30,26 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
+  // Save user message (fire-and-forget)
+  if (sessionId) {
+    prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }).catch(() => {});
+  }
+
+  // Load last 20 messages for context
+  const history = sessionId
+    ? await prisma.chatMessage.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+        take: 20,
+      })
+    : [];
+
+  const input = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: text },
+  ];
+
   let upstreamRes: Response;
   try {
     upstreamRes = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
@@ -33,9 +58,9 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         'x-openclaw-agent-id': resolvedAgent,
-        ...(sessionKey ? { 'x-openclaw-session-key': sessionKey } : {}),
+        ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input: text }),
+      body: JSON.stringify({ stream: true, model, input }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
@@ -61,6 +86,21 @@ export async function POST(req: Request) {
     async start(controller) {
       const reader = upstreamRes.body!.getReader();
       let buf = '';
+      let accumulated = '';
+      let streamClosed = false;
+
+      function closeWithSave() {
+        if (streamClosed) return;
+        streamClosed = true;
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+        if (accumulated && sessionId) {
+          prisma.chatMessage
+            .create({ data: { sessionId, role: 'assistant', content: accumulated } })
+            .catch(() => {});
+        }
+      }
+
       try {
         while (true) {
           const { value, done } = await reader.read();
@@ -72,20 +112,24 @@ export async function POST(req: Request) {
             const trimmed = line.trim();
             if (!trimmed.startsWith('data:')) continue;
             const dataStr = trimmed.slice(5).trim();
-            if (dataStr === '[DONE]') { controller.enqueue(encoder.encode('data: [DONE]\n\n')); controller.close(); return; }
+            if (dataStr === '[DONE]') { closeWithSave(); return; }
             try {
               const evt = JSON.parse(dataStr);
               const payload = evt?.data ?? evt;
               const eventType = payload?.event ?? evt?.type;
               if (eventType === 'response.output_text.delta') {
                 const delta = payload?.data ?? evt?.delta ?? '';
-                if (delta) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+                if (delta) {
+                  accumulated += delta;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+                }
               } else if (eventType === 'response.output_text.done' && evt?.text) {
+                accumulated += evt.text;
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
               } else if (eventType === 'response.error') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? evt?.error ?? 'Gateway error' })}\n\n`));
               } else if (eventType === 'response.completed') {
-                controller.enqueue(encoder.encode('data: [DONE]\n\n')); controller.close(); return;
+                closeWithSave(); return;
               }
             } catch (_) {}
           }
@@ -94,8 +138,7 @@ export async function POST(req: Request) {
         const msg = err instanceof Error ? err.message : String(err);
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
       }
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      controller.close();
+      closeWithSave();
     },
   });
 
