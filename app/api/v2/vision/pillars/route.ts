@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { getOrCreateVisionBoard, createVisionPillar, listVisionPillars } from '@/lib/services/vision';
 import { VisionPillarColor } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const board = await getOrCreateVisionBoard();
     const pillars = await listVisionPillars(board.id);
@@ -20,8 +17,6 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const body = await req.json();
     const { label, emoji, color, sortOrder } = body as {

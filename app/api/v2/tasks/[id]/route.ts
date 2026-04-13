@@ -1,4 +1,3 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { mutateTaskFromAction } from '@/lib/v2/orchestrator';
 import { updateTask } from '@/lib/services/tasks';
 
@@ -27,8 +26,6 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   try {
     const body = (await req.json()) as { action?: 'start' | 'defer' | 'complete' | 'unblock' | 'assign' | 'vision_board'; ownerLogin?: string };

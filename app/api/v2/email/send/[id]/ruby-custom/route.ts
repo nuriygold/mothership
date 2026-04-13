@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { getRubyDraft, markDraftSent } from '@/lib/v2/orchestrator';
 import { sendZohoReply } from '@/lib/services/email';
 import { publishV2Event } from '@/lib/v2/event-bus';
@@ -10,8 +9,6 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authError = await ensureV2Authorized(req);
-  if (authError) return authError;
 
   const emailId = params.id;
   const draft = getRubyDraft(emailId);

@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { getVisionItemWithLinks, updateVisionItem, deleteVisionItem } from '@/lib/services/vision';
 import { VisionItemStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const item = await getVisionItemWithLinks(params.id);
     if (!item) {
@@ -22,8 +19,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const body = await req.json();
     const item = await updateVisionItem(params.id, {
@@ -45,8 +40,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     await deleteVisionItem(params.id);
     return Response.json({ ok: true });
