@@ -111,9 +111,13 @@ export async function POST(req: Request) {
                   accumulated += delta;
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
                 }
-              } else if (eventType === 'response.output_text.done' && evt?.text) {
-                accumulated += evt.text;
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+              } else if (eventType === 'response.output_text.done') {
+                // Only use the full text if no deltas arrived (non-streaming fallback).
+                // If we already accumulated from delta events, .done just confirms completion — don't double-add.
+                if (!accumulated && evt?.text) {
+                  accumulated = evt.text;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+                }
               } else if (eventType === 'response.error') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? evt?.error ?? 'Gateway error' })}\n\n`));
               } else if (eventType === 'response.completed') {
