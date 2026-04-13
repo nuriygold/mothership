@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   TrendingUp, Mail, Search, FileText,
@@ -9,7 +9,11 @@ import {
 } from 'lucide-react';
 import type { V2BotProfile, V2BotsFeed } from '@/lib/v2/types';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+};
 
 // Text color safe for always-light pastel card backgrounds (no dark-mode override on pastels)
 const CARD_FG = '#0F1B35';
@@ -30,12 +34,9 @@ const BOT_ICON: Record<string, React.ElementType> = {
 };
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
-  active:  { color: 'var(--color-cyan)', label: 'Active'  },
   working: { color: 'var(--color-cyan)', label: 'Working' },
   idle:    { color: '#FFB800',           label: 'Idle'    },
-  pending: { color: '#FFB800',           label: 'Pending' },
   blocked: { color: '#E53E3E',           label: 'Blocked' },
-  done:    { color: 'var(--color-cyan)', label: 'Done'    },
 };
 
 function BotCardSkeleton() {
@@ -76,7 +77,7 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
   const scheme = COLOR_SCHEME[bot.identity.colorKey] ?? COLOR_SCHEME.lavender;
   const BotIcon = BOT_ICON[bot.identity.iconKey] ?? FileText;
   const statusConfig = STATUS_CONFIG[bot.liveState.status] ?? STATUS_CONFIG.idle;
-  const isIdle = bot.liveState.status === 'idle' || bot.liveState.status === 'pending';
+  const isIdle = bot.liveState.status === 'idle';
   const currentTaskIsPlaceholder =
     bot.liveState.currentTask === 'Awaiting assignment' || bot.liveState.currentTask === '';
 
@@ -255,16 +256,32 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
 }
 
 export default function BotsPage() {
-  const { data, error, mutate } = useSWR<V2BotsFeed>('/api/v2/bots', fetcher, { refreshInterval: 30000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
+  const { data, error, mutate } = useSWR<V2BotsFeed>('/api/v2/bots', fetcher, {
+    refreshInterval: streamStatus === 'live' ? 0 : 30_000,
+  });
+
+  const mutateRef = useRef(mutate);
+  useEffect(() => { mutateRef.current = mutate; }, [mutate]);
 
   useEffect(() => {
-    const stream = new EventSource('/api/v2/stream/bots');
-    stream.addEventListener('connected', () => setStreamStatus('live'));
-    stream.addEventListener('task.routed', () => void mutate());
-    stream.onerror = () => setStreamStatus('fallback');
-    return () => stream.close();
-  }, [mutate]);
+    let stream: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      stream = new EventSource('/api/v2/stream/bots');
+      stream.addEventListener('connected', () => setStreamStatus('live'));
+      stream.addEventListener('task.routed', () => void mutateRef.current());
+      stream.onerror = () => {
+        setStreamStatus('fallback');
+        stream.close();
+        reconnectTimer = setTimeout(connect, 5000);
+      };
+    }
+
+    connect();
+    return () => { stream.close(); clearTimeout(reconnectTimer); };
+  }, []);
 
   const isLoading = !data && !error;
 

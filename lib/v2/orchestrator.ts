@@ -316,11 +316,15 @@ export async function getV2BotsFeed(): Promise<V2BotsFeed> {
         currentTask: current?.title ?? 'Awaiting assignment',
         status: current ? (current.status === TaskStatus.BLOCKED ? 'blocked' : 'working') : 'idle',
       },
-      throughputMetrics: {
-        completed: assigned.filter((task) => task.status === TaskStatus.DONE).length,
-        queued: assigned.filter((task) => task.status === TaskStatus.TODO).length,
-        blocked: assigned.filter((task) => task.status === TaskStatus.BLOCKED).length,
-      },
+      throughputMetrics: assigned.reduce(
+        (acc, task) => {
+          if (task.status === TaskStatus.DONE)         acc.completed++;
+          else if (task.status === TaskStatus.TODO)    acc.queued++;
+          else if (task.status === TaskStatus.BLOCKED) acc.blocked++;
+          return acc;
+        },
+        { completed: 0, queued: 0, blocked: 0 },
+      ),
       recentOutputs,
       staticProfile: {
         workingStyle: profile.workingStyle,
