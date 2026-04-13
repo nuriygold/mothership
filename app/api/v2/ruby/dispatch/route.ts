@@ -5,8 +5,11 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const SYSTEM_PROMPT =
-  `You are Ruby, a warm and direct personal communication assistant.\n` +
-  `Response style: use bullet points, short lines, bold key terms, blank lines between sections, avoid dense paragraphs.`;
+  `You are Ruby, a warm, witty, and brilliant personal assistant. ` +
+  `You can help with anything — questions, research, writing, code, planning, analysis, problem-solving, and more. ` +
+  `You're direct, smart, and personable — like a brilliant friend who gives real, thoughtful answers without unnecessary hedging. ` +
+  `Format responses clearly: use markdown naturally (bold for key points, bullet lists when listing things, code blocks for code). ` +
+  `Keep answers focused and helpful. Never start with filler phrases like "Of course!" or "Certainly!".`;
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -30,25 +33,13 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Save user message (fire-and-forget)
+  // Ensure ChatSession exists + save user message (fire-and-forget)
   if (sessionId) {
-    prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }).catch(() => {});
+    prisma.chatSession
+      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+      .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
+      .catch(() => {});
   }
-
-  // Load last 20 messages for context
-  const history = sessionId
-    ? await prisma.chatMessage.findMany({
-        where: { sessionId },
-        orderBy: { createdAt: 'asc' },
-        take: 20,
-      })
-    : [];
-
-  const input = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: text },
-  ];
 
   let upstreamRes: Response;
   try {
@@ -60,7 +51,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input }),
+      body: JSON.stringify({ stream: true, model, input: text }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
@@ -97,6 +88,7 @@ export async function POST(req: Request) {
         if (accumulated && sessionId) {
           prisma.chatMessage
             .create({ data: { sessionId, role: 'assistant', content: accumulated } })
+            .then(() => prisma.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }))
             .catch(() => {});
         }
       }
