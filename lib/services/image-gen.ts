@@ -15,7 +15,6 @@ function buildPrompt(title: string, description: string | null, customPrompt?: s
   return customPrompt ? `${base} Style/scene direction: ${customPrompt}.` : base;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function ensureBucket(supabase: any) {
   const { data: buckets } = await supabase.storage.listBuckets();
   if (!buckets?.find((b) => b.name === BUCKET)) {
