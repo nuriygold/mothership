@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { TaskPriority, TaskStatus } from '@prisma/client';
 import { listTasks, updateTask } from '@/lib/services/tasks';
+import { isTaskPoolRepositorySource, addVisionBoardLabelToIssue } from '@/lib/integrations/task-pool';
 import { listFinancePlans } from '@/lib/services/finance';
 import { getEmailSummary } from '@/lib/services/email';
 import { fetchTodayCalendarEvents } from '@/lib/services/calendar';
@@ -257,6 +258,7 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
       status: mapTaskStatus(task.status as TaskStatus),
       title: task.title,
       visionItemId: taskVisionMap.get(String(task.id)) ?? null,
+      visionBoardLinked: (task as any).domain === 'vision board',
       metadata: {
         timeframe,
         dueAtISO,
@@ -989,7 +991,14 @@ export function approvePredictiveAction(actionId: string) {
   return { ok: true, status: 200, idempotent: false, action };
 }
 
-export async function mutateTaskFromAction(taskId: string, action: 'start' | 'defer' | 'complete' | 'unblock') {
+export async function mutateTaskFromAction(taskId: string, action: 'start' | 'defer' | 'complete' | 'unblock' | 'vision_board') {
+  if (action === 'vision_board') {
+    if (isTaskPoolRepositorySource()) {
+      await addVisionBoardLabelToIssue(taskId);
+    }
+    // No-op for DB mode (no label system)
+    return;
+  }
   if (action === 'start') {
     await updateTask({ id: taskId, status: TaskStatus.IN_PROGRESS });
   } else if (action === 'defer') {

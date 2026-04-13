@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import useSWR from 'swr';
-import type { V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
+import type { V2TaskItem, V2TasksFeed, V2DashboardPriorityItem } from '@/lib/v2/types';
 import type { KanbanColumnKey } from '@/components/tasks/kanban-column';
 import { KanbanColumn } from '@/components/tasks/kanban-column';
 import { TasksSummaryBar } from '@/components/tasks/tasks-summary-bar';
 import { TasksFilters } from '@/components/tasks/tasks-filters';
 import type { TaskFilter } from '@/components/tasks/tasks-filters';
+import { TakeActionModal } from '@/components/today/take-action-modal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -19,18 +20,22 @@ const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-async function runTaskAction(taskId: string, action: 'start' | 'defer' | 'complete' | 'unblock') {
-  const res = await fetch(`/api/v2/tasks/${taskId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
-  });
-  if (!res.ok) throw new Error('Failed to update task');
+/** Convert a V2TaskItem into the shape TakeActionModal expects. */
+function toActionItem(task: V2TaskItem): V2DashboardPriorityItem {
+  return {
+    id: task.taskId,
+    taskId: task.taskId,
+    title: task.title,
+    source: task.metadata.department,
+    // Not used in Kanban context (showRouteApproval=false), but required by the type
+    actionWebhook: `/api/v2/tasks/${task.taskId}`,
+    assignedBot: task.metadata.assignedBot,
+    dueAt: task.metadata.dueAtISO,
+  };
 }
 
 const TODAY_FRAMES = new Set(['today', 'Today']);
 
-/** Apply a filter to a flat task list — returns a new sorted/filtered array. */
 function applyFilter(tasks: V2TaskItem[], filter: TaskFilter): V2TaskItem[] {
   switch (filter) {
     case 'Today':
@@ -55,35 +60,23 @@ function applyFilter(tasks: V2TaskItem[], filter: TaskFilter): V2TaskItem[] {
   }
 }
 
-/**
- * Group tasks into 5 Kanban columns.
- *
- * Source arrays from the API already represent the intended grouping:
- *   data.active  → status='Active'  → Active column
- *   data.today   → status='Queued', timeframe='today' → Waiting column
- *   data.backlog → status='Queued', future timeframe  → Backlog column
- *
- * Blocked and Done tasks may appear anywhere; we extract them from all arrays.
- */
 function groupIntoColumns(
   data: V2TasksFeed,
   filter: TaskFilter
 ): Record<KanbanColumnKey, V2TaskItem[]> {
-  // Flatten and filter first so filter affects every column uniformly
   const all = applyFilter(
     [...data.active, ...data.today, ...data.backlog],
     filter
   );
-
   const blocked = all.filter((t) => t.status === 'Blocked');
   const done    = all.filter((t) => t.status === 'Done');
-  const blockedIds = new Set([...blocked, ...done].map((t) => t.taskId));
+  const excludeIds = new Set([...blocked, ...done].map((t) => t.taskId));
 
   return {
-    Active:  applyFilter(data.active,  filter).filter((t) => !blockedIds.has(t.taskId)),
-    Waiting: applyFilter(data.today,   filter).filter((t) => !blockedIds.has(t.taskId)),
+    Active:  applyFilter(data.active,  filter).filter((t) => !excludeIds.has(t.taskId)),
+    Waiting: applyFilter(data.today,   filter).filter((t) => !excludeIds.has(t.taskId)),
     Blocked: blocked,
-    Backlog: applyFilter(data.backlog, filter).filter((t) => !blockedIds.has(t.taskId)),
+    Backlog: applyFilter(data.backlog, filter).filter((t) => !excludeIds.has(t.taskId)),
     Done:    done,
   };
 }
@@ -112,10 +105,63 @@ export default function TasksPage() {
   });
   const [activeFilter, setActiveFilter] = useState<TaskFilter>('All');
 
+  // ── Modal state ──────────────────────────────────────────────────────────────
+  const [actionModalTask, setActionModalTask] = useState<V2TaskItem | null>(null);
+
+  // ── Optimistic vision-board tracking ──────────────────────────────────────
+  const [visionLinkedIds, setVisionLinkedIds] = useState<Set<string>>(new Set());
+
+  // ── Derived data ─────────────────────────────────────────────────────────────
   const counters = data?.counters;
   const queued   = counters ? counters.tracked - counters.active - counters.blocked : 0;
+  const grouped  = data ? groupIntoColumns(data, activeFilter) : null;
 
-  const grouped = data ? groupIntoColumns(data, activeFilter) : null;
+  // ── Modal callbacks ──────────────────────────────────────────────────────────
+
+  const handleComplete = useCallback(async (taskId: string) => {
+    const res = await fetch(`/api/v2/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'complete' }),
+    });
+    if (!res.ok) throw new Error(`Task complete failed (${res.status})`);
+    await mutate();
+  }, [mutate]);
+
+  const handleGateway = useCallback((title: string) => {
+    const params = new URLSearchParams({ q: title });
+    window.location.href = `/ruby?${params.toString()}`;
+  }, []);
+
+  const handleStartWorking = useCallback(async (item: V2DashboardPriorityItem) => {
+    if (!item.taskId) return;
+    const res = await fetch(`/api/v2/tasks/${item.taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start' }),
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    await mutate();
+  }, [mutate]);
+
+  const handleDispatch = useCallback((item: V2DashboardPriorityItem) => {
+    const params = new URLSearchParams({ task: item.title, source: item.source });
+    window.location.href = `/dispatch?${params.toString()}`;
+  }, []);
+
+  const handleAddToVisionBoard = useCallback(async (taskId: string) => {
+    const res = await fetch(`/api/v2/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'vision_board' }),
+    });
+    if (!res.ok) throw new Error(`Vision board label failed (${res.status})`);
+    // Optimistic update so the badge appears immediately
+    setVisionLinkedIds((prev) => new Set([...prev, taskId]));
+    // Background re-fetch (GitHub API caches 60s so the badge from server-side
+    // visionBoardLinked may take one more cycle, but the optimistic set covers it)
+    void mutate();
+  }, [mutate]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -153,11 +199,26 @@ export default function TasksPage() {
               key={col}
               title={col}
               tasks={grouped[col]}
-              onRefresh={mutate}
-              onAction={runTaskAction}
+              visionLinkedIds={visionLinkedIds}
+              onTakeAction={setActionModalTask}
             />
           ))}
         </div>
+      )}
+
+      {/* Take Action modal */}
+      {actionModalTask && (
+        <TakeActionModal
+          item={toActionItem(actionModalTask)}
+          onClose={() => setActionModalTask(null)}
+          onDone={() => { setActionModalTask(null); void mutate(); }}
+          onComplete={handleComplete}
+          onGateway={handleGateway}
+          onStartWorking={handleStartWorking}
+          onDispatch={handleDispatch}
+          onAddToVisionBoard={handleAddToVisionBoard}
+          showRouteApproval={false}
+        />
       )}
     </div>
   );

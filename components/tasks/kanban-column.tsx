@@ -70,11 +70,12 @@ const COLUMN_EMPTY_HINT: Record<KanbanColumnKey, string> = {
 interface KanbanColumnProps {
   title: KanbanColumnKey;
   tasks: V2TaskItem[];
-  onRefresh: () => Promise<unknown>;
-  onAction: (taskId: string, action: 'start' | 'defer' | 'complete' | 'unblock') => Promise<void>;
+  /** IDs optimistically marked as vision-board-linked before next server refresh */
+  visionLinkedIds: Set<string>;
+  onTakeAction: (task: V2TaskItem) => void;
 }
 
-export function KanbanColumn({ title, tasks, onRefresh, onAction }: KanbanColumnProps) {
+export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction }: KanbanColumnProps) {
   const colors = KANBAN_COLUMN_COLORS[title];
 
   return (
@@ -145,8 +146,8 @@ export function KanbanColumn({ title, tasks, onRefresh, onAction }: KanbanColumn
             <TaskCard
               key={task.taskId}
               task={task}
-              onRefresh={onRefresh}
-              onAction={onAction}
+              visionBoardLinked={visionLinkedIds.has(task.taskId)}
+              onTakeAction={onTakeAction}
             />
           ))
         )}

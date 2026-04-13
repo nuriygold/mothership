@@ -409,6 +409,47 @@ export async function listTaskPoolActivityEvents(limit = 50): Promise<TaskPoolAc
   }));
 }
 
+/** Adds the `domain: vision board` label to an issue without removing existing labels. */
+export async function addVisionBoardLabelToIssue(id: string): Promise<boolean> {
+  const { owner, repo, token } = getConfig();
+  if (!token) {
+    logTaskPoolEvent('warn', 'add_vision_board_label_skipped', { reason: 'GITHUB_TOKEN not configured', id });
+    return false;
+  }
+
+  const issueNumber = parseIssueNumber(id);
+  if (!issueNumber) {
+    logTaskPoolEvent('warn', 'add_vision_board_label_skipped', { reason: 'invalid task id', id });
+    return false;
+  }
+
+  // Ensure the label exists in the repo first
+  await ensureTaskPoolLabel(owner, repo, token, 'domain: vision board', '69f49d');
+
+  // POST /issues/{number}/labels adds labels without overwriting existing ones
+  const res = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ labels: ['domain: vision board'] }),
+    }
+  );
+
+  if (!res.ok) {
+    logTaskPoolEvent('warn', 'add_vision_board_label_failed', { issueNumber, status: res.status });
+    return false;
+  }
+
+  logTaskPoolEvent('info', 'add_vision_board_label_success', { issueNumber });
+  return true;
+}
+
 async function ensureTaskPoolLabel(owner: string, repo: string, token: string, name: string, color: string): Promise<void> {
   try {
     await fetch(`https://api.github.com/repos/${owner}/${repo}/labels`, {

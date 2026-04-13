@@ -71,6 +71,8 @@ export type V2TaskItem = {
   status: 'Active' | 'Queued' | 'Blocked' | 'Done';
   title: string;
   visionItemId?: string | null;
+  /** True when the GitHub issue has the `domain: vision board` label */
+  visionBoardLinked?: boolean;
   metadata: {
     timeframe: string;
     dueAtISO: string | null; // raw ISO for sorting; null when no due date

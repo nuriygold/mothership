@@ -486,6 +486,14 @@ export default function TodayPage() {
         onGateway={(title) => { handleGateway(title); setActionModalItem(null); }}
         onStartWorking={(item) => { handleStartWorking(item); setActionModalItem(null); }}
         onDispatch={(item) => { handleDispatch(item); }}
+        onAddToVisionBoard={async (taskId) => {
+          const res = await fetch(`/api/v2/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'vision_board' }),
+          });
+          if (!res.ok) throw new Error(`Vision board label failed (${res.status})`);
+        }}
       />
     )}
 

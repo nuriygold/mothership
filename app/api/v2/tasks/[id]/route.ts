@@ -31,7 +31,7 @@ export async function PATCH(
   if (authError) return authError;
 
   try {
-    const body = (await req.json()) as { action?: 'start' | 'defer' | 'complete' | 'unblock' | 'assign'; ownerLogin?: string };
+    const body = (await req.json()) as { action?: 'start' | 'defer' | 'complete' | 'unblock' | 'assign' | 'vision_board'; ownerLogin?: string };
     if (!body.action) {
       return Response.json(
         { error: { code: 'VALIDATION_ERROR', message: 'action is required' } },

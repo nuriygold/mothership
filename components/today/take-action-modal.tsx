@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ElementType } from 'react';
-import { X, CheckCircle2, Send, Zap, Clock, MessageSquare, Sparkles, Star, Rocket } from 'lucide-react';
+import { X, CheckCircle2, Send, Zap, Clock, MessageSquare, Sparkles, Star, Rocket, Layers } from 'lucide-react';
 import type { V2DashboardPriorityItem } from '@/lib/v2/types';
 import { BOT_COLORS, BOT_TELEGRAM_KEY, normalizeBotName } from '@/lib/constants/today';
 
@@ -14,9 +14,13 @@ interface TakeActionModalProps {
   onGateway: (title: string) => void;
   onStartWorking?: (item: V2DashboardPriorityItem) => void;
   onDispatch?: (item: V2DashboardPriorityItem) => void;
+  /** If provided, shows an "Add to Vision Board" action row */
+  onAddToVisionBoard?: (taskId: string) => Promise<void>;
+  /** Hide the "Approve Route to {bot}" row — useful in Kanban context (default: true) */
+  showRouteApproval?: boolean;
 }
 
-export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch }: TakeActionModalProps) {
+export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch, onAddToVisionBoard, showRouteApproval = true }: TakeActionModalProps) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -114,6 +118,21 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
           },
         ]
       : []),
+    ...(item.taskId && onAddToVisionBoard
+      ? [
+          {
+            key: 'vision_board',
+            icon: Layers,
+            label: 'Add to Vision Board',
+            desc: 'Tag this task with domain: vision board and show a marker on the Kanban card',
+            color: '#69f49d',
+            textColor: '#0A4A35',
+            fn: async () => {
+              await onAddToVisionBoard(item.taskId!);
+            },
+          },
+        ]
+      : []),
     {
       key: 'dispatch',
       icon: Rocket,
@@ -125,18 +144,22 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
         onDispatch?.(item);
       },
     },
-    {
-      key: 'route',
-      icon: Send,
-      label: `Approve Route to ${normalizedBot}`,
-      desc: `Approve this routing action in queue (does not change task status)`,
-      color: botC.bg,
-      textColor: botC.text,
-      fn: async () => {
-        const res = await fetch(item.actionWebhook, { method: 'POST' });
-        if (!res.ok) throw new Error(`${res.status}`);
-      },
-    },
+    ...(showRouteApproval
+      ? [
+          {
+            key: 'route',
+            icon: Send,
+            label: `Approve Route to ${normalizedBot}`,
+            desc: `Approve this routing action in queue (does not change task status)`,
+            color: botC.bg,
+            textColor: botC.text,
+            fn: async () => {
+              const res = await fetch(item.actionWebhook, { method: 'POST' });
+              if (!res.ok) throw new Error(`${res.status}`);
+            },
+          },
+        ]
+      : []),
     {
       key: 'telegram',
       icon: MessageSquare,
