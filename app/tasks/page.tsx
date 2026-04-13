@@ -164,7 +164,7 @@ export default function TasksPage() {
   }, [mutate]);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 min-h-0" style={{ height: 'calc(100dvh - var(--app-chrome-h))' }}>
       {/* Title */}
       <div>
         <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
@@ -191,8 +191,7 @@ export default function TasksPage() {
         <KanbanSkeleton />
       ) : (
         <div
-          className="flex gap-4 overflow-x-auto pb-6"
-          style={{ minHeight: '400px' }}
+          className="flex gap-4 overflow-x-auto pb-6 flex-1 min-h-0"
         >
           {COLUMN_ORDER.map((col) => (
             <KanbanColumn

@@ -127,10 +127,9 @@ export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction }: Ka
         </span>
       </div>
 
-      {/* Card list — scrolls independently */}
+      {/* Card list — scrolls independently within the bounded column height */}
       <div
-        className="flex flex-col gap-2.5 p-3 overflow-y-auto flex-1"
-        style={{ maxHeight: 'calc(100vh - 260px)' }}
+        className="flex flex-col gap-2.5 p-3 overflow-y-auto flex-1 min-h-0"
       >
         {tasks.length === 0 ? (
           <div

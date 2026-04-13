@@ -74,6 +74,12 @@
   --color-lemon-text: #7A5A00;
 
   color-scheme: light;
+
+  /* App chrome heights — used by the tasks page flex chain */
+  --header-h: 44px;    /* header h-11 */
+  --main-pt: 32px;     /* main py-8 on md+ */
+  --main-pb: 48px;     /* main pb-12 on md+ */
+  --app-chrome-h: calc(var(--header-h) + var(--main-pt) + var(--main-pb));
 }
 
 [data-theme='dark'] {
