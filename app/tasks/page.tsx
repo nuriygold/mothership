@@ -9,6 +9,7 @@ import { TasksSummaryBar } from '@/components/tasks/tasks-summary-bar';
 import { TasksFilters } from '@/components/tasks/tasks-filters';
 import type { TaskFilter } from '@/components/tasks/tasks-filters';
 import { TakeActionModal } from '@/components/today/take-action-modal';
+import { TaskDetailModal } from '@/components/tasks/task-detail-modal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,7 @@ export default function TasksPage() {
 
   // ── Modal state ──────────────────────────────────────────────────────────────
   const [actionModalTask, setActionModalTask] = useState<V2TaskItem | null>(null);
+  const [detailModalTask, setDetailModalTask] = useState<V2TaskItem | null>(null);
 
   // ── Optimistic vision-board tracking ──────────────────────────────────────
   const [visionLinkedIds, setVisionLinkedIds] = useState<Set<string>>(new Set());
@@ -192,6 +194,7 @@ export default function TasksPage() {
       ) : (
         <div
           className="flex gap-4 overflow-x-auto pb-6 flex-1 min-h-0"
+          data-dnd-board="true"
         >
           {COLUMN_ORDER.map((col) => (
             <KanbanColumn
@@ -200,9 +203,23 @@ export default function TasksPage() {
               tasks={grouped[col]}
               visionLinkedIds={visionLinkedIds}
               onTakeAction={setActionModalTask}
+              onCardClick={setDetailModalTask}
             />
           ))}
         </div>
+      )}
+
+      {/* Task Detail modal */}
+      {detailModalTask && (
+        <TaskDetailModal
+          task={detailModalTask}
+          visionBoardLinked={visionLinkedIds.has(detailModalTask.taskId)}
+          onClose={() => setDetailModalTask(null)}
+          onTakeAction={(task) => {
+            setDetailModalTask(null);
+            setActionModalTask(task);
+          }}
+        />
       )}
 
       {/* Take Action modal */}
