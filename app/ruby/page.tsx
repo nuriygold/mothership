@@ -19,12 +19,19 @@ function RubyPageContent() {
 
 export default function RubyPage() {
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Ruby</h1>
-      <p className="text-sm mb-6" style={{ color: 'var(--muted-foreground)' }}>
-        Ruby handles your comms &amp; writing — drafts, follow-ups, and anything you need put into words.
-      </p>
-      <Suspense fallback={<div className="h-64 rounded-3xl animate-pulse" style={{ background: 'var(--muted)' }} />}>
+    <div
+      className="flex flex-col rounded-2xl overflow-hidden"
+      style={{
+        height: 'calc(100vh - 80px)',
+        border: '1px solid var(--border)',
+        background: 'var(--card)',
+      }}
+    >
+      <Suspense
+        fallback={
+          <div className="flex-1 animate-pulse rounded-2xl" style={{ background: 'var(--muted)' }} />
+        }
+      >
         <RubyPageContent />
       </Suspense>
     </div>
