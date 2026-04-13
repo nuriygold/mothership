@@ -1502,6 +1502,43 @@ export default function FinancePage() {
               <p className="text-2xl font-bold" style={{ color: '#6EE7B7' }}>
                 ${liquidity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <button
+                  onClick={async () => {
+                    setEmeraldStatus('sending');
+                    try {
+                      const res = await fetch('/api/telegram/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: 'Emerald, quick liquidity check — how does our cash position look right now?', botKey: 'bot3' }),
+                      });
+                      setEmeraldStatus(res.ok ? 'sent' : 'error');
+                    } catch { setEmeraldStatus('error'); }
+                    setTimeout(() => setEmeraldStatus('idle'), 3000);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ background: 'rgba(16,185,129,0.22)', color: '#6EE7B7', border: '1px solid rgba(16,185,129,0.35)' }}
+                >
+                  <Send className="w-3 h-3" />
+                  {emeraldStatus === 'sending' ? 'Asking…' : emeraldStatus === 'sent' ? 'Sent ✓' : 'Ask Emerald'}
+                </button>
+                <button
+                  onClick={() => document.getElementById('cashflow-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.8)', border: '1px solid rgba(255,255,255,0.14)' }}
+                >
+                  <TrendingDown className="w-3 h-3" />
+                  Forecast
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.8)', border: '1px solid rgba(255,255,255,0.14)' }}
+                >
+                  <Download className="w-3 h-3" />
+                  {exportedFlash ? 'Exported ✓' : 'Export'}
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-2 mb-4">
               <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
@@ -1509,19 +1546,32 @@ export default function FinancePage() {
             </div>
             {data?.accounts && data.accounts.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-3">
-                {data.accounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className="rounded-2xl p-4"
-                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
-                  >
-                    <p className="text-xs mb-1" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.name}</p>
-                    <p className="text-xl font-bold" style={{ color: '#E8EDF5' }}>
-                      ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                    <TrendBadge trend={account.trendPercentage} />
-                  </div>
-                ))}
+                {data.accounts.map((account) => {
+                  const typeStyle: Record<string, { border: string; badge: string; badgeText: string; label: string }> = {
+                    checking:   { border: 'rgba(110,231,183,0.35)', badge: 'rgba(110,231,183,0.15)', badgeText: '#6EE7B7', label: 'Checking' },
+                    investment: { border: 'rgba(96,165,250,0.35)',  badge: 'rgba(96,165,250,0.15)',  badgeText: '#93C5FD', label: 'Investment' },
+                    credit:     { border: 'rgba(248,113,113,0.35)', badge: 'rgba(248,113,113,0.15)', badgeText: '#FCA5A5', label: 'Credit' },
+                    loan:       { border: 'rgba(220,38,38,0.30)',   badge: 'rgba(220,38,38,0.12)',   badgeText: '#F87171', label: 'Loan' },
+                    income:     { border: 'rgba(52,211,153,0.40)',  badge: 'rgba(52,211,153,0.15)',  badgeText: '#34D399', label: 'Income' },
+                  };
+                  const ts = typeStyle[account.type] ?? { border: 'rgba(255,255,255,0.10)', badge: 'rgba(255,255,255,0.08)', badgeText: 'rgba(232,237,245,0.5)', label: account.type };
+                  return (
+                    <div
+                      key={account.id}
+                      className="rounded-2xl p-4"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid ${ts.border}` }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.name}</p>
+                        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: ts.badge, color: ts.badgeText }}>{ts.label}</span>
+                      </div>
+                      <p className="text-xl font-bold" style={{ color: '#E8EDF5' }}>
+                        ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <TrendBadge trend={account.trendPercentage} />
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 gap-2">
