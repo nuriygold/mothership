@@ -47,15 +47,16 @@ async function upsertAccount(data: {
   name: string;
   type: string;
   balance: number;
+  liquid?: boolean;
   currency?: string;
 }) {
   const existing = await prisma.account.findFirst({ where: { name: data.name } });
   if (existing) {
     const updated = await prisma.account.update({
       where: { id: existing.id },
-      data: { type: data.type, balance: data.balance },
+      data: { type: data.type, balance: data.balance, liquid: data.liquid ?? true },
     });
-    console.log(`  [account] updated  "${data.name}" → $${data.balance}`);
+    console.log(`  [account] updated  "${data.name}" → $${data.balance} (liquid: ${data.liquid ?? true})`);
     return updated;
   }
   const created = await prisma.account.create({
@@ -63,10 +64,11 @@ async function upsertAccount(data: {
       name: data.name,
       type: data.type,
       balance: data.balance,
+      liquid: data.liquid ?? true,
       currency: data.currency ?? 'USD',
     },
   });
-  console.log(`  [account] created  "${data.name}" → $${data.balance}`);
+  console.log(`  [account] created  "${data.name}" → $${data.balance} (liquid: ${data.liquid ?? true})`);
   return created;
 }
 
@@ -165,20 +167,20 @@ async function upsertPlan(data: {
 
 const ACCOUNTS = [
   // ── Checking ──────────────────────────────────────────────────────────────
-  { name: 'Primary Checking',                type: 'checking',   balance:   4549.00 },
+  { name: 'Primary Checking',                type: 'checking',   balance:   4549.00, liquid: true  },
   // ── Investment ────────────────────────────────────────────────────────────
-  { name: 'Betterment',                      type: 'investment', balance:   2383.00 },
-  { name: 'Robinhood',                       type: 'investment', balance:    100.00 },
+  { name: 'Betterment',                      type: 'investment', balance:   2383.00, liquid: true  },
+  { name: 'Robinhood',                       type: 'investment', balance:    100.00, liquid: true  },
   // ── Credit ────────────────────────────────────────────────────────────────
-  { name: 'Chase Credit Card',               type: 'credit',     balance: -19371.00 },
-  { name: 'Capital One Credit Card',         type: 'credit',     balance:  -8862.00 },
-  { name: 'Apple Card',                      type: 'credit',     balance:  -4596.00 },
-  { name: 'Wells Fargo Credit Card',         type: 'credit',     balance:  -1457.00 },
+  { name: 'Chase Credit Card',               type: 'credit',     balance: -19371.00, liquid: false },
+  { name: 'Capital One Credit Card',         type: 'credit',     balance:  -8862.00, liquid: false },
+  { name: 'Apple Card',                      type: 'credit',     balance:  -4596.00, liquid: false },
+  { name: 'Wells Fargo Credit Card',         type: 'credit',     balance:  -1457.00, liquid: false },
   // ── Loans ─────────────────────────────────────────────────────────────────
-  { name: 'Freedom Mortgage (Clairmont)',    type: 'loan',       balance: -287804.00 },
-  { name: 'Planet Home Lending (Peters)',    type: 'loan',       balance: -216664.00 },
+  { name: 'Freedom Mortgage (Clairmont)',    type: 'loan',       balance: -287804.00, liquid: false },
+  { name: 'Planet Home Lending (Peters)',    type: 'loan',       balance: -216664.00, liquid: false },
   // ── Income ────────────────────────────────────────────────────────────────
-  { name: 'Rental Property Cashflow',        type: 'income',     balance:   2500.00 },
+  { name: 'Rental Property Cashflow',        type: 'income',     balance:   2500.00, liquid: true  },
 ];
 
 const PAYABLES = [
