@@ -161,13 +161,13 @@ export default function VisionPage() {
 function VisionPageHeader({
   title = 'My Vision',
   onRefresh,
-  visionMode,
-  onToggleMode,
+  visionMode = false,
+  onToggleMode = () => {},
 }: {
   title?: string;
   onRefresh: () => void;
-  visionMode: boolean;
-  onToggleMode: () => void;
+  visionMode?: boolean;
+  onToggleMode?: () => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 mb-1">
