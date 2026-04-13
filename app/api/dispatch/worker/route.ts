@@ -5,7 +5,10 @@ import { processDispatchQueue } from '@/lib/services/dispatch';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const secret = req.headers.get('x-cron-secret') ?? new URL(req.url).searchParams.get('secret');
+  const secret =
+    req.headers.get('x-cron-secret') ??
+    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ??
+    new URL(req.url).searchParams.get('secret');
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
   }

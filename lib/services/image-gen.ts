@@ -55,7 +55,10 @@ export async function generateVisionImage(
 
   // 2. Upload to Supabase Storage
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  await ensureBucket(supabase);
+  const { data: buckets } = await supabase.storage.listBuckets();
+  if (!buckets?.find((bucket) => bucket.name === BUCKET)) {
+    await supabase.storage.createBucket(BUCKET, { public: true });
+  }
 
   const buffer = Buffer.from(b64, 'base64');
   const fileName = `${itemId}-${Date.now()}.png`;

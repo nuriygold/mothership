@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { listTasks, updateTask, createTask } from '@/lib/services/tasks';
 import { createAuditEvent } from '@/lib/services/audit';
 import { sendTelegramMessage } from '@/lib/services/telegram';
+import { getV2FinanceOverview } from '@/lib/v2/orchestrator';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -117,6 +118,55 @@ async function handleReassign(rest: string) {
   return `Reassigned ${taskId} to ${owner}.`;
 }
 
+async function handleBalance() {
+  const data = await getV2FinanceOverview();
+  if (!data.accounts.length) return 'No accounts found.';
+  const lines = data.accounts.map(
+    (a) => `*${a.name}* (${a.type}): $${a.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  );
+  return `*Account Balances*\n${lines.join('\n')}`;
+}
+
+async function handlePayables() {
+  const data = await getV2FinanceOverview();
+  if (!data.payables.length) return 'No pending payables.';
+  const lines = data.payables.map(
+    (p) => `• ${p.vendor}: $${p.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — ${p.dueDate} [${p.status}]`
+  );
+  return `*Pending Payables*\n${lines.join('\n')}`;
+}
+
+async function handlePlans() {
+  const data = await getV2FinanceOverview();
+  const active = data.plans.filter((p) => p.status === 'ACTIVE');
+  if (!active.length) return 'No active finance plans.';
+  const lines = active.map(
+    (p) => `• *${p.title}*: ${p.progressPercent ?? 0}% complete`
+  );
+  return `*Active Finance Plans*\n${lines.join('\n')}`;
+}
+
+async function handleFinanceSummary() {
+  const data = await getV2FinanceOverview();
+  const liquid = data.accounts
+    .filter((a) => a.balance > 0)
+    .reduce((s, a) => s + a.balance, 0);
+  const debt = data.accounts
+    .filter((a) => a.balance < 0)
+    .reduce((s, a) => s + a.balance, 0);
+  const score = data.healthScore?.score ?? 'N/A';
+  const payableCount = data.payables.length;
+  const fmt = (n: number) =>
+    `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (
+    `*Finance Snapshot*\n` +
+    `Assets: ${fmt(liquid)}\n` +
+    `Debt: ${fmt(debt)}\n` +
+    `Pending payables: ${payableCount}\n` +
+    `Health score: ${score}`
+  );
+}
+
 async function handleListOpen() {
   const tasks = await listTasks();
   const open = (tasks as any[]).filter((t) => t.status !== 'DONE').slice(0, 5);
@@ -134,7 +184,7 @@ export async function POST(req: Request) {
     const command = parseCommand(message.text);
 
     if (!command) {
-      await sendTelegramMessage({ text: 'Unrecognized input. Use /open, /done <id>, /block <id>, /progress <id>.', chatId: String(chatId) });
+      await sendTelegramMessage({ text: 'Unrecognized input. Try /finance for a snapshot, or /open for tasks.', chatId: String(chatId) });
       return NextResponse.json({ ok: true });
     }
 
@@ -155,8 +205,18 @@ export async function POST(req: Request) {
       reply = await handleAssign(command.rest);
     } else if (command.cmd === '/reassign') {
       reply = await handleReassign(command.rest);
+    } else if (command.cmd === '/balance') {
+      reply = await handleBalance();
+    } else if (command.cmd === '/payables') {
+      reply = await handlePayables();
+    } else if (command.cmd === '/plans') {
+      reply = await handlePlans();
+    } else if (command.cmd === '/finance') {
+      reply = await handleFinanceSummary();
     } else {
-      reply = 'Commands: /open, /done <taskId>, /block <taskId>, /progress <taskId>, /priority <taskId> <LOW|MEDIUM|HIGH|CRITICAL>, /create <title>, /assign <taskId> <github_login> [priority], /reassign <taskId> <github_login>';
+      reply =
+        'Task commands: /open, /done <id>, /block <id>, /progress <id>, /priority <id> <level>, /create <title>, /assign <id> <login> [priority], /reassign <id> <login>\n' +
+        'Finance commands: /balance, /payables, /plans, /finance';
     }
 
     await sendTelegramMessage({ text: reply, chatId: String(chatId) });
