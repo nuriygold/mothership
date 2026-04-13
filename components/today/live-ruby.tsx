@@ -109,9 +109,29 @@ export function LiveRuby({
     }
   }, []);
 
-  // Init: load sessions list from localStorage, restore active session
+  // Init: load sessions list from localStorage, migrate legacy single-session, restore active session
   useEffect(() => {
-    const stored = loadLocalSessions();
+    let stored = loadLocalSessions();
+
+    // Migrate legacy ruby-session-id (single session from old UI) into the new list
+    const legacyId = localStorage.getItem('ruby-session-id');
+    if (legacyId && !stored.find((s) => s.id === legacyId)) {
+      const migrated: SessionMeta = {
+        id: legacyId,
+        title: 'Previous conversation',
+        lastMessage: null,
+        updatedAt: new Date().toISOString(),
+      };
+      stored = [...stored, migrated];
+      saveLocalSessions(stored);
+      // Ensure a ChatSession row exists on the server for this legacy session
+      fetch('/api/v2/ruby/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: legacyId, title: 'Previous conversation' }),
+      }).catch(() => {});
+    }
+
     setSessions(stored);
 
     const activeId = localStorage.getItem(ACTIVE_SESSION_KEY);

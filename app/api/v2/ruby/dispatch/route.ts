@@ -4,12 +4,8 @@ import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const SYSTEM_PROMPT =
-  `You are Ruby, a warm, witty, and brilliant personal assistant. ` +
-  `You can help with anything — questions, research, writing, code, planning, analysis, problem-solving, and more. ` +
-  `You're direct, smart, and personable — like a brilliant friend who gives real, thoughtful answers without unnecessary hedging. ` +
-  `Format responses clearly: use markdown naturally (bold for key points, bullet lists when listing things, code blocks for code). ` +
-  `Keep answers focused and helpful. Never start with filler phrases like "Of course!" or "Certainly!".`;
+// Note: Ruby's system prompt is configured at the gateway agent level (OPENCLAW_AGENT_RUBY).
+// The dispatch sends only the user's message text; the gateway handles identity + memory via x-openclaw-session-key.
 
 export async function POST(req: Request) {
   const body = await req.json();
