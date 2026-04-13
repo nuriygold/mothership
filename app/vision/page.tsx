@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, Sparkles, LayoutList } from 'lucide-react';
 import type { V2VisionBoardFeed, V2VisionItem, V2VisionPillar } from '@/lib/v2/types';
 import { PillarColumn } from '@/components/vision/pillar-column';
 import { BoardSummaryBar } from '@/components/vision/board-summary-bar';
@@ -27,6 +27,19 @@ export default function VisionPage() {
   const [selectedItemPillar, setSelectedItemPillar] = useState<V2VisionPillar | null>(null);
   const [addingToPillarId, setAddingToPillarId] = useState<string | null>(null);
   const [addingToPillarLabel, setAddingToPillarLabel] = useState('');
+  const [visionMode, setVisionMode] = useState(false);
+
+  // Persist mode preference
+  useEffect(() => {
+    const saved = localStorage.getItem('vision-board-mode');
+    if (saved === 'vision') setVisionMode(true);
+  }, []);
+
+  function toggleMode() {
+    const next = !visionMode;
+    setVisionMode(next);
+    localStorage.setItem('vision-board-mode', next ? 'vision' : 'ops');
+  }
 
   function handleItemClick(item: V2VisionItem, pillar: V2VisionPillar) {
     setSelectedItem(item);
@@ -95,7 +108,7 @@ export default function VisionPage() {
 
   return (
     <div className="flex flex-col gap-2">
-      <VisionPageHeader title={data.title} onRefresh={() => mutate()} />
+      <VisionPageHeader title={data.title} onRefresh={() => mutate()} visionMode={visionMode} onToggleMode={toggleMode} />
 
       <BoardSummaryBar summary={data.summary} />
 
@@ -107,6 +120,7 @@ export default function VisionPage() {
             pillar={pillar}
             onItemClick={(item) => handleItemClick(item, pillar)}
             onAddItem={handleAddItem}
+            visionMode={visionMode}
           />
         ))}
 
@@ -147,9 +161,13 @@ export default function VisionPage() {
 function VisionPageHeader({
   title = 'My Vision',
   onRefresh,
+  visionMode = false,
+  onToggleMode = () => {},
 }: {
   title?: string;
   onRefresh: () => void;
+  visionMode?: boolean;
+  onToggleMode?: () => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 mb-1">
@@ -161,14 +179,50 @@ function VisionPageHeader({
           Your north star — everything else serves this.
         </p>
       </div>
-      <button
-        onClick={onRefresh}
-        className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-70"
-        style={{ background: 'var(--muted)', color: 'var(--foreground)', opacity: 0.7 }}
-      >
-        <RefreshCw className="w-3.5 h-3.5" />
-        Refresh
-      </button>
+
+      <div className="flex items-center gap-2">
+        {/* Vision / Ops toggle */}
+        <div
+          className="flex items-center rounded-full p-1 gap-0.5"
+          style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}
+        >
+          <button
+            onClick={() => visionMode && onToggleMode()}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150"
+            style={{
+              background: !visionMode ? 'var(--card)' : 'transparent',
+              color: 'var(--foreground)',
+              opacity: !visionMode ? 1 : 0.5,
+              boxShadow: !visionMode ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            }}
+          >
+            <LayoutList className="w-3.5 h-3.5" />
+            Ops
+          </button>
+          <button
+            onClick={() => !visionMode && onToggleMode()}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150"
+            style={{
+              background: visionMode ? 'var(--card)' : 'transparent',
+              color: 'var(--foreground)',
+              opacity: visionMode ? 1 : 0.5,
+              boxShadow: visionMode ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            }}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Vision
+          </button>
+        </div>
+
+        <button
+          onClick={onRefresh}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+          style={{ background: 'var(--muted)', color: 'var(--foreground)', opacity: 0.7 }}
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh
+        </button>
+      </div>
     </div>
   );
 }

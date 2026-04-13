@@ -4,9 +4,8 @@ import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const SYSTEM_PROMPT =
-  `You are Ruby, a warm and direct personal communication assistant.\n` +
-  `Response style: use bullet points, short lines, bold key terms, blank lines between sections, avoid dense paragraphs.`;
+// Note: Ruby's system prompt is configured at the gateway agent level (OPENCLAW_AGENT_RUBY).
+// The dispatch sends only the user's message text; the gateway handles identity + memory via x-openclaw-session-key.
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -30,25 +29,13 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Save user message (fire-and-forget)
+  // Ensure ChatSession exists + save user message (fire-and-forget)
   if (sessionId) {
-    prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }).catch(() => {});
+    prisma.chatSession
+      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+      .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
+      .catch(() => {});
   }
-
-  // Load last 20 messages for context
-  const history = sessionId
-    ? await prisma.chatMessage.findMany({
-        where: { sessionId },
-        orderBy: { createdAt: 'asc' },
-        take: 20,
-      })
-    : [];
-
-  const input = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: text },
-  ];
 
   let upstreamRes: Response;
   try {
@@ -60,7 +47,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input }),
+      body: JSON.stringify({ stream: true, model, input: text }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
@@ -97,6 +84,7 @@ export async function POST(req: Request) {
         if (accumulated && sessionId) {
           prisma.chatMessage
             .create({ data: { sessionId, role: 'assistant', content: accumulated } })
+            .then(() => prisma.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }))
             .catch(() => {});
         }
       }
@@ -123,9 +111,13 @@ export async function POST(req: Request) {
                   accumulated += delta;
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
                 }
-              } else if (eventType === 'response.output_text.done' && evt?.text) {
-                accumulated += evt.text;
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+              } else if (eventType === 'response.output_text.done') {
+                // Only use the full text if no deltas arrived (non-streaming fallback).
+                // If we already accumulated from delta events, .done just confirms completion — don't double-add.
+                if (!accumulated && evt?.text) {
+                  accumulated = evt.text;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+                }
               } else if (eventType === 'response.error') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? evt?.error ?? 'Gateway error' })}\n\n`));
               } else if (eventType === 'response.completed') {

@@ -84,6 +84,12 @@ export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction }: Ka
       className="flex flex-col rounded-3xl overflow-hidden w-full md:flex-shrink-0 md:w-[272px] md:min-w-[240px] md:max-w-[300px]"
       style={{
         border:     `1px solid ${colors.border}`,
+      className="flex flex-col flex-shrink-0 rounded-3xl overflow-hidden"
+      style={{
+        width:     '272px',
+        minWidth:  '240px',
+        maxWidth:  '300px',
+        border:    `1px solid ${colors.border}`,
         background: colors.bg,
       }}
     >

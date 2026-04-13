@@ -10,9 +10,10 @@ interface PillarColumnProps {
   pillar: V2VisionPillar;
   onItemClick: (item: V2VisionItem) => void;
   onAddItem: (pillarId: string) => void;
+  visionMode?: boolean;
 }
 
-export function PillarColumn({ pillar, onItemClick, onAddItem }: PillarColumnProps) {
+export function PillarColumn({ pillar, onItemClick, onAddItem, visionMode = false }: PillarColumnProps) {
   const colors = PILLAR_COLORS[pillar.color];
 
   return (
@@ -50,6 +51,7 @@ export function PillarColumn({ pillar, onItemClick, onAddItem }: PillarColumnPro
             item={item}
             pillarColor={pillar.color}
             onClick={() => onItemClick(item)}
+            visionMode={visionMode}
           />
         ))}
 

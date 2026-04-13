@@ -474,6 +474,7 @@ export async function createTaskPoolIssue(input: {
   priority?: TaskPriority;
   status?: TaskStatus;
   workflowId?: string | null;
+  extraLabels?: string[];
 }): Promise<TaskPoolTask | null> {
   const { owner, repo, token } = getConfig();
   if (!token) {
@@ -515,7 +516,7 @@ export async function createTaskPoolIssue(input: {
     body: JSON.stringify({
       title: input.title,
       body: input.description ?? '',
-      labels: [`domain:${domain}`, priorityLabel, statusLabel],
+      labels: [`domain:${domain}`, priorityLabel, statusLabel, ...(input.extraLabels ?? [])],
     }),
   });
 
