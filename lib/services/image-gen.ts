@@ -17,7 +17,7 @@ function buildPrompt(title: string, description: string | null, customPrompt?: s
 
 async function ensureBucket(supabase: any) {
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (!buckets?.find((b) => b.name === BUCKET)) {
+  if (!buckets?.find((b: { name: string }) => b.name === BUCKET)) {
     await supabase.storage.createBucket(BUCKET, { public: true });
   }
 }
