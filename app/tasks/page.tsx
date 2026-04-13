@@ -85,12 +85,12 @@ function groupIntoColumns(
 
 function KanbanSkeleton() {
   return (
-    <div className="flex gap-4 overflow-x-auto pb-6">
+    <div className="flex flex-col gap-4 pb-6 md:flex-row md:overflow-x-auto">
       {COLUMN_ORDER.map((col) => (
         <div
           key={col}
-          className="flex-shrink-0 rounded-3xl animate-pulse"
-          style={{ width: '272px', minWidth: '240px', height: '420px', background: 'var(--muted)' }}
+          className="rounded-3xl animate-pulse w-full md:flex-shrink-0 md:w-[272px] md:min-w-[240px]"
+          style={{ height: '420px', background: 'var(--muted)' }}
         />
       ))}
     </div>
@@ -191,7 +191,7 @@ export default function TasksPage() {
         <KanbanSkeleton />
       ) : (
         <div
-          className="flex gap-4 overflow-x-auto pb-6"
+          className="flex flex-col gap-4 pb-6 md:flex-row md:overflow-x-auto"
           style={{ minHeight: '400px' }}
         >
           {COLUMN_ORDER.map((col) => (
