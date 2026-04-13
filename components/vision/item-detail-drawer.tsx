@@ -34,6 +34,7 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
   const [dispatching, setDispatching] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [liveImageUrl, setLiveImageUrl] = useState<string | null>(item.imageUrl ?? null);
+  const [customPrompt, setCustomPrompt] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
@@ -166,6 +167,8 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
     try {
       const res = await fetch(`/api/v2/vision/items/${item.id}/generate-image`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customPrompt: customPrompt.trim() || null }),
       });
       const json = await res.json();
       if (res.ok && json.imageUrl) {
@@ -345,6 +348,31 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
                 )}
               </button>
             )}
+          </div>
+
+          {/* Custom image prompt */}
+          <div>
+            <label
+              className="text-xs font-semibold uppercase tracking-wide block mb-1.5"
+              style={{ color: 'var(--foreground)', opacity: 0.45 }}
+            >
+              Image prompt
+            </label>
+            <input
+              type="text"
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder="Describe the vibe, style, or scene… (optional)"
+              className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+              style={{
+                background: 'var(--muted)',
+                border: '1px solid var(--card-border)',
+                color: 'var(--foreground)',
+              }}
+            />
+            <p className="text-[11px] mt-1" style={{ color: 'var(--foreground)', opacity: 0.38 }}>
+              Leave blank to auto-generate from title &amp; description.
+            </p>
           </div>
 
           {/* Description */}

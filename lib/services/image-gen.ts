@@ -6,13 +6,13 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const BUCKET = 'vision-images';
 
-function buildPrompt(title: string, description: string | null): string {
+function buildPrompt(title: string, description: string | null, customPrompt?: string | null): string {
   const detail = description ? ` ${description}.` : '';
-  return (
+  const base =
     `Aspirational vision board photograph representing: ${title}.${detail} ` +
     `Cinematic, photorealistic, warm golden hour light, magazine-quality lifestyle photography. ` +
-    `No text, no words, no logos, no watermarks, no people's faces.`
-  );
+    `No text, no words, no logos, no watermarks, no people's faces.`;
+  return customPrompt ? `${base} Style/scene direction: ${customPrompt}.` : base;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,7 +26,8 @@ async function ensureBucket(supabase: any) {
 export async function generateVisionImage(
   itemId: string,
   title: string,
-  description: string | null
+  description: string | null,
+  customPrompt?: string | null
 ): Promise<string> {
   // 1. Call Flux 2 Pro
   const fluxRes = await fetch(FLUX_ENDPOINT, {
@@ -36,7 +37,7 @@ export async function generateVisionImage(
       Authorization: `Bearer ${FLUX_KEY}`,
     },
     body: JSON.stringify({
-      prompt: buildPrompt(title, description),
+      prompt: buildPrompt(title, description, customPrompt),
       width: 1024,
       height: 1024,
       n: 1,
