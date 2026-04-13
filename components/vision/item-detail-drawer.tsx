@@ -116,29 +116,31 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       });
       const { streamId } = await res.json();
 
-      // Subscribe to the SSE stream
-      const es = new EventSource(`/api/v2/stream?channel=${encodeURIComponent(streamId)}`);
+      // Subscribe to the SSE stream for this vision item
+      const es = new EventSource(`/api/v2/stream/vision/${item.id}`);
       eventSourceRef.current = es;
 
       let settled = false;
 
-      es.onmessage = (e) => {
+      es.addEventListener('emerald.suggestions', (e: MessageEvent) => {
         try {
           const data = JSON.parse(e.data);
-          if (data.type === 'emerald.suggestions') {
-            settled = true;
-            setSuggestions(data.payload.suggestions ?? []);
-            setSuggestionState('done');
-            es.close();
-          } else if (data.type === 'emerald.error') {
-            settled = true;
-            setSuggestionState('error');
-            es.close();
-          }
+          settled = true;
+          setSuggestions(data.suggestions ?? []);
+          setSuggestionState('done');
+          es.close();
         } catch {
-          // non-JSON keep-alive
+          settled = true;
+          setSuggestionState('error');
+          es.close();
         }
-      };
+      });
+
+      es.addEventListener('emerald.error', () => {
+        settled = true;
+        setSuggestionState('error');
+        es.close();
+      });
 
       es.onerror = () => {
         settled = true;
