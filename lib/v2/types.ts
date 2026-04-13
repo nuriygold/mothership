@@ -39,6 +39,8 @@ export type V2DashboardPriorityItem = {
   actionWebhook: string;
   assignedBot: string;
   dueAt?: string | null;
+  /** Task workflow state — used by TakeActionModal to show only relevant actions */
+  taskStatus?: 'Active' | 'Queued' | 'Blocked' | 'Done';
 };
 
 export type V2DashboardBotActivity = {
