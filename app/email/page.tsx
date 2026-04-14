@@ -4,6 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { ExternalLink, Reply, Forward, Bot, Trash2, BellOff, CheckSquare, Calendar, ShoppingCart, Zap, DollarSign, Eye, Send, X } from 'lucide-react';
 import type { V2EmailDraft, V2EmailDraftFeed, V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
+import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+
+const EMAIL_COMMANDS = [
+  { cmd: '/add',    args: '<title>', desc: 'Add task from email to task pool' },
+  { cmd: '/buy',    args: '<item>',  desc: 'Add item to shopping list' },
+  { cmd: '/vision', args: '<item>',  desc: 'Add item to vision board' },
+  { cmd: '/bill',   args: '<vendor> $<amount> [date]', desc: 'Log a bill from email' },
+];
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -289,9 +297,12 @@ export default function EmailPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Email</h1>
-        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Split-pane inbox with hybrid AI drafting from Ruby.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Email</h1>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Split-pane inbox with hybrid AI drafting from Ruby.</p>
+        </div>
+        <SlashCommandSheet commands={EMAIL_COMMANDS} label="email" />
       </div>
 
       <div className="grid gap-0 lg:grid-cols-[420px_1fr]" style={{ minHeight: 'calc(100vh - 200px)' }}>

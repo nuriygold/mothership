@@ -5,6 +5,13 @@ import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
+import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+
+const DISPATCH_COMMANDS = [
+  { cmd: '/dispatch', args: '<title>', desc: 'Create a new dispatch campaign' },
+  { cmd: '/add',      args: '<title>', desc: 'Add task to task pool' },
+  { cmd: '/exec',     args: '<cmd>',   desc: 'Run a terminal command (restricted)' },
+];
 
 type CommandItem = {
   id: string;
@@ -414,6 +421,7 @@ function DispatchPageInner() {
               <CardSubtitle>Create and orchestrate dispatch campaigns via Dispatch-Bot.</CardSubtitle>
             </div>
             <div className="flex items-center gap-2 text-xs">
+              <SlashCommandSheet commands={DISPATCH_COMMANDS} label="dispatch" />
               <span className="text-slate-400">Campaigns</span>
               <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-200">
                 {dispatchCampaignsQuery.data?.length ?? 0}
