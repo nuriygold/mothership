@@ -344,7 +344,7 @@ const HELP_TEXT =
   '/plans — active finance plans\n' +
   '/finance — full snapshot\n' +
   '\n*System commands*\n' +
-  '/marco <cmd> — run terminal command (restricted)';
+  '/polo <cmd> — run terminal command (restricted)';
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
@@ -386,7 +386,7 @@ export async function POST(req: Request) {
       case '/plans':     reply = await handlePlans(); break;
       case '/finance':   reply = await handleFinanceSummary(); break;
       // System
-      case '/marco':     reply = await handleExec(command.rest, chatId); break;
+      case '/polo':      reply = await handleExec(command.rest, chatId); break;
       // Help
       case '/help':      reply = HELP_TEXT; break;
       default:
