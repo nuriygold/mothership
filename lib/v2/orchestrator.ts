@@ -165,7 +165,7 @@ function relativeTime(input: Date) {
   return `${hours} hr ago`;
 }
 
-function deterministicTemplateDrafts(emailId: string, subject: string): V2EmailDraft[] {
+export function deterministicTemplateDrafts(emailId: string, subject: string): V2EmailDraft[] {
   const lowered = subject.toLowerCase();
   const isMeeting = lowered.includes('meeting') || lowered.includes('schedule');
   const isPayment = lowered.includes('invoice') || lowered.includes('payment');

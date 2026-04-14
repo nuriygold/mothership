@@ -47,6 +47,8 @@ export default function EmailPage() {
   const [liveDraft, setLiveDraft] = useState<V2EmailDraft | null>(null);
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('Inbox');
   const [showDetail, setShowDetail] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sendResult, setSendResult] = useState<{ id: string; ok: boolean } | null>(null);
 
   const handleSelectEmail = (id: string) => {
     setSelectedId(id);
@@ -280,17 +282,35 @@ export default function EmailPage() {
                     return (
                       <div
                         key={draft.id}
-                        className="rounded-2xl p-4 cursor-pointer transition-opacity hover:opacity-85"
-                        style={{ background: colors.bg, border: '1px solid rgba(0,0,0,0.04)' }}
+                        className="rounded-2xl p-4 transition-opacity"
+                        style={{
+                          background: colors.bg,
+                          border: '1px solid rgba(0,0,0,0.04)',
+                          cursor: sendingId === draft.id ? 'wait' : 'pointer',
+                          opacity: sendingId && sendingId !== draft.id ? 0.5 : 1,
+                          pointerEvents: sendingId ? 'none' : 'auto',
+                        }}
                         onClick={async () => {
-                          await fetch(draft.approveWebhook, { method: 'POST' });
+                          setSendingId(draft.id);
+                          setSendResult(null);
+                          try {
+                            const res = await fetch(draft.approveWebhook, { method: 'POST' });
+                            setSendResult({ id: draft.id, ok: res.ok });
+                          } catch {
+                            setSendResult({ id: draft.id, ok: false });
+                          } finally {
+                            setSendingId(null);
+                            setTimeout(() => setSendResult(null), 3000);
+                          }
                         }}
                       >
                         <p className="text-sm font-semibold" style={{ color: colors.textColor }}>
-                          {desc.title}
+                          {sendingId === draft.id ? 'Sending…' : desc.title}
                         </p>
                         <p className="text-xs mt-0.5" style={{ color: colors.textColor, opacity: 0.75 }}>
-                          {desc.subtitle}
+                          {sendResult?.id === draft.id
+                            ? sendResult.ok ? 'Sent ✓' : 'Failed to send'
+                            : desc.subtitle}
                         </p>
                       </div>
                     );

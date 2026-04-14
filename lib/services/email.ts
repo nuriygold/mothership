@@ -358,9 +358,9 @@ export type ZohoSendOptions = { to: string; subject: string; body: string; inRep
 export type ZohoSendResult = { ok: true; messageId: string } | { ok: false; error: string };
 
 export async function sendZohoReply(options: ZohoSendOptions): Promise<ZohoSendResult> {
-  const user = process.env.ZOHO_EMAIL_USER || '';
-  const pass = process.env.ZOHO_EMAIL_PASS || '';
-  if (!user || !pass) return { ok: false, error: 'Zoho SMTP credentials not configured. Set ZOHO_EMAIL_USER and ZOHO_EMAIL_PASS.' };
+  const user = process.env.ZOHO_EMAIL_USER ?? process.env.ZOHO_IMAP_USERNAME ?? '';
+  const pass = process.env.ZOHO_EMAIL_PASS ?? process.env.ZOHO_IMAP_PASSWORD ?? process.env.ZOHO_APP_PASSWORD ?? '';
+  if (!user || !pass) return { ok: false, error: 'Zoho SMTP credentials not configured. Set ZOHO_EMAIL_USER and ZOHO_EMAIL_PASS (or ZOHO_IMAP_USERNAME / ZOHO_IMAP_PASSWORD).' };
   const transporter = nodemailer.createTransport({ host: process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com', port: Number(process.env.ZOHO_SMTP_PORT || 587), secure: false, auth: { user, pass } });
   try {
     const info = await transporter.sendMail({ from: options.from ?? `Adrian Cole <${user}>`, to: options.to, subject: options.subject.startsWith('Re:') ? options.subject : `Re: ${options.subject}`, text: options.body, ...(options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}), ...(options.references ? { references: options.references } : {}) });
