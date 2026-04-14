@@ -95,14 +95,23 @@ export default function EmailPage() {
   );
 
   // SSE draft stream
+  const [draftStreamError, setDraftStreamError] = useState<string | null>(null);
   useEffect(() => {
     setLiveDraft(null);
+    setDraftStreamError(null);
     if (!selectedId) return;
     const stream = new EventSource(`/api/v2/stream/email/${selectedId}/drafts`);
     stream.addEventListener('draft.generated', (event) => {
       try {
         const payload = JSON.parse((event as MessageEvent).data);
         setLiveDraft(payload.draft as V2EmailDraft);
+      } catch (_) {}
+    });
+    stream.addEventListener('draft.send_failed', (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent).data);
+        setDraftStreamError(payload.error ?? 'Send failed');
+        setTimeout(() => setDraftStreamError(null), 4000);
       } catch (_) {}
     });
     return () => stream.close();
@@ -223,15 +232,11 @@ export default function EmailPage() {
     setComposeSending(true);
     setComposeResult(null);
     try {
-      const to = composeMode === 'forward' ? composeTo : extractEmail(selected.sender);
-      const res = await fetch(`/api/v2/email/send/${selected.id}/ruby-custom`, {
+      const to = composeMode === 'forward' ? composeTo : undefined; // reply derives `to` server-side
+      const res = await fetch(`/api/v2/email/${selected.id}/reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to,
-          subject: selected.subject,
-          overrideBody: composeBody,
-        }),
+        body: JSON.stringify({ bodyText: composeBody, ...(to ? { to } : {}) }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -580,6 +585,11 @@ export default function EmailPage() {
                   <h3 className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
                     Ruby&apos;s Draft Suggestions
                   </h3>
+                  {draftStreamError && (
+                    <span className="text-xs ml-auto" style={{ color: '#ff5050' }}>
+                      {draftStreamError}
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-3">
                   {drafts.map((draft) => {

@@ -193,6 +193,17 @@ export function deterministicTemplateDrafts(emailId: string, subject: string): V
       approveWebhook: `/api/v2/email/send/${emailId}/measured`,
       source: 'template',
     },
+    {
+      id: `${emailId}-decline`,
+      tone: 'Decline',
+      body: isMeeting
+        ? 'Thank you for reaching out. Unfortunately I am not able to take on additional meetings at this time, but I appreciate you thinking of me.'
+        : isPayment
+          ? 'Thank you for the note. After careful review, we are unable to proceed with this at this time.'
+          : "Thank you for this. After consideration, this isn\u2019t the right fit for us right now — I appreciate you reaching out.",
+      approveWebhook: `/api/v2/email/send/${emailId}/decline`,
+      source: 'template',
+    },
   ];
 }
 
@@ -217,6 +228,17 @@ async function generateRubyDraft(emailId: string, subject: string, preview: stri
       source: 'ruby_custom',
     };
     rubyDraftStore.set(emailId, rubyDraft);
+    // Persist to DB so draft survives serverless cold starts
+    try {
+      await prisma.emailDraftSuggestion.create({
+        data: {
+          emailExternalId: emailId,
+          tone: 'Ruby Custom',
+          body,
+          source: 'ruby_custom',
+        },
+      });
+    } catch { /* best-effort — in-memory cache is still populated */ }
     publishV2Event(`email-drafts:${emailId}`, 'draft.generated', {
       emailId,
       draft: rubyDraft,
@@ -1032,14 +1054,50 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
 // ---------------------------------------------------------------------------
 // Draft store accessors — used by the ruby-custom send route
 // ---------------------------------------------------------------------------
+
+/** Fast synchronous lookup — hits memory only. */
 export function getRubyDraft(emailId: string): V2EmailDraft | undefined {
   return rubyDraftStore.get(emailId);
 }
 
-export function markDraftSent(emailId: string): void {
+/**
+ * Async lookup with DB fallback — use this in send routes so drafts survive
+ * serverless cold starts where the in-memory Map is empty.
+ */
+export async function getRubyDraftWithFallback(emailId: string): Promise<V2EmailDraft | undefined> {
+  const mem = rubyDraftStore.get(emailId);
+  if (mem) return mem;
+
+  try {
+    const record = await prisma.emailDraftSuggestion.findFirst({
+      where: { emailExternalId: emailId, source: 'ruby_custom', approvedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!record) return undefined;
+    const draft: V2EmailDraft = {
+      id: `${emailId}-ruby-custom`,
+      tone: 'Ruby Custom',
+      body: record.body,
+      approveWebhook: `/api/v2/email/send/${emailId}/ruby-custom`,
+      source: 'ruby_custom',
+    };
+    rubyDraftStore.set(emailId, draft); // restore for fast subsequent access
+    return draft;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function markDraftSent(emailId: string): Promise<void> {
   sentDrafts.add(emailId);
   rubyDraftStore.delete(emailId);
   pendingRubyDrafts.delete(emailId);
+  try {
+    await prisma.emailDraftSuggestion.updateMany({
+      where: { emailExternalId: emailId, approvedAt: null },
+      data: { approvedAt: new Date() },
+    });
+  } catch { /* best-effort */ }
 }
 
 // ---------------------------------------------------------------------------
