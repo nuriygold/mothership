@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Plus, RefreshCw, Sparkles, LayoutList } from 'lucide-react';
+import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+
+const VISION_COMMANDS = [
+  { cmd: '/vision', args: '<item>',  desc: 'Add item to vision board' },
+  { cmd: '/add',    args: '<title>', desc: 'Add task to task pool' },
+  { cmd: '/buy',    args: '<item>',  desc: 'Add item to shopping list' },
+];
 import type { V2VisionBoardFeed, V2VisionItem, V2VisionPillar } from '@/lib/v2/types';
 import { PillarColumn } from '@/components/vision/pillar-column';
 import { BoardSummaryBar } from '@/components/vision/board-summary-bar';
@@ -222,6 +229,7 @@ function VisionPageHeader({
           <RefreshCw className="w-3.5 h-3.5" />
           Refresh
         </button>
+        <SlashCommandSheet commands={VISION_COMMANDS} label="vision" />
       </div>
     </div>
   );

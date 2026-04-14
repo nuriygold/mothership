@@ -38,6 +38,45 @@ function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
 }
 
+export async function createCalendarEvent(input: {
+  title: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime?: string;
+  location?: string;
+}): Promise<{ id: string; htmlLink?: string; error?: string }> {
+  if (!isCalendarConfigured()) {
+    return { id: '', error: 'Google Calendar not configured.' };
+  }
+  try {
+    const oauth = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+    const cal = google.calendar({ version: 'v3', auth: oauth });
+    const calendarId = getCalendarId();
+    const start = new Date(input.startDateTime);
+    const end = input.endDateTime
+      ? new Date(input.endDateTime)
+      : new Date(start.getTime() + 60 * 60 * 1000);
+    const res = await cal.events.insert({
+      calendarId,
+      requestBody: {
+        summary: input.title,
+        description: input.description,
+        start: { dateTime: start.toISOString() },
+        end: { dateTime: end.toISOString() },
+        location: input.location,
+      },
+    });
+    return { id: res.data.id ?? '', htmlLink: res.data.htmlLink ?? undefined };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { id: '', error: message };
+  }
+}
+
 export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEvent[]; error?: string }> {
   if (!isCalendarConfigured()) {
     const missing = [

@@ -3,6 +3,15 @@
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown, Info } from 'lucide-react';
+import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+
+const FINANCE_COMMANDS = [
+  { cmd: '/finance',  desc: 'Full snapshot — assets, debt, health score' },
+  { cmd: '/balance',  desc: 'Account balances' },
+  { cmd: '/payables', desc: 'Upcoming bills with due dates' },
+  { cmd: '/plans',    desc: 'Active finance plans & progress' },
+  { cmd: '/bill',     args: '<vendor> $<amount> [date]', desc: 'Log a new bill' },
+];
 import { FinanceEventActionModal } from '@/components/finance/finance-event-action-modal';
 import type {
   V2FinanceOverviewFeed, V2FinancePlan, V2FinanceEvent,
@@ -1453,11 +1462,14 @@ export default function FinancePage() {
             Financial intelligence under Emerald&apos;s stewardship
           </p>
         </div>
-        {updatedAgo && (
-          <span className="text-[11px] pb-0.5" style={{ color: 'rgba(232,237,245,0.30)' }}>
-            Updated {updatedAgo}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {updatedAgo && (
+            <span className="text-[11px] pb-0.5" style={{ color: 'rgba(232,237,245,0.30)' }}>
+              Updated {updatedAgo}
+            </span>
+          )}
+          <SlashCommandSheet commands={FINANCE_COMMANDS} label="finance" />
+        </div>
       </div>
 
       {/* Partial system status banner */}

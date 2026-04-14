@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { getRubyDraft, markDraftSent } from '@/lib/v2/orchestrator';
+import { getRubyDraftWithFallback, markDraftSent } from '@/lib/v2/orchestrator';
 import { sendZohoReply } from '@/lib/services/email';
 import { publishV2Event } from '@/lib/v2/event-bus';
 
@@ -11,7 +11,7 @@ export async function POST(
 ) {
 
   const emailId = params.id;
-  const draft = getRubyDraft(emailId);
+  const draft = await getRubyDraftWithFallback(emailId);
   if (!draft) {
     return NextResponse.json(
       { error: 'Draft not found. Ruby may still be generating — retry in a moment.' },
@@ -38,7 +38,7 @@ export async function POST(
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  markDraftSent(emailId);
+  await markDraftSent(emailId);
   publishV2Event(`email-drafts:${emailId}`, 'draft.sent', { emailId, draftId: draft.id, messageId: result.messageId, to });
   publishV2Event('dashboard', 'email.reply_sent', { emailId, bot: 'Ruby', messageId: result.messageId });
 

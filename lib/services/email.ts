@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import { ImapFlow } from 'imapflow';
 
-type EmailProvider = 'gmail' | 'zoho' | 'outlook' | 'none';
+type EmailProvider = 'gmail' | 'zoho' | 'both' | 'outlook' | 'none';
 
 export type EmailSummary = {
   provider: EmailProvider;
@@ -17,6 +17,8 @@ export type EmailSummary = {
     from: string;
     subject: string;
     date: string;
+    snippet?: string;
+    gmailLink?: string;
   }>;
 };
 
@@ -32,7 +34,7 @@ type LiveEmailCounts = {
 
 const GMAIL_WINDOW_DAYS = 14;
 const GMAIL_MAX_COUNT_RESULTS = 100;
-const GMAIL_MAX_PREVIEWS = 5;
+const GMAIL_MAX_PREVIEWS = 50;
 
 function logEmailEvent(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}) {
   const payload = {
@@ -155,7 +157,7 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
               userId: 'me',
               id,
               format: 'metadata',
-              metadataHeaders: ['From', 'Subject', 'Date'],
+              metadataHeaders: ['From', 'Subject', 'Date', 'List-Unsubscribe'],
             })
           );
         } catch (_err) {
@@ -171,11 +173,14 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
         const from = getHeader(headers, 'From') || 'Unknown sender';
         const subject = getHeader(headers, 'Subject') || '(no subject)';
         const rawDate = getHeader(headers, 'Date');
+        const msgId = result.data.id || `gmail-${index}`;
         return {
-          id: result.data.id || `gmail-${index}`,
+          id: msgId,
           from,
           subject,
           date: rawDate ? toIsoDate(rawDate) : new Date().toISOString(),
+          snippet: result.data.snippet ?? undefined,
+          gmailLink: `https://mail.google.com/mail/u/0/#inbox/${msgId}`,
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -255,7 +260,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
 
     const previews: EmailSummary['previews'] = [];
     const fetchResults = client.fetch(
-      unseen.slice(-10),
+      unseen.slice(-50),
       { envelope: true, source: false, bodyStructure: false },
       { signal: controller.signal }
     );
@@ -268,7 +273,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
         subject: env?.subject ?? '(no subject)',
         date: env?.date ? new Date(env.date).toISOString() : new Date().toISOString(),
       });
-      if (previews.length >= 5) break;
+      if (previews.length >= 50) break;
     }
 
     await client.logout();
@@ -342,6 +347,32 @@ export async function getEmailSummary(): Promise<EmailSummary> {
     };
   }
 
+  if (provider === 'both') {
+    const [gmail, zoho] = await Promise.all([
+      fetchGmailCounts(configuredInboxes),
+      fetchZohoCounts(),
+    ]);
+    const mergedPreviews = [...gmail.previews, ...zoho.previews]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 50);
+    const resolvedInboxes =
+      configuredInboxes.length > 0
+        ? configuredInboxes
+        : gmail.inferredInbox
+          ? [gmail.inferredInbox]
+          : [];
+    return {
+      provider: 'both',
+      inboxes: resolvedInboxes,
+      connected: gmail.connected || zoho.connected,
+      unreadCount: gmail.unread + zoho.unread,
+      needsReplyCount: gmail.needsReply + zoho.needsReply,
+      urgentCount: gmail.urgent + zoho.urgent,
+      previews: mergedPreviews,
+      note: [gmail.connected ? `Gmail: ${gmail.note}` : null, zoho.connected ? `Zoho: ${zoho.note}` : null].filter(Boolean).join(' | '),
+    };
+  }
+
   return {
     provider,
     inboxes: configuredInboxes,
@@ -357,10 +388,70 @@ export async function getEmailSummary(): Promise<EmailSummary> {
 export type ZohoSendOptions = { to: string; subject: string; body: string; inReplyTo?: string; references?: string; from?: string; };
 export type ZohoSendResult = { ok: true; messageId: string } | { ok: false; error: string };
 
+function getGmailOAuth() {
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || '';
+  if (!clientId || !clientSecret || !refreshToken) return null;
+  const oauth = new google.auth.OAuth2(clientId, clientSecret);
+  oauth.setCredentials({ refresh_token: refreshToken });
+  return google.gmail({ version: 'v1', auth: oauth });
+}
+
+export async function deleteGmailMessage(messageId: string): Promise<{ ok: boolean; error?: string }> {
+  const gmail = getGmailOAuth();
+  if (!gmail) return { ok: false, error: 'Gmail OAuth credentials missing.' };
+  try {
+    await gmail.users.messages.trash({ userId: 'me', id: messageId });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function getEmailListUnsubscribeUrl(messageId: string): Promise<string | null> {
+  const gmail = getGmailOAuth();
+  if (!gmail) return null;
+  try {
+    const result = await gmail.users.messages.get({
+      userId: 'me',
+      id: messageId,
+      format: 'metadata',
+      metadataHeaders: ['List-Unsubscribe'],
+    });
+    const header = getHeader(result.data.payload?.headers, 'List-Unsubscribe');
+    if (!header) return null;
+    const urlMatch = header.match(/<(https?:[^>]+)>/);
+    return urlMatch ? urlMatch[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function sendGmailReply(options: { to: string; subject: string; body: string; inReplyTo?: string; references?: string }): Promise<ZohoSendResult> {
+  const gmail = getGmailOAuth();
+  if (!gmail) return { ok: false, error: 'Gmail OAuth credentials missing.' };
+  try {
+    const subject = options.subject.startsWith('Re:') ? options.subject : `Re: ${options.subject}`;
+    const headers = [
+      `To: ${options.to}`,
+      `Subject: ${subject}`,
+      `Content-Type: text/plain; charset=utf-8`,
+      ...(options.inReplyTo ? [`In-Reply-To: ${options.inReplyTo}`] : []),
+      ...(options.references ? [`References: ${options.references}`] : []),
+    ].join('\r\n');
+    const raw = Buffer.from(`${headers}\r\n\r\n${options.body}`).toString('base64url');
+    const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+    return { ok: true, messageId: res.data.id ?? 'unknown' };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function sendZohoReply(options: ZohoSendOptions): Promise<ZohoSendResult> {
-  const user = process.env.ZOHO_EMAIL_USER || '';
-  const pass = process.env.ZOHO_EMAIL_PASS || '';
-  if (!user || !pass) return { ok: false, error: 'Zoho SMTP credentials not configured. Set ZOHO_EMAIL_USER and ZOHO_EMAIL_PASS.' };
+  const user = process.env.ZOHO_EMAIL_USER ?? process.env.ZOHO_IMAP_USERNAME ?? '';
+  const pass = process.env.ZOHO_EMAIL_PASS ?? process.env.ZOHO_IMAP_PASSWORD ?? process.env.ZOHO_APP_PASSWORD ?? '';
+  if (!user || !pass) return { ok: false, error: 'Zoho SMTP credentials not configured. Set ZOHO_EMAIL_USER and ZOHO_EMAIL_PASS (or ZOHO_IMAP_USERNAME / ZOHO_IMAP_PASSWORD).' };
   const transporter = nodemailer.createTransport({ host: process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com', port: Number(process.env.ZOHO_SMTP_PORT || 587), secure: false, auth: { user, pass } });
   try {
     const info = await transporter.sendMail({ from: options.from ?? `Adrian Cole <${user}>`, to: options.to, subject: options.subject.startsWith('Re:') ? options.subject : `Re: ${options.subject}`, text: options.body, ...(options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}), ...(options.references ? { references: options.references } : {}) });
