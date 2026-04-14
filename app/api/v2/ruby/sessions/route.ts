@@ -10,7 +10,26 @@ export async function GET(req: Request) {
   const idsParam = searchParams.get('ids')?.trim();
 
   if (!idsParam) {
-    return Response.json({ sessions: [] });
+    // Cross-device: return all sessions ordered by most recent, limit 100
+    const all = await prisma.chatSession.findMany({
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+      include: {
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+    return Response.json({
+      sessions: all.map((s) => ({
+        id: s.id,
+        title: s.title,
+        lastMessage: s.messages[0]?.content?.slice(0, 120) ?? null,
+        updatedAt: s.updatedAt,
+        createdAt: s.createdAt,
+      })),
+    });
   }
 
   const ids = idsParam

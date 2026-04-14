@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send, Mic, Plus, Trash2, MessageSquare, Pencil, Check, X } from 'lucide-react';
+import { Send, Mic, Plus, Trash2, MessageSquare, Pencil, Check, X, Copy, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -52,6 +52,18 @@ function saveLocalSessions(sessions: SessionMeta[]) {
   localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.slice(0, 50)));
 }
 
+function getSessionDateGroup(updatedAt: string): string {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yest = new Date(todayStart.getTime() - 86400_000);
+  const week = new Date(todayStart.getTime() - 6 * 86400_000);
+  const d = new Date(updatedAt);
+  if (d >= todayStart) return 'Today';
+  if (d >= yest) return 'Yesterday';
+  if (d >= week) return 'This week';
+  return 'Older';
+}
+
 const MARKDOWN_STYLE = `
 .ruby-md { font-size: 0.9375rem; line-height: 1.65; color: inherit; }
 .ruby-md p { margin: 0 0 0.5em 0; }
@@ -90,9 +102,11 @@ export function LiveRuby({
   const [transcribing, setTranscribing] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState('');
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -107,6 +121,19 @@ export function LiveRuby({
       s.textContent = MARKDOWN_STYLE;
       document.head.appendChild(s);
     }
+  }, []);
+
+  // Mobile detection — sets sidebar default and tracks viewport changes
+  useEffect(() => {
+    const check = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      return mobile;
+    };
+    const mobile = check();
+    setSidebarOpen(!mobile);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
   // Init: load sessions list from localStorage, migrate legacy single-session, restore active session
@@ -142,6 +169,43 @@ export function LiveRuby({
     } else {
       startNewSession();
     }
+
+    // Background server sync — fetches all sessions so history persists across devices.
+    // localStorage is the fast initial cache; server is the source of truth.
+    fetch('/api/v2/ruby/sessions')
+      .then((r) => r.json())
+      .then((data: { sessions: Array<{ id: string; title: string | null; lastMessage: string | null; updatedAt: string }> }) => {
+        const serverSessions: SessionMeta[] = (data?.sessions ?? []).map((s) => ({
+          id: s.id,
+          title: s.title,
+          lastMessage: s.lastMessage,
+          updatedAt: s.updatedAt,
+        }));
+        if (serverSessions.length === 0) return;
+
+        setSessions((prev) => {
+          const localMap = new Map(prev.map((s) => [s.id, s]));
+          // Merge: prefer whichever copy is more recently updated
+          const merged = serverSessions.map((srv) => {
+            const local = localMap.get(srv.id);
+            if (!local) return srv;
+            return new Date(local.updatedAt) >= new Date(srv.updatedAt) ? local : srv;
+          });
+          // Keep any local-only sessions not yet flushed to server
+          const serverIds = new Set(serverSessions.map((s) => s.id));
+          const localOnly = prev.filter((s) => !serverIds.has(s.id));
+          const final = [...localOnly, ...merged].sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          );
+          saveLocalSessions(final);
+          return final;
+        });
+
+        // On a fresh device the active session may not be set yet — pick the newest
+        setSessionId((cur) => cur ?? (data.sessions[0]?.id ?? null));
+      })
+      .catch(() => {}); // fail silently — localStorage already loaded
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -231,7 +295,8 @@ export function LiveRuby({
 
   const switchSession = useCallback((id: string) => {
     setSessionId(id);
-  }, []);
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
 
   const deleteSession = useCallback(
     (id: string) => {
@@ -277,6 +342,32 @@ export function LiveRuby({
     },
     [sessionId, sessions, updateSessionTitle]
   );
+
+  const copyMessage = useCallback((id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedMsgId(id);
+      setTimeout(() => setCopiedMsgId((cur) => (cur === id ? null : cur)), 1500);
+    }).catch(() => {});
+  }, []);
+
+  const exportConversation = useCallback(() => {
+    const session = sessions.find((s) => s.id === sessionId);
+    const title = session?.title ?? 'conversation';
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const lines: string[] = [`# ${title}`, `_Exported ${dateStr}_`, ''];
+    messages.forEach((msg) => {
+      if (msg.id === 'welcome') return;
+      lines.push(`### ${msg.role === 'user' ? '**You**' : '**Ruby**'}`);
+      lines.push(msg.text, '');
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ruby-${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${dateStr}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [messages, sessions, sessionId]);
 
   const send = useCallback(
     async (text: string) => {
@@ -446,14 +537,24 @@ export function LiveRuby({
     <div className="flex h-full" style={{ minHeight: 0 }}>
       {/* ── Sidebar ─────────────────────────────────── */}
       {sidebarOpen && (
-        <div
-          className="flex flex-col flex-shrink-0 border-r overflow-hidden"
-          style={{
-            width: '240px',
-            background: 'var(--sidebar, var(--card))',
-            borderColor: 'var(--border)',
-          }}
-        >
+        <>
+          {/* Mobile: darkened backdrop that closes the drawer on tap */}
+          {isMobile && (
+            <div
+              className="fixed inset-0 z-20 bg-black/40"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+          <div
+            className="flex flex-col flex-shrink-0 border-r overflow-hidden"
+            style={{
+              width: '240px',
+              // On mobile, render as a fixed overlay drawer above the content
+              ...(isMobile ? { position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 30 } : {}),
+              background: 'var(--sidebar, var(--card))',
+              borderColor: 'var(--border)',
+            }}
+          >
           {/* Sidebar header */}
           <div className="flex items-center justify-between px-3 py-3 flex-shrink-0">
             <div className="flex items-center gap-2">
@@ -478,122 +579,143 @@ export function LiveRuby({
           </div>
 
           {/* Sessions list */}
-          <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+          <div className="flex-1 overflow-y-auto px-2 pb-2">
             {sessions.length === 0 && (
               <p className="text-xs px-2 py-4 text-center" style={{ color: 'var(--muted-foreground)' }}>
                 No conversations yet
               </p>
             )}
-            {sessions.map((s) => (
-              <div
-                key={s.id}
-                onClick={() => switchSession(s.id)}
-                className="group flex items-start gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors"
-                style={{
-                  background: s.id === sessionId ? 'rgba(190,24,93,0.08)' : 'transparent',
-                }}
-                onMouseEnter={(e) => {
-                  if (s.id !== sessionId)
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  if (s.id !== sessionId)
-                    (e.currentTarget as HTMLElement).style.background = 'transparent';
-                }}
-              >
-                <MessageSquare
-                  className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
-                  style={{ color: s.id === sessionId ? '#be185d' : 'var(--muted-foreground)' }}
-                />
-                <div className="flex-1 min-w-0">
-                  {editingTitle === s.id ? (
-                    <div
-                      className="flex gap-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        autoFocus
-                        value={editTitleValue}
-                        onChange={(e) => setEditTitleValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            updateSessionTitle(s.id, editTitleValue.trim() || 'Untitled');
-                            setEditingTitle(null);
-                          } else if (e.key === 'Escape') {
-                            setEditingTitle(null);
-                          }
-                        }}
-                        className="flex-1 text-xs rounded px-1 py-0.5 outline-none min-w-0"
-                        style={{
-                          background: 'var(--input-background)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--foreground)',
-                        }}
-                      />
-                      <button
-                        onClick={() => {
-                          updateSessionTitle(s.id, editTitleValue.trim() || 'Untitled');
-                          setEditingTitle(null);
-                        }}
-                        className="text-green-500 hover:text-green-600"
-                      >
-                        <Check className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => setEditingTitle(null)}
-                        className="hover:opacity-70"
-                        style={{ color: 'var(--muted-foreground)' }}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <p
-                      className="text-xs font-medium truncate leading-tight"
-                      style={{ color: s.id === sessionId ? '#9d174d' : 'var(--foreground)' }}
-                    >
-                      {s.title ?? 'New conversation'}
-                    </p>
-                  )}
-                  {s.lastMessage && editingTitle !== s.id && (
-                    <p
-                      className="text-[10px] truncate mt-0.5"
-                      style={{ color: 'var(--muted-foreground)' }}
-                    >
-                      {s.lastMessage}
-                    </p>
-                  )}
-                </div>
-                {editingTitle !== s.id && (
-                  <div
-                    className="flex-shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => e.stopPropagation()}
+            {sessions.length > 0 && (() => {
+              const GROUP_ORDER = ['Today', 'Yesterday', 'This week', 'Older'];
+              const grouped = new Map<string, SessionMeta[]>();
+              GROUP_ORDER.forEach((g) => grouped.set(g, []));
+              sessions.forEach((s) => grouped.get(getSessionDateGroup(s.updatedAt))!.push(s));
+
+              return GROUP_ORDER.flatMap((groupLabel) => {
+                const groupSessions = grouped.get(groupLabel)!;
+                if (groupSessions.length === 0) return [];
+                return [
+                  <p
+                    key={`group-${groupLabel}`}
+                    className="text-[10px] font-semibold uppercase tracking-wider px-2 pt-3 pb-1 select-none"
+                    style={{ color: 'var(--muted-foreground)' }}
                   >
-                    <button
-                      onClick={() => {
-                        setEditTitleValue(s.title ?? '');
-                        setEditingTitle(s.id);
+                    {groupLabel}
+                  </p>,
+                  ...groupSessions.map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => switchSession(s.id)}
+                      className="group flex items-start gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors"
+                      style={{
+                        background: s.id === sessionId ? 'rgba(190,24,93,0.08)' : 'transparent',
                       }}
-                      className="hover:opacity-70"
-                      style={{ color: 'var(--muted-foreground)' }}
-                      title="Rename"
+                      onMouseEnter={(e) => {
+                        if (s.id !== sessionId)
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (s.id !== sessionId)
+                          (e.currentTarget as HTMLElement).style.background = 'transparent';
+                      }}
                     >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => deleteSession(s.id)}
-                      className="hover:text-red-500 transition-colors"
-                      style={{ color: 'var(--muted-foreground)' }}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+                      <MessageSquare
+                        className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                        style={{ color: s.id === sessionId ? '#be185d' : 'var(--muted-foreground)' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        {editingTitle === s.id ? (
+                          <div
+                            className="flex gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              autoFocus
+                              value={editTitleValue}
+                              onChange={(e) => setEditTitleValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  updateSessionTitle(s.id, editTitleValue.trim() || 'Untitled');
+                                  setEditingTitle(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingTitle(null);
+                                }
+                              }}
+                              className="flex-1 text-xs rounded px-1 py-0.5 outline-none min-w-0"
+                              style={{
+                                background: 'var(--input-background)',
+                                border: '1px solid var(--border)',
+                                color: 'var(--foreground)',
+                              }}
+                            />
+                            <button
+                              onClick={() => {
+                                updateSessionTitle(s.id, editTitleValue.trim() || 'Untitled');
+                                setEditingTitle(null);
+                              }}
+                              className="text-green-500 hover:text-green-600"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => setEditingTitle(null)}
+                              className="hover:opacity-70"
+                              style={{ color: 'var(--muted-foreground)' }}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <p
+                            className="text-xs font-medium truncate leading-tight"
+                            style={{ color: s.id === sessionId ? '#9d174d' : 'var(--foreground)' }}
+                          >
+                            {s.title ?? 'New conversation'}
+                          </p>
+                        )}
+                        {s.lastMessage && editingTitle !== s.id && (
+                          <p
+                            className="text-[10px] truncate mt-0.5"
+                            style={{ color: 'var(--muted-foreground)' }}
+                          >
+                            {s.lastMessage}
+                          </p>
+                        )}
+                      </div>
+                      {editingTitle !== s.id && (
+                        <div
+                          className="flex-shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => {
+                              setEditTitleValue(s.title ?? '');
+                              setEditingTitle(s.id);
+                            }}
+                            className="hover:opacity-70"
+                            style={{ color: 'var(--muted-foreground)' }}
+                            title="Rename"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => deleteSession(s.id)}
+                            className="hover:text-red-500 transition-colors"
+                            style={{ color: 'var(--muted-foreground)' }}
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )),
+                ];
+              });
+            })()}
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* ── Main chat area ───────────────────────────── */}
@@ -612,10 +734,20 @@ export function LiveRuby({
             <MessageSquare className="w-4 h-4" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate" style={{ color: 'var(--foreground)' }}>
+            <p className="text-sm font-semibold truncate max-w-[140px] sm:max-w-none" style={{ color: 'var(--foreground)' }}>
               {sessions.find((s) => s.id === sessionId)?.title ?? 'New conversation'}
             </p>
           </div>
+          {messages.some((m) => m.id !== 'welcome') && (
+            <button
+              onClick={exportConversation}
+              className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:opacity-70 flex-shrink-0"
+              style={{ background: 'rgba(190,24,93,0.08)', color: '#be185d' }}
+              title="Export conversation"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={startNewSession}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80 flex-shrink-0"
@@ -630,7 +762,7 @@ export function LiveRuby({
         <div
           ref={scrollRef}
           className="flex-1 overflow-y-auto px-4 py-6 space-y-6"
-          style={{ minHeight: 0 }}
+          style={{ minHeight: 0, WebkitOverflowScrolling: 'touch' }}
         >
           {/* Empty state */}
           {showEmpty && (
@@ -649,7 +781,7 @@ export function LiveRuby({
                   Ask me anything — I can write, research, code, plan, and more.
                 </p>
               </div>
-              <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 max-w-sm sm:max-w-lg">
                 {QUICK_PROMPTS.map((p) => (
                   <button
                     key={p}
@@ -674,7 +806,7 @@ export function LiveRuby({
             messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`group flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'bot' && (
                   <div
@@ -685,7 +817,7 @@ export function LiveRuby({
                   </div>
                 )}
                 <div
-                  className="rounded-2xl px-4 py-3 max-w-[80%]"
+                  className="rounded-2xl px-4 py-3 max-w-[88%] sm:max-w-[80%]"
                   style={{
                     background: msg.role === 'user' ? '#be185d' : 'var(--input-background, var(--muted))',
                     color: msg.role === 'user' ? '#fff' : 'var(--foreground)',
@@ -709,6 +841,19 @@ export function LiveRuby({
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                   )}
                 </div>
+                {!msg.streaming && msg.text && (
+                  <button
+                    onClick={() => copyMessage(msg.id, msg.text)}
+                    className="self-end mb-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Copy message"
+                  >
+                    {copiedMsgId === msg.id ? (
+                      <span className="text-[10px] font-medium" style={{ color: '#be185d' }}>Copied!</span>
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)' }} />
+                    )}
+                  </button>
+                )}
               </div>
             ))}
 
@@ -726,8 +871,12 @@ export function LiveRuby({
 
         {/* Input area */}
         <div
-          className="flex-shrink-0 px-4 pb-4 pt-2"
-          style={{ borderTop: '1px solid var(--border)', background: 'var(--card)' }}
+          className="flex-shrink-0 px-4 pt-2"
+          style={{
+            borderTop: '1px solid var(--border)',
+            background: 'var(--card)',
+            paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+          }}
         >
           <div
             className="flex items-end gap-2 rounded-2xl px-3 py-2"
@@ -766,7 +915,7 @@ export function LiveRuby({
               onPointerUp={handleMicPointerUp}
               onPointerLeave={handleMicPointerUp}
               disabled={isBusy && !recording}
-              className="w-8 h-8 flex items-center justify-center rounded-xl flex-shrink-0 transition-all disabled:opacity-40 select-none touch-none"
+              className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl flex-shrink-0 transition-all disabled:opacity-40 select-none touch-none"
               style={{
                 background: recording ? '#f9a8d4' : 'transparent',
                 boxShadow: recording ? '0 0 12px rgba(249,168,212,0.6)' : 'none',
@@ -780,7 +929,7 @@ export function LiveRuby({
             <button
               onClick={() => send(input)}
               disabled={!input.trim() || isBusy}
-              className="w-8 h-8 flex items-center justify-center rounded-xl flex-shrink-0 transition-all disabled:opacity-40"
+              className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl flex-shrink-0 transition-all disabled:opacity-40"
               style={{ background: input.trim() && !isBusy ? '#be185d' : 'var(--muted)', color: input.trim() && !isBusy ? '#fff' : 'var(--muted-foreground)' }}
             >
               <Send className="w-4 h-4" />
