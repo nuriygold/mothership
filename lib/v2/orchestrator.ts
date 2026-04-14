@@ -109,6 +109,14 @@ const BOT_PROFILES: Array<{
 ];
 
 function routeForTask(task: any): BotRouteKey {
+  // Explicit assignee takes priority over keyword inference
+  const assignee = String(task.assignee ?? '').toLowerCase().trim();
+  if (assignee === 'adrian' || assignee === 'main') return 'adrian';
+  if (assignee === 'ruby') return 'ruby';
+  if (assignee === 'emerald') return 'emerald';
+  if (assignee === 'adobe' || assignee === 'adobe pettaway') return 'adobe';
+
+  // Fall back to keyword inference from title + description
   const title = String(task.title ?? '').toLowerCase();
   const description = String(task.description ?? '').toLowerCase();
   const haystack = `${title} ${description}`;

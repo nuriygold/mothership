@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   TrendingUp, Mail, Search, FileText,
-  CheckCircle2, Settings, ChevronDown,
-  WifiOff, Users,
+  CheckCircle2, ChevronDown,
+  WifiOff, Users, Send, X, Loader2,
 } from 'lucide-react';
 import type { V2BotProfile, V2BotsFeed } from '@/lib/v2/types';
 
@@ -37,6 +37,14 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   working: { color: 'var(--color-cyan)', label: 'Working' },
   idle:    { color: '#FFB800',           label: 'Idle'    },
   blocked: { color: '#E53E3E',           label: 'Blocked' },
+};
+
+// Maps bot profile name to its route key used in the API path
+const BOT_KEY: Record<string, string> = {
+  'Adrian':        'adrian',
+  'Ruby':          'ruby',
+  'Emerald':       'emerald',
+  'Adobe Pettaway':'adobe',
 };
 
 function BotCardSkeleton() {
@@ -73,6 +81,12 @@ function BotCardSkeleton() {
 
 function BotCard({ bot }: { bot: V2BotProfile }) {
   const [expanded, setExpanded] = useState(false);
+  const [instructing, setInstructing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [response, setResponse] = useState('');
+  const [responseError, setResponseError] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scheme = COLOR_SCHEME[bot.identity.colorKey] ?? COLOR_SCHEME.lavender;
   const BotIcon = BOT_ICON[bot.identity.iconKey] ?? FileText;
@@ -83,6 +97,81 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
 
   const visibleOutputs = bot.recentOutputs.slice(0, expanded ? undefined : 3);
   const hasMore = !expanded && bot.recentOutputs.length > 3;
+
+  const botKey = BOT_KEY[bot.identity.name] ?? bot.identity.name.toLowerCase();
+
+  function openInstructPanel() {
+    setInstructing(true);
+    setResponse('');
+    setResponseError('');
+    setDraft('');
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }
+
+  function closeInstructPanel() {
+    setInstructing(false);
+    setDraft('');
+    setResponse('');
+    setResponseError('');
+    setSending(false);
+  }
+
+  async function sendInstruction() {
+    const text = draft.trim();
+    if (!text || sending) return;
+
+    setSending(true);
+    setResponse('');
+    setResponseError('');
+
+    try {
+      const res = await fetch(`/api/v2/bots/${botKey}/dispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok || !res.body) {
+        setResponseError(`Request failed (${res.status})`);
+        setSending(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === '[DONE]') break;
+          try {
+            const evt = JSON.parse(dataStr);
+            if (evt.delta) setResponse((r) => r + evt.delta);
+            if (evt.error) setResponseError(evt.error);
+          } catch (_) {}
+        }
+      }
+    } catch (err) {
+      setResponseError(err instanceof Error ? err.message : 'Failed to reach bot');
+    }
+
+    setSending(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void sendInstruction();
+    }
+  }
 
   return (
     <div
@@ -232,23 +321,75 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
         </div>
       </div>
 
-      {/* Footer: actions — disabled until detail pages exist */}
+      {/* Instruction panel */}
+      {instructing && (
+        <div
+          className="mb-4 rounded-2xl p-3 flex flex-col gap-2"
+          style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }}
+        >
+          <div className="flex items-center justify-between mb-0.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: scheme.text }}>
+              Send instruction to {bot.identity.name}
+            </p>
+            <button onClick={closeInstructPanel} className="opacity-40 hover:opacity-70 transition-opacity">
+              <X className="w-3.5 h-3.5" style={{ color: CARD_FG }} />
+            </button>
+          </div>
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type an instruction… (Enter to send)"
+            rows={3}
+            disabled={sending}
+            className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none"
+            style={{
+              background: 'rgba(255,255,255,0.8)',
+              border: '1px solid rgba(0,0,0,0.08)',
+              color: CARD_FG,
+              opacity: sending ? 0.6 : 1,
+            }}
+          />
+          <button
+            onClick={() => void sendInstruction()}
+            disabled={!draft.trim() || sending}
+            className="flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'var(--color-purple)', color: '#fff' }}
+          >
+            {sending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+            ) : (
+              <><Send className="w-4 h-4" /> Send</>
+            )}
+          </button>
+          {/* Streaming response */}
+          {(response || responseError) && (
+            <div
+              className="rounded-xl px-3 py-2.5 text-sm whitespace-pre-wrap"
+              style={{
+                background: responseError ? 'rgba(229,62,62,0.08)' : 'rgba(255,255,255,0.85)',
+                border: `1px solid ${responseError ? 'rgba(229,62,62,0.2)' : 'rgba(0,0,0,0.06)'}`,
+                color: responseError ? '#E53E3E' : CARD_FG,
+              }}
+            >
+              {responseError || response}
+              {sending && !responseError && (
+                <span className="inline-block w-1.5 h-4 ml-0.5 rounded-sm animate-pulse" style={{ background: scheme.text, verticalAlign: 'middle' }} />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer: actions */}
       <div className="mt-auto flex items-center gap-2">
         <button
-          disabled
-          title="Bot detail pages coming soon"
-          className="flex-1 rounded-2xl py-3 text-sm font-semibold text-center opacity-40 cursor-not-allowed"
+          onClick={instructing ? closeInstructPanel : openInstructPanel}
+          className="flex-1 rounded-2xl py-3 text-sm font-semibold text-center transition-opacity hover:opacity-85"
           style={{ background: 'var(--color-purple)', color: '#FFFFFF' }}
         >
-          View Details
-        </button>
-        <button
-          disabled
-          title="Bot settings coming soon"
-          className="w-11 h-11 rounded-2xl flex items-center justify-center opacity-40 cursor-not-allowed"
-          style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)' }}
-        >
-          <Settings className="w-4 h-4" style={{ color: scheme.text }} />
+          {instructing ? 'Close' : 'Instruct'}
         </button>
       </div>
     </div>
