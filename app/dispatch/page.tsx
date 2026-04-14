@@ -10,7 +10,7 @@ import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 const DISPATCH_COMMANDS = [
   { cmd: '/dispatch', args: '<title>', desc: 'Create a new dispatch campaign' },
   { cmd: '/add',      args: '<title>', desc: 'Add task to task pool' },
-  { cmd: '/exec',     args: '<cmd>',   desc: 'Run a terminal command (restricted)' },
+  { cmd: '/marco',    args: '<cmd>',   desc: 'Run a terminal command (restricted)' },
 ];
 
 type CommandItem = {
