@@ -10,6 +10,19 @@ import { TasksFilters } from '@/components/tasks/tasks-filters';
 import type { TaskTimeFilter, TaskSort } from '@/components/tasks/tasks-filters';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { TaskDetailModal } from '@/components/tasks/task-detail-modal';
+import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+
+const TASK_COMMANDS = [
+  { cmd: '/open',     desc: 'List open tasks' },
+  { cmd: '/create',  args: '<title>',             desc: 'Create a new task' },
+  { cmd: '/add',     args: '<title>',             desc: 'Add item to task pool' },
+  { cmd: '/done',    args: '<taskId>',            desc: 'Mark task complete' },
+  { cmd: '/block',   args: '<taskId>',            desc: 'Mark task blocked' },
+  { cmd: '/progress',args: '<taskId>',            desc: 'Mark task in progress' },
+  { cmd: '/priority',args: '<taskId> <level>',    desc: 'Set priority (LOW–CRITICAL)' },
+  { cmd: '/assign',  args: '<taskId> <login>',    desc: 'Assign task to someone' },
+  { cmd: '/reassign',args: '<taskId> <login>',    desc: 'Reassign task' },
+];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -182,13 +195,16 @@ export default function TasksPage() {
   return (
     <div className="flex flex-col gap-5 min-h-0" style={{ height: 'calc(100dvh - var(--app-chrome-h))' }}>
       {/* Title */}
-      <div>
-        <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
-          Tasks
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-          Kanban board · priorities and workflow stages at a glance
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
+            Tasks
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+            Kanban board · priorities and workflow stages at a glance
+          </p>
+        </div>
+        <SlashCommandSheet commands={TASK_COMMANDS} label="tasks" />
       </div>
 
       {/* Status summary bar */}
