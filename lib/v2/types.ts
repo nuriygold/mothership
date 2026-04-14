@@ -139,6 +139,8 @@ export type V2EmailItem = {
   sender: string;
   subject: string;
   preview: string;
+  snippet?: string;
+  gmailLink?: string;
   timestamp: string;
   isRead: boolean;
   sourceIntegration: 'Gmail' | 'Zoho' | 'Internal';

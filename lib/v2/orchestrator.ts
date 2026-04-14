@@ -347,14 +347,18 @@ export async function getV2BotsFeed(): Promise<V2BotsFeed> {
 
 export async function getV2EmailFeed(): Promise<V2EmailFeed> {
   const summary = await getEmailSummary();
+  const integration: V2EmailItem['sourceIntegration'] =
+    summary.provider === 'zoho' ? 'Zoho' : summary.provider === 'gmail' || summary.provider === 'both' ? 'Gmail' : 'Internal';
   const inbox: V2EmailItem[] = summary.previews.map((preview) => ({
     id: preview.id,
     sender: preview.from,
     subject: preview.subject,
-    preview: preview.subject,
+    preview: preview.snippet ?? preview.subject,
+    snippet: preview.snippet,
+    gmailLink: preview.gmailLink,
     timestamp: preview.date,
     isRead: false,
-    sourceIntegration: summary.provider === 'zoho' ? 'Zoho' : summary.provider === 'gmail' ? 'Gmail' : 'Internal',
+    sourceIntegration: (preview as { gmailLink?: string }).gmailLink ? 'Gmail' : integration,
   }));
   return { inbox };
 }

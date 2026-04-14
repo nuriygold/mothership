@@ -621,6 +621,20 @@ model VisionTaskLink {
   @@index([taskId])
 }
 
+model ShoppingItem {
+  id             String    @id @default(uuid())
+  name           String
+  notes          String?
+  source         String?
+  emailId        String?
+  emailSubject   String?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([completedAt])
+}
+
 model ChatSession {
   id        String        @id @default(uuid())
   title     String?
