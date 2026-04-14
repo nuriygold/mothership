@@ -39,12 +39,12 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   blocked: { color: '#E53E3E',           label: 'Blocked' },
 };
 
-// Maps bot profile name to its route key used in the API path
-const BOT_KEY: Record<string, string> = {
-  'Adrian':        'adrian',
-  'Ruby':          'ruby',
-  'Emerald':       'emerald',
-  'Adobe Pettaway':'adobe',
+// Per-bot dedicated dispatch endpoints (each has session support + correct context injection)
+const BOT_DISPATCH_URL: Record<string, string> = {
+  'Adrian':         '/api/v2/adrian/dispatch',
+  'Ruby':           '/api/v2/ruby/dispatch',
+  'Emerald':        '/api/v2/emerald/dispatch',
+  'Adobe Pettaway': '/api/v2/adobe/dispatch',
 };
 
 function BotCardSkeleton() {
@@ -87,6 +87,8 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
   const [response, setResponse] = useState('');
   const [responseError, setResponseError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Stable session ID for this card — persists across instructions within the same page session
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
 
   const scheme = COLOR_SCHEME[bot.identity.colorKey] ?? COLOR_SCHEME.lavender;
   const BotIcon = BOT_ICON[bot.identity.iconKey] ?? FileText;
@@ -98,7 +100,7 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
   const visibleOutputs = bot.recentOutputs.slice(0, expanded ? undefined : 3);
   const hasMore = !expanded && bot.recentOutputs.length > 3;
 
-  const botKey = BOT_KEY[bot.identity.name] ?? bot.identity.name.toLowerCase();
+  const dispatchUrl = BOT_DISPATCH_URL[bot.identity.name] ?? `/api/v2/bots/${bot.identity.name.toLowerCase()}/dispatch`;
 
   function openInstructPanel() {
     setInstructing(true);
@@ -125,10 +127,10 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
     setResponseError('');
 
     try {
-      const res = await fetch(`/api/v2/bots/${botKey}/dispatch`, {
+      const res = await fetch(dispatchUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, sessionId: sessionIdRef.current }),
       });
 
       if (!res.ok || !res.body) {
