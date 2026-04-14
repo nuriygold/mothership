@@ -611,25 +611,33 @@ export default function EmailPage() {
                     return (
                       <div
                         key={draft.id}
-                        className="rounded-2xl p-4 transition-opacity"
+                        className="rounded-2xl p-4"
                         style={{
                           background: colors.bg,
                           border: '1px solid rgba(0,0,0,0.04)',
-                          cursor: sendingId ? 'wait' : 'pointer',
-                          opacity: sendingId && !isSending ? 0.5 : 1,
-                          pointerEvents: sendingId ? 'none' : 'auto',
                         }}
-                        onClick={() => handleSendDraft(draft)}
                       >
                         <p className="text-sm font-semibold" style={{ color: colors.textColor }}>
-                          {isSending ? 'Sending…' : desc.title}
+                          {desc.title}
                         </p>
                         <p className="text-xs mt-0.5" style={{ color: colors.textColor, opacity: 0.75 }}>
-                          {result ? (result.ok ? 'Sent ✓' : 'Failed to send') : desc.subtitle}
+                          {desc.subtitle}
                         </p>
                         <p className="text-xs mt-2 leading-relaxed" style={{ color: colors.textColor, opacity: 0.85 }}>
                           {draft.body}
                         </p>
+                        <div className="flex items-center gap-2 mt-3">
+                          <button
+                            type="button"
+                            disabled={!!sendingId}
+                            onClick={() => handleSendDraft(draft)}
+                            className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-40"
+                            style={{ background: 'rgba(0,0,0,0.12)', color: colors.textColor }}
+                          >
+                            <Send className="w-3 h-3" />
+                            {isSending ? 'Sending…' : result?.ok ? 'Sent ✓' : result ? 'Failed' : 'Send'}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
