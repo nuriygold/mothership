@@ -831,7 +831,8 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
   }
 
   // 2. Add today's high-priority tasks as timeline items
-  const tasksForTimeline = tasks.today
+  // Include active (IN_PROGRESS) tasks first so "Start Working" moves them into the timeline
+  const tasksForTimeline = [...tasks.active, ...tasks.today]
     .filter((t) => t.status !== 'Done')
     .slice(0, 6);
 
