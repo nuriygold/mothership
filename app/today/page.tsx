@@ -5,7 +5,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import {
   Calendar, Star, CheckCircle2, Zap, Video,
-  GripVertical, Trophy, Plus,
+  Trophy, Plus,
   ListChecks, MessageSquare,
   Send, Sparkles, Rocket,
 } from 'lucide-react';
@@ -18,9 +18,10 @@ import { WellnessAnchors } from '@/components/today/wellness-anchors';
 import { StressCard } from '@/components/today/stress-card';
 import { JarvisCard } from '@/components/voice/jarvis-card';
 import type { OuraTodayData } from '@/lib/oura';
-import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
-import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
+import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
+import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
+import { TaskCard } from '@/components/tasks/task-card';
 
 type MergedItem =
   | (V2DashboardTimelineItem & { _calEvent?: false })
@@ -46,71 +47,26 @@ function logTodayClientFailure(action: string, error: unknown, metadata?: Record
   }));
 }
 
-function taskExistsInTimeline(
-  timeline: MergedItem[],
-  candidate: { taskId?: string; title: string }
-): boolean {
-  if (!candidate.taskId) return false;
-  return timeline.some((entry) => {
-    if (entry._calEvent) return false;
-    const timelineItem = entry as V2DashboardTimelineItem;
-    return Boolean(timelineItem.taskId && timelineItem.taskId === candidate.taskId);
-  });
-}
 
-// ── Today-keyed localStorage helpers (Eastern Time boundary = 12am ET) ────────
-function easternDateKey(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-}
-function todayKey(suffix: string) {
-  return `today-${easternDateKey()}-${suffix}`;
-}
-function loadTodayJSON<T>(suffix: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const s = localStorage.getItem(todayKey(suffix));
-    return s ? JSON.parse(s) as T : fallback;
-  } catch { return fallback; }
-}
-function saveTodayJSON(suffix: string, value: unknown) {
-  if (typeof window === 'undefined') return;
-  try { localStorage.setItem(todayKey(suffix), JSON.stringify(value)); } catch { /**/ }
+
+/** Convert a V2TaskItem into the shape TakeActionModal expects. */
+function toActionItem(task: V2TaskItem): V2DashboardPriorityItem {
+  return {
+    id: task.taskId,
+    taskId: task.taskId,
+    title: task.title,
+    source: task.metadata.department,
+    actionWebhook: `/api/v2/tasks/${task.taskId}`,
+    assignedBot: task.metadata.assignedBot,
+    dueAt: task.metadata.dueAtISO,
+  };
 }
 
 export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
+  const { data: tasksData } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const [dragOverEnd, setDragOverEnd] = useState(false);
-
-  // Persisted across refreshes — keyed to today's date, auto-clears tomorrow
-  const [droppedTasks, setDroppedTasksRaw] = useState<V2DashboardTimelineItem[]>([]);
-  const [dismissedPriorityIds, setDismissedPriorityIdsRaw] = useState<Set<string>>(new Set());
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    setDroppedTasksRaw(loadTodayJSON<V2DashboardTimelineItem[]>('droppedTasks', []));
-    setDismissedPriorityIdsRaw(new Set(loadTodayJSON<string[]>('dismissedIds', [])));
-  }, []);
-
-  // Wrapped setters that also persist
-  const setDroppedTasks = useCallback((updater: ((prev: V2DashboardTimelineItem[]) => V2DashboardTimelineItem[]) | V2DashboardTimelineItem[]) => {
-    setDroppedTasksRaw((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      saveTodayJSON('droppedTasks', next);
-      return next;
-    });
-  }, []);
-  const setDismissedPriorityIds = useCallback((updater: ((prev: Set<string>) => Set<string>) | Set<string>) => {
-    setDismissedPriorityIdsRaw((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      saveTodayJSON('dismissedIds', [...next]);
-      return next;
-    });
-  }, []);
-
-  const draggedItemRef = useRef<{ id: string; taskId?: string; title: string; assignedBot: string; source: string } | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
   const [showTrophy, setShowTrophy] = useState(false);
@@ -157,8 +113,6 @@ export default function TodayPage() {
   }, [toastMsg]);
 
   const feed = data;
-  const priorities = feed?.topPriorities ?? [];
-  const availablePriorities = priorities.filter((p) => !dismissedPriorityIds.has(p.id)).slice(0, 10);
   const serverTimeline = feed?.timeline ?? [];
 
   // Apply completedIds overlay to server timeline
@@ -171,19 +125,13 @@ export default function TodayPage() {
     });
   }, [serverTimeline, completedIds]);
 
-  // Merge dropped tasks
-  const taskTimeline = useMemo(() => {
-    if (droppedTasks.length === 0) return timeline;
-    return [...timeline, ...droppedTasks];
-  }, [timeline, droppedTasks]);
-
   // ── Merge calendar events as underlay ──────────────────────────────────────
   const mergedTimeline = useMemo((): MergedItem[] => {
     const calEvents = calData?.events ?? [];
-    const combined: MergedItem[] = [...taskTimeline];
+    const combined: MergedItem[] = [...timeline];
 
     // Add calendar events not already in the timeline (dedup by title similarity)
-    const taskTitles = new Set(taskTimeline.map((t) => t.title.toLowerCase()));
+    const taskTitles = new Set(timeline.map((t) => t.title.toLowerCase()));
     for (const ev of calEvents) {
       if (!taskTitles.has(ev.title.toLowerCase())) {
         combined.push({
@@ -211,7 +159,7 @@ export default function TodayPage() {
     });
 
     return combined;
-  }, [taskTimeline, calData]);
+  }, [timeline, calData]);
 
   // Find NOW position in merged timeline
   const nowIndex = useMemo(() => {
@@ -248,7 +196,6 @@ export default function TodayPage() {
         body: JSON.stringify({ action: 'complete' }),
       });
       if (!res.ok) throw new Error(`Task complete failed (${res.status})`);
-      setDroppedTasks((prev) => prev.filter((item) => item.taskId !== taskId));
       setToastMsg(`✓ "${title}" added to Trophy Collection`);
       await mutate();
     } catch (error) {
@@ -262,10 +209,10 @@ export default function TodayPage() {
         if (idx === -1) return prev;
         return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
       });
-      setToastMsg(`Couldn’t complete "${title}"`);
+      setToastMsg(`Couldn't complete "${title}"`);
       logTodayClientFailure('task_complete', error, { taskId });
     }
-  }, [mutate, mergedTimeline, setDroppedTasks]);
+  }, [mutate, mergedTimeline]);
 
   // ── Undo Done (from Trophy) ──
   const handleUndoDone = useCallback(async (taskId: string) => {
@@ -282,16 +229,15 @@ export default function TodayPage() {
         body: JSON.stringify({ action: 'defer' }),
       });
       if (!res.ok) throw new Error(`Task defer failed (${res.status})`);
-      setDroppedTasks((prev) => prev.filter((item) => item.taskId !== taskId));
       await mutate();
       setToastMsg('Task moved back to timeline');
     } catch (error) {
       setCompletedIds((prev) => new Set([...prev, taskId]));
       setCompletedTitles((prev) => [...prev, title]);
-      setToastMsg(`Couldn’t defer "${title}"`);
+      setToastMsg(`Couldn't defer "${title}"`);
       logTodayClientFailure('task_defer', error, { taskId });
     }
-  }, [mergedTimeline, mutate, setDroppedTasks]);
+  }, [mergedTimeline, mutate]);
 
   // ── Gateway → Navigate to Ruby ──
   const handleGateway = useCallback((title: string) => {
@@ -299,27 +245,6 @@ export default function TodayPage() {
     window.location.href = `/ruby?${params.toString()}`;
   }, []);
 
-  // ── Start Working → Move to Timeline + dismiss from priorities ──
-  const handleStartWorking = useCallback((item: V2DashboardPriorityItem) => {
-    const newEntry: V2DashboardTimelineItem = {
-      time: 'Now',
-      title: item.title,
-      type: 'task',
-      status: 'current',
-      iconType: 'clock',
-      assignedBot: item.assignedBot,
-      taskId: item.taskId,
-      startDate: new Date().toISOString(),
-      endTime: undefined,
-      meetingUrl: undefined,
-    };
-    setDroppedTasks((prev) => {
-      if (item.taskId && prev.some((t) => t.taskId === item.taskId)) return prev;
-      return [...prev, newEntry];
-    });
-    setDismissedPriorityIds((prev) => new Set([...prev, item.id]));
-    setToastMsg(`"${item.title}" moved to Today's Timeline`);
-  }, [setDroppedTasks, setDismissedPriorityIds]);
 
   // ── Dispatch This → Navigate to /dispatch with task pre-filled ──
   const handleDispatch = useCallback((item: V2DashboardPriorityItem) => {
@@ -358,7 +283,7 @@ export default function TodayPage() {
     const normalizedBot = normalizeBotName(newBot);
     const ownerLogin = BOT_OWNER_LOGIN[normalizedBot];
     if (!ownerLogin) {
-      setToastMsg(`Couldn’t assign "${taskTitle}" to ${normalizedBot}`);
+      setToastMsg(`Couldn't assign "${taskTitle}" to ${normalizedBot}`);
       logTodayClientFailure('task_assign', new Error('Unknown bot owner login mapping'), { taskId, botName: normalizedBot });
       return;
     }
@@ -384,82 +309,11 @@ export default function TodayPage() {
         logTodayClientFailure('assignment_telegram', new Error(`Telegram notify failed (${telegramRes.status})`), { taskId, botName: normalizedBot });
       }
     } catch (error) {
-      setToastMsg(`Couldn’t assign "${taskTitle}" to ${normalizedBot}`);
+      setToastMsg(`Couldn't assign "${taskTitle}" to ${normalizedBot}`);
       logTodayClientFailure('task_assign', error, { taskId, botName: normalizedBot, ownerLogin });
     }
   }, [mutate]);
 
-  // ── Drag & Drop ──
-  const handleDragStart = useCallback((item: typeof priorities[0]) => {
-    draggedItemRef.current = { id: item.id, taskId: item.taskId, title: item.title, assignedBot: item.assignedBot, source: item.source };
-  }, []);
-
-  const handleDrop = useCallback((dropIdx: number) => {
-    const dragged = draggedItemRef.current;
-    if (!dragged) return;
-    const hasDuplicate = taskExistsInTimeline(mergedTimeline, dragged);
-    if (hasDuplicate) {
-      setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
-      setDragOverIdx(null);
-      setDragOverEnd(false);
-      draggedItemRef.current = null;
-      setToastMsg(`"${dragged.title}" is already on the timeline`);
-      return;
-    }
-    const refEntry = mergedTimeline[dropIdx];
-    const refStartDate = refEntry && !refEntry._calEvent ? (refEntry as V2DashboardTimelineItem).startDate : refEntry?._calEvent ? (refEntry as { startDate: string }).startDate : undefined;
-    const refTime = refEntry?._calEvent ? (refEntry as { startTime: string }).startTime : (refEntry as V2DashboardTimelineItem)?.time ?? 'TBD';
-    const newEntry: V2DashboardTimelineItem = {
-      time: refTime ?? 'TBD',
-      title: dragged.title,
-      type: 'task',
-      status: 'upcoming',
-      iconType: 'clock',
-      assignedBot: dragged.assignedBot,
-      taskId: dragged.taskId,
-      startDate: refStartDate ?? undefined,
-      endTime: undefined,
-      meetingUrl: undefined,
-    };
-    setDroppedTasks((prev) => [...prev, newEntry]);
-    setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
-    setDragOverIdx(null);
-    setDragOverEnd(false);
-    draggedItemRef.current = null;
-    setToastMsg(`"${dragged.title}" added to timeline`);
-  }, [mergedTimeline, setDismissedPriorityIds]);
-
-  const handleDropEnd = useCallback(() => {
-    const dragged = draggedItemRef.current;
-    if (!dragged) return;
-    const hasDuplicate = taskExistsInTimeline(mergedTimeline, dragged);
-    if (hasDuplicate) {
-      setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
-      setDragOverEnd(false);
-      draggedItemRef.current = null;
-      setToastMsg(`"${dragged.title}" is already on the timeline`);
-      return;
-    }
-    // Far-future startDate ensures sort always places this after everything else
-    const farFuture = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const newEntry: V2DashboardTimelineItem = {
-      time: 'Later',
-      title: dragged.title,
-      type: 'task',
-      status: 'upcoming',
-      iconType: 'clock',
-      assignedBot: dragged.assignedBot,
-      taskId: dragged.taskId,
-      startDate: farFuture,
-      endTime: undefined,
-      meetingUrl: undefined,
-    };
-    setDroppedTasks((prev) => [...prev, newEntry]);
-    setDismissedPriorityIds((prev) => new Set([...prev, dragged.id]));
-    setDragOverEnd(false);
-    draggedItemRef.current = null;
-    setToastMsg(`"${dragged.title}" added to end of timeline`);
-  }, [mergedTimeline, setDismissedPriorityIds]);
 
   // ── Take Action ──
   const handleTakeAction = useCallback((item: V2DashboardPriorityItem) => {
@@ -484,7 +338,6 @@ export default function TodayPage() {
         onDone={() => { void mutate(); }}
         onComplete={handleComplete}
         onGateway={(title) => { handleGateway(title); setActionModalItem(null); }}
-        onStartWorking={(item) => { handleStartWorking(item); setActionModalItem(null); }}
         onDispatch={(item) => { handleDispatch(item); }}
         onAddToVisionBoard={async (taskId) => {
           const res = await fetch(`/api/v2/tasks/${taskId}`, {
@@ -562,16 +415,8 @@ export default function TodayPage() {
                       const isCurrent = calEntry.status === 'current';
                       const isDone = calEntry.status === 'done';
                       return (
-                        <div
-                          key={`cal-${calEntry.id}`}
-                          onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
-                          onDragLeave={() => setDragOverIdx(null)}
-                          onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}
-                        >
+                        <div key={`cal-${calEntry.id}`}>
                           {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
-                          {dragOverIdx === idx && (
-                            <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
-                          )}
                           <div className="rounded-xl p-3 transition-all group"
                             style={{
                               border: isCurrent ? '1.5px solid var(--color-sky-text)' : '1px solid var(--border)',
@@ -625,14 +470,8 @@ export default function TodayPage() {
                     const botColors = normalizedTaskBot ? BOT_COLORS[normalizedTaskBot] : null;
 
                     return (
-                      <div key={`${taskEntry.time}-${taskEntry.title}-${idx}`}
-                        onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
-                        onDragLeave={() => setDragOverIdx(null)}
-                        onDrop={(e) => { e.preventDefault(); handleDrop(idx); }}>
+                      <div key={`${taskEntry.time}-${taskEntry.title}-${idx}`}>
                         {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
-                        {dragOverIdx === idx && (
-                          <div className="h-1 rounded-full mx-2 mb-1" style={{ background: 'var(--color-cyan)', boxShadow: '0 0 8px rgba(0,217,255,0.5)' }} />
-                        )}
                         <div className="rounded-xl p-3 transition-all group"
                           style={{
                             border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
@@ -704,89 +543,42 @@ export default function TodayPage() {
                 </>
               )}
 
-              {/* ── Drop zone below time bar ── */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOverEnd(true); }}
-                onDragLeave={() => setDragOverEnd(false)}
-                onDrop={(e) => { e.preventDefault(); handleDropEnd(); }}
-                className="rounded-xl px-3 py-3 text-center text-[11px] transition-all"
-                style={{
-                  border: dragOverEnd ? '2px dashed var(--color-cyan)' : '2px dashed var(--border)',
-                  background: dragOverEnd ? 'rgba(0,217,255,0.05)' : 'transparent',
-                  color: dragOverEnd ? 'var(--color-cyan)' : 'var(--muted-foreground)',
-                  marginTop: 4,
-                }}
-              >
-                {dragOverEnd ? '📌 Drop to schedule later' : '↓ Drop here to add below current time'}
-              </div>
             </div>
           </Card>
 
-        {/* ── Right: Top Priorities (drag source) ── */}
+        {/* ── Right: Active Tasks ── */}
         <Card>
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Star className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
-              <CardTitle>Top Priorities</CardTitle>
+              <CardTitle>Active Tasks</CardTitle>
             </div>
-            <CardSubtitle>Drag into timeline to schedule · Click to take action</CardSubtitle>
-            <div className="mt-3 space-y-2">
-              {!data ? (
-                // Loading skeleton
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: 'var(--muted)' }} />
-                  ))}
-                </div>
-              ) : availablePriorities.length === 0 ? (
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No priorities right now.</p>
-              ) : (
-                availablePriorities.map((item) => {
-                  const normalizedPriorityBot = normalizeBotName(item.assignedBot);
-                  const borderColor = BOT_BORDER[normalizedPriorityBot] ?? BOT_BORDER.default;
-                  const botC = BOT_COLORS[normalizedPriorityBot];
-                  return (
-                    <div key={item.id}
-                      draggable
-                      onDragStart={() => handleDragStart(item)}
-                      onDragEnd={() => { draggedItemRef.current = null; setDragOverIdx(null); setDragOverEnd(false); }}
-                      className="flex items-center justify-between rounded-xl p-3 group cursor-grab active:cursor-grabbing"
-                      style={{ border: '1px solid var(--border)', background: 'var(--input-background)', borderLeft: `3px solid ${borderColor}` }}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <GripVertical className="w-3.5 h-3.5 flex-shrink-0 opacity-30 group-hover:opacity-70 transition-opacity" />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{item.title}</p>
-                            {item.dueAt && new Date(item.dueAt).getTime() < Date.now() && (
-                              <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(255,92,92,0.15)', color: '#FF5C5C' }}>OVERDUE</span>
-                            )}
-                          </div>
-                          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{item.source}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {botC && (
-                          <button onClick={() => handleBotTelegram(normalizedPriorityBot, item.title)}
-                            className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 cursor-pointer"
-                            style={{ background: botC.bg, color: botC.text }}
-                            title={`Message ${normalizedPriorityBot} on Telegram`}>
-                            {normalizedPriorityBot}
-                          </button>
-                        )}
-                        {item.taskId && (
-                          <AssignToDropdown currentBot={normalizedPriorityBot} taskTitle={item.title}
-                            onAssign={(bot) => handleAssign(item.taskId!, item.title, bot)} />
-                        )}
-                        <button className="rounded-full px-3 py-1.5 text-xs font-semibold hover:opacity-85"
-                          style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}
-                          onClick={() => handleTakeAction(item)}>
-                          Take Action
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+            {tasksData && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+                {tasksData.active.length}
+              </span>
+            )}
+          </div>
+          <div className="mt-3 space-y-2">
+            {!tasksData ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: 'var(--muted)' }} />
+                ))}
+              </div>
+            ) : tasksData.active.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No active tasks right now.</p>
+            ) : (
+              tasksData.active.map((task) => (
+                <TaskCard
+                  key={task.taskId}
+                  task={task}
+                  onTakeAction={(t) => handleTakeAction(toActionItem(t))}
+                />
+              ))
+            )}
+          </div>
         </Card>
       </div>
 
