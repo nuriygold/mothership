@@ -18,9 +18,19 @@ interface TakeActionModalProps {
   onAddToVisionBoard?: (taskId: string) => Promise<void>;
   /** Hide the "Approve Route to {bot}" row — useful in Kanban context (default: true) */
   showRouteApproval?: boolean;
+  /**
+   * Current task state — used to show only relevant status-change actions.
+   * When omitted all actions are shown for backward compatibility.
+   */
+  taskStatus?: 'Active' | 'Queued' | 'Blocked' | 'Done';
 }
 
-export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch, onAddToVisionBoard, showRouteApproval = true }: TakeActionModalProps) {
+export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch, onAddToVisionBoard, showRouteApproval = true, taskStatus: taskStatusProp }: TakeActionModalProps) {
+  // Prefer the explicit prop; fall back to item.taskStatus so callers that
+  // don't pass the prop (e.g. Today page) still get status-aware behaviour
+  // once the API populates it on the item.
+  const taskStatus = taskStatusProp ?? item.taskStatus;
+
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -61,6 +71,12 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
 
   const normalizedBot = normalizeBotName(item.assignedBot);
   const botC = BOT_COLORS[normalizedBot] ?? BOT_COLORS.Adrian;
+  // Which status-change actions make sense for the current task state
+  const showDone    = item.taskId && taskStatus !== 'Done';
+  const showStart   = item.taskId && taskStatus !== 'Active' && taskStatus !== 'Done';
+  const showDefer   = item.taskId && taskStatus !== 'Done';
+  const showUnblock = item.taskId && taskStatus === 'Blocked';
+
   const actions: Array<{
     key: string;
     icon: ElementType<{ className?: string; style?: CSSProperties }>;
@@ -70,7 +86,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
     textColor: string;
     fn: () => void | Promise<void>;
   }> = [
-    ...(item.taskId
+    ...(showDone
       ? [
           {
             key: 'done',
@@ -79,10 +95,32 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
             desc: 'Complete this task and log it to Trophy',
             color: 'var(--color-mint)',
             textColor: 'var(--color-mint-text)',
-            fn: () => {
-              onComplete(item.taskId!);
+            fn: () => { onComplete(item.taskId!); },
+          },
+        ]
+      : []),
+    ...(showUnblock
+      ? [
+          {
+            key: 'unblock',
+            icon: Zap,
+            label: 'Unblock',
+            desc: 'Mark as unblocked and move back to In Progress',
+            color: 'var(--color-cyan)',
+            textColor: '#0A0E1A',
+            fn: async () => {
+              const res = await fetch(`/api/v2/tasks/${item.taskId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'unblock' }),
+              });
+              if (!res.ok) throw new Error(`${res.status}`);
             },
           },
+        ]
+      : []),
+    ...(showStart
+      ? [
           {
             key: 'start',
             icon: Zap,
@@ -100,6 +138,10 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
               onStartWorking?.(item);
             },
           },
+        ]
+      : []),
+    ...(showDefer
+      ? [
           {
             key: 'defer',
             icon: Clock,

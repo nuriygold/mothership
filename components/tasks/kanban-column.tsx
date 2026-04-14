@@ -73,9 +73,11 @@ interface KanbanColumnProps {
   /** IDs optimistically marked as vision-board-linked before next server refresh */
   visionLinkedIds: Set<string>;
   onTakeAction: (task: V2TaskItem) => void;
+  /** Opens the detail modal when a card body is clicked */
+  onCardClick: (task: V2TaskItem) => void;
 }
 
-export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction }: KanbanColumnProps) {
+export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction, onCardClick }: KanbanColumnProps) {
   const colors = KANBAN_COLUMN_COLORS[title];
 
   return (
@@ -127,10 +129,11 @@ export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction }: Ka
         </span>
       </div>
 
-      {/* Card list — scrolls independently */}
+      {/* Card list — scrolls independently within the bounded column height */}
       <div
-        className="flex flex-col gap-2.5 p-3 overflow-y-auto flex-1"
-        style={{ maxHeight: 'calc(100vh - 260px)' }}
+        className="flex flex-col gap-2.5 p-3 overflow-y-auto flex-1 min-h-0"
+        data-droppable="true"
+        data-column-key={title}
       >
         {tasks.length === 0 ? (
           <div
@@ -148,9 +151,12 @@ export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction }: Ka
               task={task}
               visionBoardLinked={visionLinkedIds.has(task.taskId)}
               onTakeAction={onTakeAction}
+              onCardClick={onCardClick}
             />
           ))
         )}
+        {/* Placeholder slot for future DnD drop indicator */}
+        <div data-drop-placeholder="true" className="hidden" />
       </div>
     </div>
   );

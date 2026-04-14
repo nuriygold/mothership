@@ -745,6 +745,7 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
         actionWebhook: `/api/v2/actions/${action.id}/approve`,
         assignedBot: item.metadata.assignedBot,
         dueAt: item.metadata.dueAtISO ?? null,
+        taskStatus: item.status,
       };
     });
 
