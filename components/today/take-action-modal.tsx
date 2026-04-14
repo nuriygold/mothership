@@ -25,7 +25,12 @@ interface TakeActionModalProps {
   taskStatus?: 'Active' | 'Queued' | 'Blocked' | 'Done';
 }
 
-export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch, onAddToVisionBoard, showRouteApproval = true, taskStatus }: TakeActionModalProps) {
+export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, onStartWorking, onDispatch, onAddToVisionBoard, showRouteApproval = true, taskStatus: taskStatusProp }: TakeActionModalProps) {
+  // Prefer the explicit prop; fall back to item.taskStatus so callers that
+  // don't pass the prop (e.g. Today page) still get status-aware behaviour
+  // once the API populates it on the item.
+  const taskStatus = taskStatusProp ?? item.taskStatus;
+
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
