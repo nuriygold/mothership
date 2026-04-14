@@ -15,9 +15,7 @@ import { NowLine } from '@/components/today/now-line';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
-import { StressCard } from '@/components/today/stress-card';
 import { JarvisCard } from '@/components/voice/jarvis-card';
-import type { OuraTodayData } from '@/lib/oura';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
@@ -116,16 +114,7 @@ export default function TodayPage() {
   const [showTrophy, setShowTrophy] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [actionModalItem, setActionModalItem] = useState<V2DashboardPriorityItem | null>(null);
-  const [ouraToday, setOuraToday] = useState<OuraTodayData | null>(null);
   const nowRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-    fetch(`/api/oura/today?date=${today}`)
-      .then((r) => r.json() as Promise<OuraTodayData>)
-      .then(setOuraToday)
-      .catch(() => null);
-  }, []);
 
   // EventSource with retry (up to 3 attempts: 2s, 4s, 8s backoff)
   useEffect(() => {
@@ -842,16 +831,6 @@ export default function TodayPage() {
         <JarvisCard />
       </div>
 
-      {/* ── Stress Card ── */}
-      {ouraToday?.connected && ouraToday.stressSummary && (
-        <div className="max-sm:mx-3">
-          <StressCard
-            summary={ouraToday.stressSummary}
-            stressHighMinutes={ouraToday.stressHighMinutes}
-            userName={feed?.userContext?.userName}
-          />
-        </div>
-      )}
     </div>
     </>
   );
