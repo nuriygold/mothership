@@ -1,21 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus } from 'lucide-react';
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
-import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
-import type { DraggableAttributes } from '@dnd-kit/core';
 import type { V2VisionPillar, V2VisionItem } from '@/lib/v2/types';
 import { PillarHeader } from './pillar-header';
-import { SortableItemWrapper } from './sortable-item-wrapper';
+import { VisionItemCard } from './vision-item-card';
 import { PILLAR_COLORS } from './pillar-colors';
 
 interface PillarColumnProps {
@@ -23,49 +11,10 @@ interface PillarColumnProps {
   onItemClick: (item: V2VisionItem) => void;
   onAddItem: (pillarId: string) => void;
   visionMode?: boolean;
-  dragHandleProps?: { listeners: SyntheticListenerMap | undefined; attributes: DraggableAttributes };
-  onItemsReordered: (pillarId: string, orderedIds: string[]) => void;
 }
 
-export function PillarColumn({
-  pillar,
-  onItemClick,
-  onAddItem,
-  visionMode = false,
-  dragHandleProps,
-  onItemsReordered,
-}: PillarColumnProps) {
+export function PillarColumn({ pillar, onItemClick, onAddItem, visionMode = false }: PillarColumnProps) {
   const colors = PILLAR_COLORS[pillar.color];
-  const [localItems, setLocalItems] = useState<V2VisionItem[]>(pillar.items);
-  const isDraggingItem = useRef(false);
-
-  // Sync from SWR re-fetches, but not during an active drag
-  useEffect(() => {
-    if (!isDraggingItem.current) {
-      setLocalItems(pillar.items);
-    }
-  }, [pillar.items]);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  );
-
-  const handleItemDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      isDraggingItem.current = false;
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const oldIndex = localItems.findIndex((i) => i.id === active.id);
-      const newIndex = localItems.findIndex((i) => i.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-
-      const reordered = arrayMove(localItems, oldIndex, newIndex);
-      setLocalItems(reordered);
-      onItemsReordered(pillar.id, reordered.map((i) => i.id));
-    },
-    [localItems, onItemsReordered, pillar.id]
-  );
 
   return (
     <div
@@ -77,7 +26,7 @@ export function PillarColumn({
         border: `1px solid ${colors.border}`,
       }}
     >
-      <PillarHeader pillar={pillar} dragHandleProps={dragHandleProps} />
+      <PillarHeader pillar={pillar} />
 
       {/* Items */}
       <div
@@ -96,25 +45,15 @@ export function PillarColumn({
           </div>
         )}
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={() => { isDraggingItem.current = true; }}
-          onDragEnd={handleItemDragEnd}
-          onDragCancel={() => { isDraggingItem.current = false; }}
-        >
-          <SortableContext items={localItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            {localItems.map((item) => (
-              <SortableItemWrapper
-                key={item.id}
-                item={item}
-                pillarColor={pillar.color}
-                onClick={() => onItemClick(item)}
-                visionMode={visionMode}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
+        {pillar.items.map((item) => (
+          <VisionItemCard
+            key={item.id}
+            item={item}
+            pillarColor={pillar.color}
+            onClick={() => onItemClick(item)}
+            visionMode={visionMode}
+          />
+        ))}
 
         {/* Add item button */}
         <button

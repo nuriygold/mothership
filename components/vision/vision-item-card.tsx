@@ -1,8 +1,5 @@
 'use client';
 
-import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
-import type { DraggableAttributes } from '@dnd-kit/core';
-import { GripVertical } from 'lucide-react';
 import type { V2VisionItem, VisionPillarColor, VisionItemStatus } from '@/lib/v2/types';
 import { ProgressRing } from './progress-ring';
 import { LinkedBadge } from './linked-badge';
@@ -20,10 +17,9 @@ interface VisionItemCardProps {
   pillarColor: VisionPillarColor;
   onClick: () => void;
   visionMode?: boolean;
-  dragHandleProps?: { listeners: SyntheticListenerMap | undefined; attributes: DraggableAttributes };
 }
 
-export function VisionItemCard({ item, pillarColor, onClick, visionMode = false, dragHandleProps }: VisionItemCardProps) {
+export function VisionItemCard({ item, pillarColor, onClick, visionMode = false }: VisionItemCardProps) {
   const colors = PILLAR_COLORS[pillarColor];
   const statusMeta = STATUS_LABELS[item.status];
   const hasImage = Boolean(item.imageUrl);
@@ -139,18 +135,6 @@ export function VisionItemCard({ item, pillarColor, onClick, visionMode = false,
             <ProgressRing percent={item.overallProgressPercent} size={32} strokeWidth={2.5} color="#fff" />
           </div>
         )}
-
-        {/* Drag handle — top left, visible on hover */}
-        {dragHandleProps && (
-          <div
-            className="absolute top-2 left-2 opacity-0 group-hover:opacity-70 transition-opacity cursor-grab active:cursor-grabbing z-10 rounded p-0.5"
-            style={{ background: 'rgba(0,0,0,0.25)' }}
-            {...dragHandleProps.listeners}
-            {...dragHandleProps.attributes}
-          >
-            <GripVertical className="w-3.5 h-3.5 text-white" />
-          </div>
-        )}
       </button>
     );
   }
@@ -159,23 +143,13 @@ export function VisionItemCard({ item, pillarColor, onClick, visionMode = false,
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-2xl transition-all duration-200 hover:shadow-md group overflow-hidden relative"
+      className="w-full text-left rounded-2xl transition-all duration-200 hover:shadow-md group overflow-hidden"
       style={{
         background: 'var(--card)',
         border: '1px solid var(--card-border)',
         borderLeft: hasImage ? '1px solid var(--card-border)' : `4px solid ${colors.accent}`,
       }}
     >
-      {/* Drag handle — top left, visible on hover */}
-      {dragHandleProps && (
-        <div
-          className="absolute top-2 left-2 opacity-0 group-hover:opacity-50 transition-opacity cursor-grab active:cursor-grabbing z-10 rounded p-0.5"
-          {...dragHandleProps.listeners}
-          {...dragHandleProps.attributes}
-        >
-          <GripVertical className="w-3.5 h-3.5" style={{ color: 'var(--foreground)' }} />
-        </div>
-      )}
       {hasImage && (
         <div className="relative w-full" style={{ height: '140px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

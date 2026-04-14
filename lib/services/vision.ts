@@ -297,19 +297,3 @@ export async function unlinkTaskFromItem(visionItemId: string, taskId: string) {
     data: { visionItemId: null },
   });
 }
-
-export async function reorderVisionPillars(boardId: string, orderedIds: string[]): Promise<void> {
-  await prisma.$transaction(
-    orderedIds.map((id, i) =>
-      prisma.visionPillar.update({ where: { id, boardId }, data: { sortOrder: i } })
-    )
-  );
-}
-
-export async function reorderVisionItems(pillarId: string, orderedIds: string[]): Promise<void> {
-  await prisma.$transaction(
-    orderedIds.map((id, i) =>
-      prisma.visionItem.update({ where: { id, pillarId }, data: { sortOrder: i } })
-    )
-  );
-}

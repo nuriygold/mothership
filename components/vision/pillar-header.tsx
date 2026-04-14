@@ -1,35 +1,22 @@
 'use client';
 
-import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
-import type { DraggableAttributes } from '@dnd-kit/core';
-import { GripVertical } from 'lucide-react';
 import type { V2VisionPillar } from '@/lib/v2/types';
 import { PILLAR_COLORS } from './pillar-colors';
 
 interface PillarHeaderProps {
   pillar: V2VisionPillar;
-  dragHandleProps?: { listeners: SyntheticListenerMap | undefined; attributes: DraggableAttributes };
 }
 
-export function PillarHeader({ pillar, dragHandleProps }: PillarHeaderProps) {
+export function PillarHeader({ pillar }: PillarHeaderProps) {
   const colors = PILLAR_COLORS[pillar.color];
 
   return (
     <div
-      className="rounded-t-3xl px-4 pt-4 pb-3 group"
+      className="rounded-t-3xl px-4 pt-4 pb-3"
       style={{ background: colors.bg }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          {dragHandleProps && (
-            <div
-              className="opacity-0 group-hover:opacity-60 transition-opacity cursor-grab active:cursor-grabbing flex-shrink-0 self-center"
-              {...dragHandleProps.listeners}
-              {...dragHandleProps.attributes}
-            >
-              <GripVertical className="w-4 h-4" style={{ color: colors.text }} />
-            </div>
-          )}
           {pillar.emoji && (
             <span className="text-2xl leading-none">{pillar.emoji}</span>
           )}

@@ -1,29 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Plus, RefreshCw, Sparkles, LayoutList } from 'lucide-react';
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  horizontalListSortingStrategy,
-  sortableKeyboardCoordinates,
-  arrayMove,
-} from '@dnd-kit/sortable';
 import type { V2VisionBoardFeed, V2VisionItem, V2VisionPillar } from '@/lib/v2/types';
+import { PillarColumn } from '@/components/vision/pillar-column';
 import { BoardSummaryBar } from '@/components/vision/board-summary-bar';
 import { ItemDetailDrawer } from '@/components/vision/item-detail-drawer';
 import { AddItemModal } from '@/components/vision/add-item-modal';
-import { SortablePillarWrapper } from '@/components/vision/sortable-pillar-wrapper';
-import { reorderPillars, reorderItems } from '@/lib/v2/vision-reorder';
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -38,16 +22,6 @@ export default function VisionPage() {
     fetcher,
     { refreshInterval: 30_000 }
   );
-
-  const [localPillars, setLocalPillars] = useState<V2VisionPillar[]>([]);
-  const isDraggingPillar = useRef(false);
-
-  // Sync localPillars from SWR, but not while a pillar drag is in flight
-  useEffect(() => {
-    if (!isDraggingPillar.current && data?.pillars) {
-      setLocalPillars(data.pillars);
-    }
-  }, [data]);
 
   const [selectedItem, setSelectedItem] = useState<V2VisionItem | null>(null);
   const [selectedItemPillar, setSelectedItemPillar] = useState<V2VisionPillar | null>(null);
@@ -87,54 +61,6 @@ export default function VisionPage() {
     setAddingToPillarId(null);
     setAddingToPillarLabel('');
   }
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handlePillarDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      isDraggingPillar.current = false;
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const oldIndex = localPillars.findIndex((p) => p.id === active.id);
-      const newIndex = localPillars.findIndex((p) => p.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-
-      const reordered = arrayMove(localPillars, oldIndex, newIndex);
-      const snapshot = localPillars;
-      setLocalPillars(reordered);
-
-      try {
-        await reorderPillars(reordered.map((p) => p.id));
-      } catch {
-        setLocalPillars(snapshot);
-      }
-    },
-    [localPillars]
-  );
-
-  const handleItemsReordered = useCallback(
-    async (pillarId: string, orderedIds: string[]) => {
-      const snapshot = localPillars;
-      setLocalPillars((prev) =>
-        prev.map((p) => {
-          if (p.id !== pillarId) return p;
-          const itemMap = new Map(p.items.map((i) => [i.id, i]));
-          return { ...p, items: orderedIds.map((id) => itemMap.get(id)!).filter(Boolean) };
-        })
-      );
-
-      try {
-        await reorderItems(pillarId, orderedIds);
-      } catch {
-        setLocalPillars(snapshot);
-      }
-    },
-    [localPillars]
-  );
 
   if (error) {
     return (
@@ -188,29 +114,18 @@ export default function VisionPage() {
 
       {/* Board — horizontal scroll */}
       <div className="flex gap-4 overflow-x-auto pb-6" style={{ minHeight: '400px' }}>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={() => { isDraggingPillar.current = true; }}
-          onDragEnd={handlePillarDragEnd}
-          onDragCancel={() => { isDraggingPillar.current = false; }}
-        >
-          <SortableContext items={localPillars.map((p) => p.id)} strategy={horizontalListSortingStrategy}>
-            {localPillars.map((pillar) => (
-              <SortablePillarWrapper
-                key={pillar.id}
-                pillar={pillar}
-                onItemClick={(item) => handleItemClick(item, pillar)}
-                onAddItem={handleAddItem}
-                visionMode={visionMode}
-                onItemsReordered={handleItemsReordered}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
+        {data.pillars.map((pillar) => (
+          <PillarColumn
+            key={pillar.id}
+            pillar={pillar}
+            onItemClick={(item) => handleItemClick(item, pillar)}
+            onAddItem={handleAddItem}
+            visionMode={visionMode}
+          />
+        ))}
 
         {/* + Add Pillar */}
-        <AddPillarButton nextSortOrder={localPillars.length} onCreated={() => mutate()} />
+        <AddPillarButton onCreated={() => mutate()} />
       </div>
 
       {/* Item detail drawer */}
@@ -312,7 +227,7 @@ function VisionPageHeader({
   );
 }
 
-function AddPillarButton({ nextSortOrder, onCreated }: { nextSortOrder: number; onCreated: () => void }) {
+function AddPillarButton({ onCreated }: { onCreated: () => void }) {
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
   const [saving, setSaving] = useState(false);
@@ -325,7 +240,7 @@ function AddPillarButton({ nextSortOrder, onCreated }: { nextSortOrder: number; 
       const res = await fetch('/api/v2/vision/pillars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: label.trim(), sortOrder: nextSortOrder }),
+        body: JSON.stringify({ label: label.trim() }),
       });
       if (res.ok) {
         setLabel('');
