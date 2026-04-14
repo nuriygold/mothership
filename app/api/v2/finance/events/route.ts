@@ -1,11 +1,8 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { resolveFinanceEvent } from '@/lib/finance/events';
 
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   try {
     const body = await req.json();

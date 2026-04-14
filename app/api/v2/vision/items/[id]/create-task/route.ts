@@ -1,4 +1,3 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { linkTaskToItem } from '@/lib/services/vision';
 import { prisma } from '@/lib/prisma';
 import { createTaskPoolIssue, isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
@@ -9,8 +8,6 @@ export const dynamic = 'force-dynamic';
 const VISION_LABEL = 'domain: vision board';
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   const item = await prisma.visionItem.findUnique({ where: { id: params.id } });
   if (!item) return Response.json({ error: { message: 'Vision item not found' } }, { status: 404 });

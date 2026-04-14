@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
-import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Zap, Pill, RefreshCw } from 'lucide-react';
+import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Pill } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { OuraTodayData } from '@/lib/oura';
 
 type AnchorDef = {
   key: string;
@@ -49,6 +48,12 @@ function wellnessKey() {
   return `wellness-${easternDateString(0)}`;
 }
 
+// Tracks when we last saved locally so we can compare against Supabase's updated_at.
+// Stored separately to avoid changing the wellness data format.
+function wellnessSavedAtKey() {
+  return `wellness-savedAt-${easternDateString(0)}`;
+}
+
 function loadWellness(): WellnessState {
   if (typeof window === 'undefined') return WELLNESS_DEFAULT;
   try {
@@ -57,57 +62,66 @@ function loadWellness(): WellnessState {
   } catch { return WELLNESS_DEFAULT; }
 }
 
+function loadLocalSavedAt(): string | null {
+  try { return localStorage.getItem(wellnessSavedAtKey()); } catch { return null; }
+}
+
 function saveWellness(s: WellnessState) {
-  try { localStorage.setItem(wellnessKey(), JSON.stringify(s)); } catch { /**/ }
+  try {
+    localStorage.setItem(wellnessKey(), JSON.stringify(s));
+    // Record when we last wrote locally so Supabase can only win if it's newer.
+    localStorage.setItem(wellnessSavedAtKey(), new Date().toISOString());
+  } catch { /**/ }
 }
 
-// Tracks the last values Oura reported, so we can detect when Oura has new data.
-// Oura only wins for a field when its value changes from what it last reported.
-// User edits are preserved as long as Oura's value stays the same.
-interface OuraCache { steps: number; workout: boolean; }
-function ouraKey() { return `oura-cache-${easternDateString(0)}`; }
-function loadOuraCache(): OuraCache | null {
-  try { const s = localStorage.getItem(ouraKey()); return s ? JSON.parse(s) : null; } catch { return null; }
-}
-function saveOuraCache(c: OuraCache) {
-  try { localStorage.setItem(ouraKey(), JSON.stringify(c)); } catch { /**/ }
-}
-
-async function fetchFromSupabase(date: string): Promise<WellnessState | null> {
+async function fetchFromSupabase(date: string): Promise<{ state: WellnessState; updatedAt: string } | null> {
   const { data, error } = await supabase
     .from('wellness_logs')
-    .select('water, steps, workout, prayer, journal, vitamins')
+    .select('water, steps, workout, prayer, journal, vitamins, updated_at')
     .eq('date', date)
     .maybeSingle();
   if (error || !data) return null;
   return {
-    water: data.water,
-    steps: data.steps,
-    workout: data.workout,
-    prayer: data.prayer,
-    journal: data.journal,
-    vitamins: data.vitamins ?? false,
+    state: {
+      water: data.water,
+      steps: data.steps,
+      workout: data.workout,
+      prayer: data.prayer,
+      journal: data.journal,
+      vitamins: data.vitamins ?? false,
+    },
+    updatedAt: data.updated_at as string,
   };
 }
 
-async function syncToSupabase(state: WellnessState) {
-  await supabase.from('wellness_logs').upsert(
-    { date: todayDate(), ...state, updated_at: new Date().toISOString() },
-    { onConflict: 'date' }
-  );
+// Syncs to Supabase with up to `retries` attempts (1 s apart).
+// localStorage always has the correct state; Supabase is the cross-device store.
+async function syncToSupabase(state: WellnessState, retries = 2): Promise<void> {
+  try {
+    const { error } = await supabase.from('wellness_logs').upsert(
+      { date: todayDate(), ...state, updated_at: new Date().toISOString() },
+      { onConflict: 'date' }
+    );
+    if (error) throw error;
+  } catch {
+    if (retries > 0) {
+      await new Promise<void>((r) => setTimeout(r, 1000));
+      return syncToSupabase(state, retries - 1);
+    }
+    // All retries exhausted — localStorage still holds the correct data and
+    // the savedAt timestamp will protect it from being overwritten on the next load.
+  }
 }
 
 export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void } = {}) {
   const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [yw, setYw] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [celebrate, setCelebrate] = useState(false);
-  const [oura, setOura] = useState<OuraTodayData | null>(null);
-  const [ouraYesterday, setOuraYesterday] = useState<OuraTodayData | null>(null);
-  const [ouraRefreshing, setOuraRefreshing] = useState(false);
   const celebrateTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     const local = loadWellness();
+    const localSavedAt = loadLocalSavedAt();
     setW(local);
 
     const ydate = yesterdayDate();
@@ -116,56 +130,28 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
     Promise.all([
       fetchFromSupabase(tdate),
       fetchFromSupabase(ydate),
-      // Yesterday Oura is read-only (no user edits possible) — safe to auto-fetch
-      fetch(`/api/oura/today?date=${ydate}`).then((r) => r.json() as Promise<OuraTodayData>).catch(() => null),
-    ]).then(([remote, remoteYesterday, ouraYday]) => {
-      setOuraYesterday(ouraYday);
+    ]).then(([remote, remoteYesterday]) => {
+      // Today — Supabase wins only if its data is newer than our last local save.
+      // This prevents the Supabase fetch from overwriting edits the user made
+      // before the fetch completed, while still keeping cross-device data fresh.
+      if (remote) {
+        const supabaseNewer = !localSavedAt || remote.updatedAt > localSavedAt;
+        if (supabaseNewer) {
+          setW(remote.state);
+          saveWellness(remote.state);
+        }
+      }
 
-      // Today — use saved data only; Oura sync is manual via the refresh button
-      const base = remote ?? local;
-      setW(base);
-      saveWellness(base);
-
-      // Yesterday (read-only) — Oura always wins, no user edits possible
+      // Yesterday — read-only; use Supabase, fall back to localStorage snapshot.
       const ylocal = (() => {
         try {
           const s = localStorage.getItem(`wellness-${ydate}`);
           return s ? { ...WELLNESS_DEFAULT, ...JSON.parse(s) } : null;
         } catch { return null; }
       })();
-      const ybase = remoteYesterday ?? ylocal ?? WELLNESS_DEFAULT;
-      const ymerged: WellnessState = {
-        ...ybase,
-        ...(ouraYday?.connected ? { steps: ouraYday.steps, workout: ouraYday.workout } : {}),
-      };
-      setYw(ymerged);
+      setYw(remoteYesterday?.state ?? ylocal ?? WELLNESS_DEFAULT);
     });
   }, []);
-
-  async function refreshFromOura() {
-    setOuraRefreshing(true);
-    try {
-      const tdate = todayDate();
-      const ouraData = await fetch(`/api/oura/today?date=${tdate}`)
-        .then((r) => r.json() as Promise<OuraTodayData>)
-        .catch(() => null);
-      setOura(ouraData);
-      if (ouraData?.connected) {
-        setW((prev) => {
-          const cache = loadOuraCache();
-          const merged = { ...prev };
-          if (ouraData.steps !== cache?.steps) merged.steps = ouraData.steps;
-          if (ouraData.workout !== cache?.workout) merged.workout = ouraData.workout;
-          saveOuraCache({ steps: ouraData.steps, workout: ouraData.workout });
-          saveWellness(merged);
-          void syncToSupabase(merged);
-          return merged;
-        });
-      }
-    } finally {
-      setOuraRefreshing(false);
-    }
-  }
 
   useEffect(() => () => clearTimeout(celebrateTimer.current), []);
 
@@ -219,36 +205,16 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       key: 'steps', label: 'Steps', icon: Footprints,
       bg: 'var(--color-mint)', text: 'var(--color-mint-text)',
       todayActive: w.steps >= 10, ydayActive: yw.steps >= 10,
-      todaySub: (
-        <span className="text-[8px] flex items-center gap-0.5">
-          {oura?.connected && <Zap className="w-2 h-2 opacity-60" />}
-          {w.steps}k
-        </span>
-      ),
-      ydaySub: (
-        <span className="text-[8px] flex items-center gap-0.5">
-          {ouraYesterday?.connected && <Zap className="w-2 h-2 opacity-60" />}
-          {yw.steps}k
-        </span>
-      ),
+      todaySub: <span className="text-[8px]">{w.steps}k</span>,
+      ydaySub: <span className="text-[8px]">{yw.steps}k</span>,
       onTap: () => update({ steps: w.steps >= 10 ? 0 : w.steps + 1 }),
     },
     {
       key: 'workout', label: 'Move', icon: Dumbbell,
       bg: 'var(--color-peach)', text: 'var(--color-peach-text)',
       todayActive: w.workout, ydayActive: yw.workout,
-      todaySub: (
-        <span className="text-[8px] flex items-center gap-0.5">
-          {oura?.connected && <Zap className="w-2 h-2 opacity-60" />}
-          {w.workout ? '✓' : '—'}
-        </span>
-      ),
-      ydaySub: (
-        <span className="text-[8px] flex items-center gap-0.5">
-          {ouraYesterday?.connected && <Zap className="w-2 h-2 opacity-60" />}
-          {yw.workout ? '✓' : '—'}
-        </span>
-      ),
+      todaySub: <span className="text-[8px]">{w.workout ? '✓' : '—'}</span>,
+      ydaySub: <span className="text-[8px]">{yw.workout ? '✓' : '—'}</span>,
       onTap: () => update({ workout: !w.workout }),
     },
     {
@@ -307,19 +273,7 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => void refreshFromOura()}
-            disabled={ouraRefreshing}
-            title="Sync Oura ring data"
-            className="flex items-center gap-1 rounded-xl px-2 py-1 text-[10px] transition-opacity hover:opacity-80 active:scale-95"
-            style={{ color: 'var(--muted-foreground)', background: 'rgba(0,0,0,0.05)', opacity: ouraRefreshing ? 0.5 : 1 }}
-          >
-            <Zap className="w-3 h-3" />
-            <RefreshCw className={`w-3 h-3 ${ouraRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-          {celebrate && <span className="text-lg animate-bounce">🎉</span>}
-        </div>
+        {celebrate && <span className="text-lg animate-bounce">🎉</span>}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">

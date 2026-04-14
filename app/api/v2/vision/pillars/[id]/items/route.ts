@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { createVisionItem } from '@/lib/services/vision';
 import { VisionItemStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const body = await req.json();
     const { title, description, status, targetDate, imageEmoji, notes, sortOrder } = body as {

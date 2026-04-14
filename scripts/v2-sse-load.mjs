@@ -1,22 +1,14 @@
 #!/usr/bin/env node
 
 const base = process.env.BASE_URL || 'http://localhost:3000';
-const apiKey = process.env.MOTHERSHIP_V2_API_KEY || '';
 const concurrency = Number(process.env.SSE_CLIENTS || '10');
 const durationMs = Number(process.env.SSE_DURATION_MS || '6000');
-
-function headers() {
-  return apiKey ? { 'x-mothership-v2-key': apiKey } : {};
-}
 
 async function openStream(path) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), durationMs);
   try {
-    const res = await fetch(`${base}${path}`, {
-      headers: headers(),
-      signal: controller.signal,
-    });
+    const res = await fetch(`${base}${path}`, { signal: controller.signal });
     if (!res.ok || !res.body) {
       throw new Error(`${path} failed with status ${res.status}`);
     }
@@ -42,4 +34,3 @@ main().catch((error) => {
   console.error(error.message || error);
   process.exit(1);
 });
-

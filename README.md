@@ -107,11 +107,6 @@ If Ruby generation fails, template actions still work.
 - `AZURE_SPEECH_REGION` (example: `eastus2`)
 - optional `AZURE_SPEECH_VOICE` (default: `en-US-AriaNeural`)
 
-### V2 API Guard (optional but recommended)
-
-- `MOTHERSHIP_V2_API_KEY`
-  - When set, `/api/v2/*` expects header: `x-mothership-v2-key`
-  - Unauthorized responses use a consistent JSON error envelope
 
 ## Local Development
 

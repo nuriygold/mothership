@@ -74,6 +74,20 @@
   --color-lemon-text: #7A5A00;
 
   color-scheme: light;
+
+  /* App chrome heights — used by the tasks page flex chain */
+  --header-h: 44px;    /* header h-11 */
+  --main-pt: 20px;     /* main py-5 on mobile */
+  --main-pb: 80px;     /* main pb-20 on mobile */
+  --app-chrome-h: calc(var(--header-h) + var(--main-pt) + var(--main-pb));
+}
+
+/* Desktop overrides: main uses py-8 + pb-12 on md+ */
+@media (min-width: 768px) {
+  :root {
+    --main-pt: 32px;
+    --main-pb: 48px;
+  }
 }
 
 [data-theme='dark'] {
