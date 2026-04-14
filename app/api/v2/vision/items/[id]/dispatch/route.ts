@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { getVisionItemWithLinks, linkCampaignToItem } from '@/lib/services/vision';
 import { createDispatchCampaign } from '@/lib/services/dispatch';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const item = await getVisionItemWithLinks(params.id);
     if (!item) {

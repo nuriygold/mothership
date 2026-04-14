@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { prisma } from '@/lib/prisma';
 import { createFinanceEvent } from '@/lib/finance/events';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   try {
     const body = await req.json();

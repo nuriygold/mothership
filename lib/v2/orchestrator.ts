@@ -109,6 +109,14 @@ const BOT_PROFILES: Array<{
 ];
 
 function routeForTask(task: any): BotRouteKey {
+  // Explicit assignee takes priority over keyword inference
+  const assignee = String(task.assignee ?? '').toLowerCase().trim();
+  if (assignee === 'adrian' || assignee === 'main') return 'adrian';
+  if (assignee === 'ruby') return 'ruby';
+  if (assignee === 'emerald') return 'emerald';
+  if (assignee === 'adobe' || assignee === 'adobe pettaway') return 'adobe';
+
+  // Fall back to keyword inference from title + description
   const title = String(task.title ?? '').toLowerCase();
   const description = String(task.description ?? '').toLowerCase();
   const haystack = `${title} ${description}`;
@@ -316,11 +324,15 @@ export async function getV2BotsFeed(): Promise<V2BotsFeed> {
         currentTask: current?.title ?? 'Awaiting assignment',
         status: current ? (current.status === TaskStatus.BLOCKED ? 'blocked' : 'working') : 'idle',
       },
-      throughputMetrics: {
-        completed: assigned.filter((task) => task.status === TaskStatus.DONE).length,
-        queued: assigned.filter((task) => task.status === TaskStatus.TODO).length,
-        blocked: assigned.filter((task) => task.status === TaskStatus.BLOCKED).length,
-      },
+      throughputMetrics: assigned.reduce(
+        (acc, task) => {
+          if (task.status === TaskStatus.DONE)         acc.completed++;
+          else if (task.status === TaskStatus.TODO)    acc.queued++;
+          else if (task.status === TaskStatus.BLOCKED) acc.blocked++;
+          return acc;
+        },
+        { completed: 0, queued: 0, blocked: 0 },
+      ),
       recentOutputs,
       staticProfile: {
         workingStyle: profile.workingStyle,

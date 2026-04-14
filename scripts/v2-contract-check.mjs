@@ -1,14 +1,9 @@
 #!/usr/bin/env node
 
 const base = process.env.BASE_URL || 'http://localhost:3000';
-const apiKey = process.env.MOTHERSHIP_V2_API_KEY || '';
-
-function headers() {
-  return apiKey ? { 'x-mothership-v2-key': apiKey } : {};
-}
 
 async function getJson(path) {
-  const res = await fetch(`${base}${path}`, { headers: headers() });
+  const res = await fetch(`${base}${path}`);
   const text = await res.text();
   let payload;
   try {
@@ -57,4 +52,3 @@ main().catch((error) => {
   console.error(error.message || error);
   process.exit(1);
 });
-

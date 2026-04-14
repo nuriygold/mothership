@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { updateVisionPillar, deleteVisionPillar } from '@/lib/services/vision';
 import { VisionPillarColor } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const body = await req.json();
     const pillar = await updateVisionPillar(params.id, {
@@ -25,8 +22,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     await deleteVisionPillar(params.id);
     return Response.json({ ok: true });

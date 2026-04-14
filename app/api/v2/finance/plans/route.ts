@@ -1,12 +1,9 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { listFinancePlans, createFinancePlan } from '@/lib/services/finance';
 import { FinancePlanType, FinancePlanStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const { searchParams } = new URL(req.url);
     const statusParam = searchParams.get('status');
@@ -24,8 +21,6 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const body = await req.json();
     const plan = await createFinancePlan({

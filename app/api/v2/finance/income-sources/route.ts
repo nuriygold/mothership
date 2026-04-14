@@ -8,7 +8,6 @@
  *  ignore         { id }                 — delete source + resolve associated event
  */
 
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -23,8 +22,6 @@ const INTERVAL_DAYS: Record<Interval, number> = {
 };
 
 export async function PATCH(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   try {
     const body = await req.json();

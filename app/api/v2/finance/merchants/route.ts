@@ -1,4 +1,3 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import {
   listMerchantProfiles,
   categorizeMerchant,
@@ -10,8 +9,6 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/v2/finance/merchants?uncategorized=true
 export async function GET(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -40,8 +37,6 @@ export async function GET(req: Request) {
 //    { merchantName, action: "ignore-subscription", eventId }
 //
 export async function PATCH(req: Request) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
 
   try {
     const body = await req.json();

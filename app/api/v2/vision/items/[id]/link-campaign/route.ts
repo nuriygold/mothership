@@ -1,11 +1,8 @@
-import { ensureV2Authorized } from '@/lib/v2/auth';
 import { linkCampaignToItem, unlinkCampaignFromItem } from '@/lib/services/vision';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const { campaignId } = await req.json();
     if (!campaignId) {
@@ -22,8 +19,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  const authError = ensureV2Authorized(req);
-  if (authError) return authError;
   try {
     const { campaignId } = await req.json();
     if (!campaignId) {
