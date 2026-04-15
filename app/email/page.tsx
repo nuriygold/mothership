@@ -280,13 +280,14 @@ export default function EmailPage() {
   }
 
   function handleSelectTone(tone: string) {
-    setSelectedTone(tone);
     const draft = drafts.find((d) => d.tone === tone);
     if (draft) {
       setDraftEditorModal(draft);
       setEditingBody(draft.body);
       setShowToneSelector(false);
+      setSelectedTone(null);
     }
+    // If draft not found (e.g., Ruby Custom still generating), tone selector stays open
   }
 
   async function handleSendEditedDraft() {
@@ -730,23 +731,35 @@ export default function EmailPage() {
                 { tone: 'Measured', title: 'Professional & Measured', color: 'var(--color-sky)' },
                 { tone: 'Decline', title: 'Polite Decline', color: 'var(--color-peach)' },
                 { tone: 'Ruby Custom', title: 'Ruby Custom', color: 'var(--color-lavender)' },
-              ].map(({ tone, title, color }) => (
-                <button
-                  key={tone}
-                  type="button"
-                  onClick={() => handleSelectTone(tone)}
-                  className="w-full text-left rounded-xl p-3 transition-all"
-                  style={{
-                    background: color,
-                    border: selectedTone === tone ? '2px solid currentColor' : '1px solid rgba(0,0,0,0.04)',
-                    opacity: selectedTone && selectedTone !== tone ? 0.5 : 1,
-                  }}
-                >
-                  <p className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>
-                    {title}
-                  </p>
-                </button>
-              ))}
+              ].map(({ tone, title, color }) => {
+                const isDraftReady = drafts.some((d) => d.tone === tone);
+                const isRubyCustom = tone === 'Ruby Custom';
+                return (
+                  <button
+                    key={tone}
+                    type="button"
+                    onClick={() => handleSelectTone(tone)}
+                    disabled={isRubyCustom && !isDraftReady}
+                    className="w-full text-left rounded-xl p-3 transition-all disabled:opacity-50 disabled:cursor-wait"
+                    style={{
+                      background: color,
+                      border: selectedTone === tone ? '2px solid currentColor' : '1px solid rgba(0,0,0,0.04)',
+                      opacity: selectedTone && selectedTone !== tone ? 0.5 : 1,
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>
+                        {title}
+                      </p>
+                      {isRubyCustom && !isDraftReady && (
+                        <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                          Generating…
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <button
               type="button"
