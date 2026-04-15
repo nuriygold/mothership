@@ -75,19 +75,21 @@ function saveWellness(s: WellnessState) {
 }
 
 async function fetchFromSupabase(date: string): Promise<{ state: WellnessState; updatedAt: string } | null> {
+  // Use select('*') so the query succeeds even if the vitamins column hasn't been
+  // added to the DB schema yet — PostgREST errors on explicit unknown column names.
   const { data, error } = await supabase
     .from('wellness_logs')
-    .select('water, steps, workout, prayer, journal, vitamins, updated_at')
+    .select('*')
     .eq('date', date)
     .maybeSingle();
   if (error || !data) return null;
   return {
     state: {
-      water: data.water,
-      steps: data.steps,
-      workout: data.workout,
-      prayer: data.prayer,
-      journal: data.journal,
+      water: data.water ?? 0,
+      steps: data.steps ?? 0,
+      workout: data.workout ?? false,
+      prayer: data.prayer ?? false,
+      journal: data.journal ?? false,
       vitamins: data.vitamins ?? false,
     },
     updatedAt: data.updated_at as string,
@@ -97,13 +99,22 @@ async function fetchFromSupabase(date: string): Promise<{ state: WellnessState; 
 // Syncs to Supabase with up to `retries` attempts (1 s apart).
 // localStorage always has the correct state; Supabase is the cross-device store.
 async function syncToSupabase(state: WellnessState, retries = 2): Promise<void> {
+  const payload: Record<string, unknown> = {
+    date: todayDate(), ...state, updated_at: new Date().toISOString(),
+  };
   try {
-    const { error } = await supabase.from('wellness_logs').upsert(
-      { date: todayDate(), ...state, updated_at: new Date().toISOString() },
-      { onConflict: 'date' }
-    );
+    const { error } = await supabase.from('wellness_logs').upsert(payload, { onConflict: 'date' });
     if (error) throw error;
-  } catch {
+  } catch (err: unknown) {
+    const pgErr = err as { code?: string; message?: string };
+    // If a column in the payload doesn't exist in the DB schema yet (e.g. vitamins),
+    // PostgREST returns code 42703.  Retry once without that column so the rest of
+    // the data still gets saved.
+    if (pgErr?.code === '42703' && pgErr?.message?.includes('vitamins')) {
+      const { vitamins: _v, ...withoutVitamins } = payload;
+      await supabase.from('wellness_logs').upsert(withoutVitamins, { onConflict: 'date' });
+      return;
+    }
     if (retries > 0) {
       await new Promise<void>((r) => setTimeout(r, 1000));
       return syncToSupabase(state, retries - 1);
@@ -135,7 +146,10 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       // This prevents the Supabase fetch from overwriting edits the user made
       // before the fetch completed, while still keeping cross-device data fresh.
       if (remote) {
-        const supabaseNewer = !localSavedAt || remote.updatedAt > localSavedAt;
+        // Compare as timestamps, not strings — Supabase returns "+00:00" suffix
+        // while Date.toISOString() returns "Z", so string comparison is unreliable.
+        const supabaseNewer = !localSavedAt ||
+          new Date(remote.updatedAt).getTime() > new Date(localSavedAt).getTime();
         if (supabaseNewer) {
           setW(remote.state);
           saveWellness(remote.state);
