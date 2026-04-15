@@ -62,6 +62,7 @@ export default function EmailPage() {
   // Draft send state
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<{ id: string; ok: boolean } | null>(null);
+  const [sentDraftIds, setSentDraftIds] = useState<Set<string>>(new Set());
 
   // Compose state
   const [composeMode, setComposeMode] = useState<'reply' | 'forward' | null>(null);
@@ -221,11 +222,14 @@ export default function EmailPage() {
   }
 
   async function handleSendDraft(draft: V2EmailDraft) {
-    if (sendingId) return;
+    if (sendingId || sentDraftIds.has(draft.id)) return;
     setSendingId(draft.id);
     setSendResult(null);
     try {
       const res = await fetch(draft.approveWebhook, { method: 'POST' });
+      if (res.ok) {
+        setSentDraftIds((prev) => new Set(prev).add(draft.id));
+      }
       setSendResult({ id: draft.id, ok: res.ok });
     } catch {
       setSendResult({ id: draft.id, ok: false });
@@ -469,7 +473,7 @@ export default function EmailPage() {
                   className="rounded-full px-4 py-2 text-xs font-medium flex items-center gap-1.5 transition-opacity hover:opacity-85"
                   style={{ background: 'var(--color-lavender)', color: 'var(--color-lavender-text)', border: '1px solid rgba(0,0,0,0.04)' }}
                 >
-                  <Bot className="w-3.5 h-3.5" /> Draft with Ruby
+                  <Bot className="w-3.5 h-3.5" /> View Ruby Draft
                 </button>
               </div>
 
@@ -629,13 +633,13 @@ export default function EmailPage() {
                         <div className="flex items-center gap-2 mt-3">
                           <button
                             type="button"
-                            disabled={!!sendingId}
+                            disabled={!!sendingId || sentDraftIds.has(draft.id)}
                             onClick={() => handleSendDraft(draft)}
                             className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-40"
                             style={{ background: 'rgba(0,0,0,0.12)', color: colors.textColor }}
                           >
                             <Send className="w-3 h-3" />
-                            {isSending ? 'Sending…' : result?.ok ? 'Sent ✓' : result ? 'Failed' : 'Send'}
+                            {isSending ? 'Sending…' : sentDraftIds.has(draft.id) ? 'Sent ✓' : result?.ok ? 'Sent ✓' : result ? 'Failed' : 'Send'}
                           </button>
                         </div>
                       </div>

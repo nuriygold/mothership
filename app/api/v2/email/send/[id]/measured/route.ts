@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { deterministicTemplateDrafts, getV2EmailFeed } from '@/lib/v2/orchestrator';
+import { deterministicTemplateDrafts, getV2EmailFeed, markDraftSent } from '@/lib/v2/orchestrator';
 import { sendZohoReply } from '@/lib/services/email';
 import { publishV2Event } from '@/lib/v2/event-bus';
 
@@ -36,6 +36,7 @@ export async function POST(
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
+  await markDraftSent(emailId);
   publishV2Event(`email-drafts:${emailId}`, 'draft.sent', { emailId, draftId: draft.id, messageId: result.messageId, to });
   publishV2Event('dashboard', 'email.reply_sent', { emailId, bot: 'Ruby', tone: 'Measured', messageId: result.messageId });
 
