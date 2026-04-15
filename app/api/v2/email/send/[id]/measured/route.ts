@@ -11,7 +11,7 @@ function extractEmail(sender: string): string {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const emailId = params.id;
@@ -31,11 +31,22 @@ export async function POST(
 
   const to = extractEmail(email.sender);
 
+  // Allow overrideBody from request (for edited drafts)
+  let overrideBody: string | undefined;
+  try {
+    const body = await req.json();
+    overrideBody = body.overrideBody;
+  } catch {
+    // No request body, use default draft.body
+  }
+
+  const draftBody = overrideBody ?? draft.body;
+
   let result;
   if (provider === 'gmail') {
-    result = await sendGmailReply({ to, subject: email.subject, body: draft.body });
+    result = await sendGmailReply({ to, subject: email.subject, body: draftBody });
   } else if (provider === 'zoho') {
-    result = await sendZohoReply({ to, subject: email.subject, body: draft.body });
+    result = await sendZohoReply({ to, subject: email.subject, body: draftBody });
   } else {
     result = { ok: false, error: `EMAIL_PROVIDER not configured. Set to 'gmail' or 'zoho'.` };
   }
