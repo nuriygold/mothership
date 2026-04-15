@@ -104,13 +104,15 @@ export default function EmailPage() {
     setSelectedTone(null);
     setDraftEditorModal(null);
     setEditingBody('');
+    rubyCustomReadyRef.current = false;
   }, [selectedId]);
 
-  // Drafts polling
+  // Drafts polling — fast interval until Ruby Custom draft arrives, then slow down
+  const rubyCustomReadyRef = useRef(false);
   const { data: draftsFeed } = useSWR<V2EmailDraftFeed>(
     selected ? `/api/v2/email/${selected.id}/ai-drafts` : null,
     fetcher,
-    { refreshInterval: 20000 }
+    { refreshInterval: () => rubyCustomReadyRef.current ? 30000 : 4000 }
   );
 
   // SSE draft stream
@@ -138,8 +140,9 @@ export default function EmailPage() {
 
   const drafts = useMemo(() => {
     const base = draftsFeed?.drafts ?? [];
-    if (liveDraft && !base.some((item) => item.id === liveDraft.id)) return [...base, liveDraft];
-    return base;
+    const combined = liveDraft && !base.some((item) => item.id === liveDraft.id) ? [...base, liveDraft] : base;
+    rubyCustomReadyRef.current = combined.some((d) => d.tone === 'Ruby Custom');
+    return combined;
   }, [draftsFeed?.drafts, liveDraft]);
 
   const inboxCount = inbox.filter((e) => !e.isRead).length || inbox.length;
