@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getRubyDraftWithFallback, markDraftSent } from '@/lib/v2/orchestrator';
-import { sendZohoReply } from '@/lib/services/email';
+import { sendGmailReply, sendZohoReply } from '@/lib/services/email';
 import { publishV2Event } from '@/lib/v2/event-bus';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,8 @@ export async function POST(
 ) {
 
   const emailId = params.id;
+  const provider = process.env.EMAIL_PROVIDER || 'none';
+
   const draft = await getRubyDraftWithFallback(emailId);
   if (!draft) {
     return NextResponse.json(
@@ -31,7 +33,14 @@ export async function POST(
     return NextResponse.json({ error: 'Missing required fields: to, subject.' }, { status: 400 });
   }
 
-  const result = await sendZohoReply({ to, subject, body: overrideBody ?? draft.body, inReplyTo, references });
+  let result;
+  if (provider === 'gmail') {
+    result = await sendGmailReply({ to, subject, body: overrideBody ?? draft.body, inReplyTo, references });
+  } else if (provider === 'zoho') {
+    result = await sendZohoReply({ to, subject, body: overrideBody ?? draft.body, inReplyTo, references });
+  } else {
+    result = { ok: false, error: `EMAIL_PROVIDER not configured. Set to 'gmail' or 'zoho'.` };
+  }
 
   if (!result.ok) {
     publishV2Event(`email-drafts:${emailId}`, 'draft.send_failed', { emailId, draftId: draft.id, error: result.error });

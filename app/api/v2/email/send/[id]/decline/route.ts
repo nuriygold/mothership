@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { deterministicTemplateDrafts, getV2EmailFeed, markDraftSent } from '@/lib/v2/orchestrator';
-import { sendZohoReply } from '@/lib/services/email';
+import { sendGmailReply, sendZohoReply } from '@/lib/services/email';
 import { publishV2Event } from '@/lib/v2/event-bus';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +15,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   const emailId = params.id;
+  const provider = process.env.EMAIL_PROVIDER || 'none';
 
   const feed = await getV2EmailFeed();
   const email = feed.inbox.find((item) => item.id === emailId);
@@ -29,7 +30,15 @@ export async function POST(
   }
 
   const to = extractEmail(email.sender);
-  const result = await sendZohoReply({ to, subject: email.subject, body: draft.body });
+
+  let result;
+  if (provider === 'gmail') {
+    result = await sendGmailReply({ to, subject: email.subject, body: draft.body });
+  } else if (provider === 'zoho') {
+    result = await sendZohoReply({ to, subject: email.subject, body: draft.body });
+  } else {
+    result = { ok: false, error: `EMAIL_PROVIDER not configured. Set to 'gmail' or 'zoho'.` };
+  }
 
   if (!result.ok) {
     publishV2Event(`email-drafts:${emailId}`, 'draft.send_failed', { emailId, draftId: draft.id, error: result.error });
