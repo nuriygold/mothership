@@ -1088,10 +1088,16 @@ export async function getRubyDraftWithFallback(emailId: string): Promise<V2Email
   }
 }
 
-export async function markDraftSent(emailId: string): Promise<void> {
-  sentDrafts.add(emailId);
+export async function markDraftSent(emailId: string, draftId?: string): Promise<void> {
+  // Track sent draft with optional draftId for granular tracking
+  // Composite key format: "emailId" or "emailId:draftId"
+  const sentKey = draftId ? `${emailId}:${draftId}` : emailId;
+  sentDrafts.add(sentKey);
+
+  // Always clear Ruby draft store for this email (backward compatible behavior)
   rubyDraftStore.delete(emailId);
   pendingRubyDrafts.delete(emailId);
+
   try {
     await prisma.emailDraftSuggestion.updateMany({
       where: { emailExternalId: emailId, approvedAt: null },

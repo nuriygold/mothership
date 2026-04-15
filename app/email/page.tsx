@@ -62,6 +62,7 @@ export default function EmailPage() {
   // Draft send state
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<{ id: string; ok: boolean } | null>(null);
+  const [sentDraftIds, setSentDraftIds] = useState<Set<string>>(new Set());
 
   // Compose state
   const [composeMode, setComposeMode] = useState<'reply' | 'forward' | null>(null);
@@ -73,6 +74,12 @@ export default function EmailPage() {
   // Action button states
   const [actionStates, setActionStates] = useState<Record<string, ActionStatus>>({});
   const [actionMessages, setActionMessages] = useState<Record<string, string>>({});
+
+  // Draft selection & editing modals
+  const [showToneSelector, setShowToneSelector] = useState(false);
+  const [selectedTone, setSelectedTone] = useState<string | null>(null);
+  const [draftEditorModal, setDraftEditorModal] = useState<V2EmailDraft | null>(null);
+  const [editingBody, setEditingBody] = useState('');
 
   const inbox = data?.inbox ?? [];
 
@@ -93,6 +100,10 @@ export default function EmailPage() {
     setComposeResult(null);
     setActionStates({});
     setActionMessages({});
+    setShowToneSelector(false);
+    setSelectedTone(null);
+    setDraftEditorModal(null);
+    setEditingBody('');
   }, [selectedId]);
 
   // Drafts polling
@@ -221,11 +232,14 @@ export default function EmailPage() {
   }
 
   async function handleSendDraft(draft: V2EmailDraft) {
-    if (sendingId) return;
+    if (sendingId || sentDraftIds.has(draft.id)) return;
     setSendingId(draft.id);
     setSendResult(null);
     try {
       const res = await fetch(draft.approveWebhook, { method: 'POST' });
+      if (res.ok) {
+        setSentDraftIds((prev) => new Set(prev).add(draft.id));
+      }
       setSendResult({ id: draft.id, ok: res.ok });
     } catch {
       setSendResult({ id: draft.id, ok: false });
@@ -257,6 +271,46 @@ export default function EmailPage() {
       setComposeResult({ ok: false, message: err instanceof Error ? err.message : 'Send failed' });
     } finally {
       setComposeSending(false);
+    }
+  }
+
+  function handleOpenToneSelector() {
+    setShowToneSelector(true);
+    setSelectedTone(null);
+  }
+
+  function handleSelectTone(tone: string) {
+    const draft = drafts.find((d) => d.tone === tone);
+    if (draft) {
+      setDraftEditorModal(draft);
+      setEditingBody(draft.body);
+      setShowToneSelector(false);
+      setSelectedTone(null);
+    }
+    // If draft not found (e.g., Ruby Custom still generating), tone selector stays open
+  }
+
+  async function handleSendEditedDraft() {
+    if (!draftEditorModal || sendingId || sentDraftIds.has(draftEditorModal.id)) return;
+    setSendingId(draftEditorModal.id);
+    setSendResult(null);
+    try {
+      const res = await fetch(draftEditorModal.approveWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overrideBody: editingBody }),
+      });
+      if (res.ok) {
+        setSentDraftIds((prev) => new Set(prev).add(draftEditorModal.id));
+        setDraftEditorModal(null);
+        setEditingBody('');
+      }
+      setSendResult({ id: draftEditorModal.id, ok: res.ok });
+      setTimeout(() => setSendResult(null), 3000);
+    } catch {
+      setSendResult({ id: draftEditorModal.id, ok: false });
+    } finally {
+      setSendingId(null);
     }
   }
 
@@ -465,11 +519,11 @@ export default function EmailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => draftsRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={handleOpenToneSelector}
                   className="rounded-full px-4 py-2 text-xs font-medium flex items-center gap-1.5 transition-opacity hover:opacity-85"
                   style={{ background: 'var(--color-lavender)', color: 'var(--color-lavender-text)', border: '1px solid rgba(0,0,0,0.04)' }}
                 >
-                  <Bot className="w-3.5 h-3.5" /> Draft with Ruby
+                  <Bot className="w-3.5 h-3.5" /> Write a response for this
                 </button>
               </div>
 
@@ -629,13 +683,13 @@ export default function EmailPage() {
                         <div className="flex items-center gap-2 mt-3">
                           <button
                             type="button"
-                            disabled={!!sendingId}
+                            disabled={!!sendingId || sentDraftIds.has(draft.id)}
                             onClick={() => handleSendDraft(draft)}
                             className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-40"
                             style={{ background: 'rgba(0,0,0,0.12)', color: colors.textColor }}
                           >
                             <Send className="w-3 h-3" />
-                            {isSending ? 'Sending…' : result?.ok ? 'Sent ✓' : result ? 'Failed' : 'Send'}
+                            {isSending ? 'Sending…' : sentDraftIds.has(draft.id) ? 'Sent ✓' : result?.ok ? 'Sent ✓' : result ? 'Failed' : 'Send'}
                           </button>
                         </div>
                       </div>
@@ -657,6 +711,116 @@ export default function EmailPage() {
           )}
         </div>
       </div>
+
+      {/* ── TONE SELECTOR MODAL ── */}
+      {showToneSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div
+            className="rounded-2xl p-6 space-y-4 max-w-md w-full"
+            style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+          >
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              Select response tone
+            </h3>
+            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+              Choose how you&apos;d like to respond to this email.
+            </p>
+            <div className="space-y-2">
+              {[
+                { tone: 'Enthusiastic', title: 'Enthusiastic & Collaborative', color: 'var(--color-mint)' },
+                { tone: 'Measured', title: 'Professional & Measured', color: 'var(--color-sky)' },
+                { tone: 'Decline', title: 'Polite Decline', color: 'var(--color-peach)' },
+                { tone: 'Ruby Custom', title: 'Ruby Custom', color: 'var(--color-lavender)' },
+              ].map(({ tone, title, color }) => {
+                const isDraftReady = drafts.some((d) => d.tone === tone);
+                const isRubyCustom = tone === 'Ruby Custom';
+                return (
+                  <button
+                    key={tone}
+                    type="button"
+                    onClick={() => handleSelectTone(tone)}
+                    disabled={isRubyCustom && !isDraftReady}
+                    className="w-full text-left rounded-xl p-3 transition-all disabled:opacity-50 disabled:cursor-wait"
+                    style={{
+                      background: color,
+                      border: selectedTone === tone ? '2px solid currentColor' : '1px solid rgba(0,0,0,0.04)',
+                      opacity: selectedTone && selectedTone !== tone ? 0.5 : 1,
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>
+                        {title}
+                      </p>
+                      {isRubyCustom && !isDraftReady && (
+                        <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                          Generating…
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowToneSelector(false)}
+              className="w-full rounded-full px-4 py-2 text-xs font-medium"
+              style={{ background: 'var(--muted)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── DRAFT EDITOR MODAL ── */}
+      {draftEditorModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div
+            className="rounded-2xl p-6 space-y-4 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+          >
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              {DRAFT_DESCRIPTIONS[draftEditorModal.tone]?.title || draftEditorModal.tone}
+            </h3>
+            <textarea
+              value={editingBody}
+              onChange={(e) => setEditingBody(e.target.value)}
+              rows={10}
+              className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
+              style={{ background: 'var(--muted)', border: '1px solid var(--border)', color: 'var(--foreground)' }}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={sendingId === draftEditorModal.id || sentDraftIds.has(draftEditorModal.id)}
+                onClick={handleSendEditedDraft}
+                className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-40"
+                style={{ background: 'var(--color-purple)', color: '#FFFFFF' }}
+              >
+                <Send className="w-3 h-3" />
+                {sendingId === draftEditorModal.id ? 'Sending…' : sentDraftIds.has(draftEditorModal.id) ? 'Sent ✓' : 'Send'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftEditorModal(null);
+                  setEditingBody('');
+                }}
+                className="rounded-full px-3 py-2 text-xs font-medium flex items-center gap-1"
+                style={{ color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}
+              >
+                <X className="w-3 h-3" /> Cancel
+              </button>
+              {sendResult?.id === draftEditorModal.id && (
+                <span className="text-xs" style={{ color: sendResult.ok ? 'var(--color-mint-text)' : '#ff5050' }}>
+                  {sendResult.ok ? 'Sent successfully' : 'Failed to send'}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
