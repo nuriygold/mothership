@@ -734,12 +734,16 @@ export default function EmailPage() {
               ].map(({ tone, title, color }) => {
                 const isDraftReady = drafts.some((d) => d.tone === tone);
                 const isRubyCustom = tone === 'Ruby Custom';
+                const draftsLoading = draftsFeed === undefined;
+                // Disable if: Ruby Custom not ready, OR template draft not ready because drafts haven't loaded yet
+                const isDisabled = !isDraftReady && (isRubyCustom || draftsLoading);
+                const loadingLabel = isRubyCustom ? 'Generating…' : draftsLoading ? 'Loading…' : null;
                 return (
                   <button
                     key={tone}
                     type="button"
                     onClick={() => handleSelectTone(tone)}
-                    disabled={isRubyCustom && !isDraftReady}
+                    disabled={isDisabled}
                     className="w-full text-left rounded-xl p-3 transition-all disabled:opacity-50 disabled:cursor-wait"
                     style={{
                       background: color,
@@ -751,9 +755,9 @@ export default function EmailPage() {
                       <p className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>
                         {title}
                       </p>
-                      {isRubyCustom && !isDraftReady && (
+                      {!isDraftReady && loadingLabel && (
                         <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                          Generating…
+                          {loadingLabel}
                         </span>
                       )}
                     </div>

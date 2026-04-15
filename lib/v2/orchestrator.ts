@@ -165,49 +165,83 @@ function relativeTime(input: Date) {
   return `${hours} hr ago`;
 }
 
-export function deterministicTemplateDrafts(emailId: string, subject: string): V2EmailDraft[] {
-  const lowered = subject.toLowerCase();
-  const isMeeting = lowered.includes('meeting') || lowered.includes('schedule');
-  const isPayment = lowered.includes('invoice') || lowered.includes('payment');
+export function deterministicTemplateDrafts(
+  emailId: string,
+  subject: string,
+  preview: string = '',
+  sender: string = '',
+): V2EmailDraft[] {
+  const combined = `${subject} ${preview}`.toLowerCase();
+
+  const isMeeting    = /meeting|schedule|calendar|invite|appointment|sync up|catch[- ]?up/.test(combined);
+  const isPayment    = /invoice|payment|billing|charge|receipt|transaction/.test(combined);
+  const isMarketing  = /\d+% off|sale|deal|promo|coupon|discount|shop now|limited.?time|ends today|flash sale|free shipping/.test(combined);
+  const isNewsletter = /newsletter|weekly|monthly|digest|edition|roundup|issue #/.test(combined);
+  const isDelivery   = /delivered|shipped|tracking|your order|package|shipment/.test(combined);
+  const isOpportunity = /opportunity|position|hiring|partnership|collaboration|collab|proposal|pitch/.test(combined);
+
+  let enthusiasticBody: string;
+  let measuredBody: string;
+  let declineBody: string;
+
+  if (isMeeting) {
+    enthusiasticBody = "Absolutely—happy to meet! I can do Tuesday afternoon or Wednesday morning. Share what works best and I'll lock it in.";
+    measuredBody     = 'Thank you for the note. I can accommodate a meeting this week; please share two preferred slots and any agenda context.';
+    declineBody      = "Thank you for reaching out. I'm not able to take on additional meetings right now, but I appreciate you thinking of me.";
+  } else if (isPayment) {
+    enthusiasticBody = "Thanks for sending this over. We're reviewing now and will confirm payment timing shortly.";
+    measuredBody     = "Received. We're validating the details and will respond with confirmation once the review is complete.";
+    declineBody      = "Thank you for the note. After careful review, we're unable to proceed with this at this time.";
+  } else if (isMarketing) {
+    enthusiasticBody = "Thanks for the heads up! I've bookmarked this and will take a closer look today.";
+    measuredBody     = "Noted—I'll review this offer and circle back if it's a good fit.";
+    declineBody      = "Thanks for sharing, but I'll pass on this one for now.";
+  } else if (isNewsletter) {
+    enthusiasticBody = "Great read—a few of these points are directly relevant to what I'm working on right now. Thanks for keeping me in the loop.";
+    measuredBody     = "Thanks for the update. I'll review the full issue when I get a moment.";
+    declineBody      = "Thanks for keeping me on the list. I'm going to step back for now to keep my inbox focused, but I appreciate the content.";
+  } else if (isDelivery) {
+    enthusiasticBody = "Got it—thanks for the update! Looking forward to receiving this.";
+    measuredBody     = "Thank you for the shipping confirmation. I'll keep an eye out and follow up if anything looks off.";
+    declineBody      = "Hi—there seems to be an issue with this delivery. Could someone from your team please follow up?";
+  } else if (isOpportunity) {
+    enthusiasticBody = "This sounds like a great fit—I'd love to explore this further. Let's find a time to connect this week.";
+    measuredBody     = "Thank you for reaching out. I'm interested in learning more; could you share additional details so I can evaluate properly?";
+    declineBody      = "Thank you for thinking of me. After reviewing the details, this isn't the right fit for where I'm focused right now—I appreciate the outreach.";
+  } else {
+    const senderName = sender.match(/^([^<]+)/)?.[1]?.trim().replace(/^"(.*)"$/, '$1') ?? '';
+    const fromClause = senderName ? ` from ${senderName}` : '';
+    enthusiasticBody = `Thanks for this${fromClause}! I'm on it and will follow up with next steps shortly.`;
+    measuredBody     = `Thank you for this. I've reviewed it and will put together a thoughtful response once I've had a chance to look into the details.`;
+    declineBody      = "Thank you for reaching out. After careful consideration, this isn't the right fit for us at this time—I appreciate you thinking of me.";
+  }
 
   return [
     {
       id: `${emailId}-enthusiastic`,
       tone: 'Enthusiastic',
-      body: isMeeting
-        ? 'Absolutely—happy to meet. I can do Tuesday afternoon or Wednesday morning. Share what works best and I will lock it in.'
-        : isPayment
-          ? 'Thanks for sending this over. We are reviewing now and will confirm payment timing shortly.'
-          : 'Love this direction. I can move this forward today and circle back with next steps.',
+      body: enthusiasticBody,
       approveWebhook: `/api/v2/email/send/${emailId}/enthusiastic`,
       source: 'template',
     },
     {
       id: `${emailId}-measured`,
       tone: 'Measured',
-      body: isMeeting
-        ? 'Thank you for the note. I can accommodate a meeting this week; please share two preferred slots and agenda context.'
-        : isPayment
-          ? 'Received. We are validating details and will respond with confirmation once review is complete.'
-          : 'Thank you. I reviewed this and can provide a structured response once we confirm a few details.',
+      body: measuredBody,
       approveWebhook: `/api/v2/email/send/${emailId}/measured`,
       source: 'template',
     },
     {
       id: `${emailId}-decline`,
       tone: 'Decline',
-      body: isMeeting
-        ? 'Thank you for reaching out. Unfortunately I am not able to take on additional meetings at this time, but I appreciate you thinking of me.'
-        : isPayment
-          ? 'Thank you for the note. After careful review, we are unable to proceed with this at this time.'
-          : "Thank you for this. After consideration, this isn\u2019t the right fit for us right now — I appreciate you reaching out.",
+      body: declineBody,
       approveWebhook: `/api/v2/email/send/${emailId}/decline`,
       source: 'template',
     },
   ];
 }
 
-async function generateRubyDraft(emailId: string, subject: string, preview: string) {
+async function generateRubyDraft(emailId: string, subject: string, preview: string, sender: string = '') {
   if (pendingRubyDrafts.has(emailId)) return;
   if (sentDrafts.has(emailId)) return;
   pendingRubyDrafts.add(emailId);
@@ -215,7 +249,7 @@ async function generateRubyDraft(emailId: string, subject: string, preview: stri
   try {
     const result = await dispatchToOpenClaw({
       agentId: 'ruby',
-      text: `Draft a concise decline-or-defer email reply with empathy. Subject: ${subject}. Context: ${preview}.`,
+      text: `Draft a brief, natural email reply (1–3 sentences, no greeting or sign-off) that is clearly specific to this email's content and sender. Do not use generic filler phrases.\n\nFrom: ${sender || 'unknown sender'}\nSubject: ${subject}\nPreview: ${preview}`,
       sessionKey: `email-${emailId}`,
     });
 
@@ -390,11 +424,12 @@ export async function getV2EmailDrafts(emailId: string): Promise<V2EmailDraftFee
   const selected = inbox.inbox.find((item) => item.id === emailId);
   const fallbackSubject = selected?.subject ?? 'New request';
   const fallbackPreview = selected?.preview ?? 'Please draft a response.';
+  const fallbackSender  = selected?.sender ?? '';
 
-  const drafts = deterministicTemplateDrafts(emailId, fallbackSubject);
+  const drafts = deterministicTemplateDrafts(emailId, fallbackSubject, fallbackPreview, fallbackSender);
   const rubyDraft = rubyDraftStore.get(emailId);
   if (rubyDraft) drafts.push(rubyDraft);
-  void generateRubyDraft(emailId, fallbackSubject, fallbackPreview);
+  void generateRubyDraft(emailId, fallbackSubject, fallbackPreview, fallbackSender);
 
   return {
     emailId,
