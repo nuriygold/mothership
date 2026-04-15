@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import http from 'http';
-import url from 'url';
-import open from 'open';
+import { parse } from 'url';
+import { exec } from 'child_process';
 
 const CLIENT_ID = process.argv[2] || process.env.GOOGLE_CLIENT_ID || '';
 const CLIENT_SECRET = process.argv[3] || process.env.GOOGLE_CLIENT_SECRET || '';
@@ -37,12 +37,12 @@ function startServer(): Promise<string> {
   return new Promise((resolve, reject) => {
     server = http.createServer(async (req, res) => {
       try {
-        const parsedUrl = url.parse(req.url || '', true);
+        const parsedUrl = parse(req.url || '', true);
         const code = parsedUrl.query.code as string;
 
         if (code) {
-          const { credentials } = await oauth2Client.getToken(code);
-          const refreshToken = credentials.refresh_token;
+          const tokenResponse = await oauth2Client.getToken(code);
+          const refreshToken = tokenResponse.tokens.refresh_token;
 
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(`
@@ -50,11 +50,7 @@ function startServer(): Promise<string> {
               <head><title>OAuth Success</title></head>
               <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 2rem; text-align: center;">
                 <h1>✅ Success!</h1>
-                <p>Your refresh token has been generated. Copy it below:</p>
-                <code style="display: block; background: #f5f5f5; padding: 1rem; margin: 1rem 0; word-break: break-all; border-radius: 4px;">
-                  ${refreshToken}
-                </code>
-                <p>Add this to your .env as: <code>GOOGLE_REFRESH_TOKEN="${refreshToken}"</code></p>
+                <p>Your refresh token has been generated. Copy it from your terminal.</p>
               </body>
             </html>
           `);
@@ -73,8 +69,11 @@ function startServer(): Promise<string> {
     });
 
     server.listen(3001, () => {
-      console.log('🔐 Opening Google OAuth consent screen...\n');
-      open(authUrl);
+      console.log('\n🔐 Open this URL in your browser to authorize:\n');
+      console.log(authUrl);
+      console.log('\nWaiting for authorization...\n');
+      // Try to auto-open browser on macOS/Linux
+      exec(`open "${authUrl}" 2>/dev/null || xdg-open "${authUrl}" 2>/dev/null || true`);
     });
   });
 }
@@ -82,7 +81,7 @@ function startServer(): Promise<string> {
 startServer()
   .then((refreshToken) => {
     console.log('\n✅ OAuth flow complete!\n');
-    console.log('Your GOOGLE_REFRESH_TOKEN:');
+    console.log('GOOGLE_REFRESH_TOKEN:');
     console.log(refreshToken);
     console.log('\nAdd to your .env file:');
     console.log(`GOOGLE_REFRESH_TOKEN="${refreshToken}"`);
