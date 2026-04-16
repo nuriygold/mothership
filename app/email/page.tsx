@@ -184,6 +184,21 @@ export default function EmailPage() {
     }, 'Unsubscribed');
   }
 
+  async function handleDeleteAndUnsubscribe() {
+    if (!selected) return;
+    const id = selected.id;
+    await runAction('delete-unsubscribe', async () => {
+      const [unsubRes, delRes] = await Promise.all([
+        fetch(`/api/v2/email/${id}/unsubscribe`, { method: 'POST' }),
+        fetch(`/api/v2/email/${id}`, { method: 'DELETE' }),
+      ]);
+      const delJson = await delRes.json();
+      if (!unsubRes.ok && !delRes.ok) return { ok: false, error: 'Both actions failed' };
+      return delJson;
+    }, 'Unsubscribed & deleted');
+    setTimeout(() => mutateInbox(), 500);
+  }
+
   async function handleMakeTask(type: 'task' | 'financial') {
     if (!selected) return;
     const key = type === 'financial' ? 'financial-task' : 'task';
@@ -591,6 +606,13 @@ export default function EmailPage() {
               <div>
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Actions</p>
                 <div className="flex flex-wrap gap-2">
+                  <ActionBtn
+                    actionKey="delete-unsubscribe"
+                    icon={<><BellOff className="w-3 h-3" /><Trash2 className="w-3 h-3" /></>}
+                    label="Unsub & Delete"
+                    onClick={handleDeleteAndUnsubscribe}
+                    danger
+                  />
                   <ActionBtn
                     actionKey="delete"
                     icon={<Trash2 className="w-3 h-3" />}
