@@ -52,13 +52,27 @@ export function modelForOpenClaw(agentId?: string) {
   return resolvedAgent === 'main' ? 'openclaw/main' : `openclaw/${resolvedAgent}`;
 }
 
+/**
+ * Returns the base URL for AI inference calls (POST /v1/responses).
+ *
+ * Prefer OPENCLAW_INFERENCE_GATEWAY when set — this separates the AI inference
+ * endpoint from the data bridge (OPENCLAW_GATEWAY / mother.nuriy.com).
+ * Falls back to OPENCLAW_GATEWAY for backward compatibility.
+ */
+export function inferenceGatewayBase(): string | undefined {
+  const infer = String(process.env.OPENCLAW_INFERENCE_GATEWAY || '').trim();
+  if (infer) return infer.replace(/\/$/, '');
+  const legacy = String(process.env.OPENCLAW_GATEWAY || '').trim();
+  return legacy ? legacy.replace(/\/$/, '') : undefined;
+}
+
 export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: number }) {
-  const gateway = process.env.OPENCLAW_GATEWAY;
+  const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
   const defaultAgent = agentForKey();
 
   if (!gateway || !token) {
-    throw new Error('OPENCLAW_GATEWAY or OPENCLAW_TOKEN not set');
+    throw new Error('OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) and OPENCLAW_TOKEN must be set');
   }
 
   const agentId = agentForKey(input.agentId) || defaultAgent;
@@ -69,7 +83,7 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
     input: input.text,
   };
 
-  const res = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
+  const res = await fetch(`${gateway}/v1/responses`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -83,6 +97,13 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
 
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => '');
+    if (res.status === 404) {
+      throw new Error(
+        `OpenClaw dispatch failed: 404 Not Found at ${gateway}/v1/responses. ` +
+          `The configured gateway does not expose /v1/responses — set OPENCLAW_INFERENCE_GATEWAY ` +
+          `to the correct AI inference endpoint. Raw: ${text}`
+      );
+    }
     throw new Error(`OpenClaw dispatch failed: ${res.status} ${text}`);
   }
 
