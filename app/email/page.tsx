@@ -680,7 +680,7 @@ export default function EmailPage() {
                         <p className="text-xs mt-0.5" style={{ color: colors.textColor, opacity: 0.75 }}>
                           {desc.subtitle}
                         </p>
-                        <p className="text-xs mt-2 leading-relaxed" style={{ color: colors.textColor, opacity: 0.85 }}>
+                        <p className="text-xs mt-2 leading-relaxed whitespace-pre-wrap" style={{ color: colors.textColor, opacity: 0.85 }}>
                           {draft.body}
                         </p>
                         <div className="flex items-center gap-2 mt-3">
