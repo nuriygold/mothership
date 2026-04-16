@@ -153,21 +153,31 @@ export async function runEmailAgentTriage(): Promise<{ created: number; dismisse
 }
 
 export async function listPendingTriages() {
-  const rows = await prisma.emailAgentTriage.findMany({
-    where: { status: 'PENDING' },
-    orderBy: { createdAt: 'desc' },
-  });
-  return rows.map(row => ({
-    ...row,
-    emailIds: row.emailIds as string[],
-    emailSummaries: row.emailSummaries as TriageEmailMeta[],
-    actionPayload: row.actionPayload as Record<string, unknown> | null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    approvedAt: row.approvedAt?.toISOString() ?? null,
-    deniedAt: row.deniedAt?.toISOString() ?? null,
-    executedAt: row.executedAt?.toISOString() ?? null,
-  }));
+  const [rows, latest] = await Promise.all([
+    prisma.emailAgentTriage.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.emailAgentTriage.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  return {
+    triages: rows.map(row => ({
+      ...row,
+      emailIds: row.emailIds as string[],
+      emailSummaries: row.emailSummaries as TriageEmailMeta[],
+      actionPayload: row.actionPayload as Record<string, unknown> | null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      approvedAt: row.approvedAt?.toISOString() ?? null,
+      deniedAt: row.deniedAt?.toISOString() ?? null,
+      executedAt: row.executedAt?.toISOString() ?? null,
+    })),
+    lastRunAt: latest?.createdAt.toISOString() ?? null,
+  };
 }
 
 export async function approveEmailTriage(id: string): Promise<{ ok: boolean; message: string; results?: unknown[] }> {

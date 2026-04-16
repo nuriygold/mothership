@@ -39,6 +39,15 @@ const DRAFT_DESCRIPTIONS: Record<string, { title: string; subtitle: string }> = 
   'Ruby Custom': { title: 'Ruby Custom Draft',            subtitle: 'AI-generated contextual response' },
 };
 
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  return `${hours} hr ago`;
+}
+
 function formatTime(timestamp: string) {
   const d = new Date(timestamp);
   const now = new Date();
@@ -92,8 +101,10 @@ export default function EmailPage() {
   // Agent triage suggestions
   const { data: triageFeed, mutate: mutateTriage } = useSWR<V2EmailTriageFeed>('/api/v2/email/triage', fetcher, { refreshInterval: 60000 });
   const triages = triageFeed?.triages ?? [];
+  const lastRunAt = triageFeed?.lastRunAt ?? null;
   const [triageActing, setTriageActing] = useState<Record<string, 'loading' | 'done' | 'error'>>({});
   const [triageExpanded, setTriageExpanded] = useState(true);
+  const [triageRunning, setTriageRunning] = useState(false);
 
   const inbox = data?.inbox ?? [];
 
@@ -346,6 +357,17 @@ export default function EmailPage() {
     }
   }
 
+  async function handleRunTriage() {
+    if (triageRunning) return;
+    setTriageRunning(true);
+    try {
+      await fetch('/api/v2/email/triage/run', { method: 'POST' });
+      await mutateTriage();
+    } finally {
+      setTriageRunning(false);
+    }
+  }
+
   async function handleTriageApprove(id: string) {
     setTriageActing((s) => ({ ...s, [id]: 'loading' }));
     try {
@@ -415,38 +437,67 @@ export default function EmailPage() {
       </div>
 
       {/* ── AGENT SUGGESTIONS ── */}
-      {triages.length > 0 && (
+      {(triages.length > 0 || lastRunAt) && (
         <div
           className="rounded-3xl overflow-hidden"
           style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
         >
-          <button
-            type="button"
-            onClick={() => setTriageExpanded((v) => !v)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left"
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
+          <div className="flex items-center justify-between px-5 py-4">
+            <button
+              type="button"
+              onClick={() => setTriageExpanded((v) => !v)}
+              className="flex items-center gap-2 min-w-0"
+            >
+              <Sparkles className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />
               <span className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
                 Agent Suggestions
               </span>
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+              {triages.length > 0 && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
+                  style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+                >
+                  {triages.length}
+                </span>
+              )}
+              {lastRunAt && (
+                <span className="text-xs hidden sm:block" style={{ color: 'var(--muted-foreground)' }}>
+                  — sorted {formatRelativeTime(lastRunAt)}
+                </span>
+              )}
+            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                disabled={triageRunning}
+                onClick={handleRunTriage}
+                className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ background: 'var(--muted)', color: 'var(--foreground)', border: '1px solid var(--border)' }}
               >
-                {triages.length}
-              </span>
-              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                — sorted and grouped by your agents, waiting on your call
-              </span>
+                <Sparkles className="w-3 h-3" />
+                {triageRunning ? 'Sorting…' : 'Run now'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTriageExpanded((v) => !v)}
+                className="p-1 rounded-full transition-opacity hover:opacity-70"
+              >
+                {triageExpanded
+                  ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--muted-foreground)' }} />
+                  : <ChevronDown className="w-4 h-4" style={{ color: 'var(--muted-foreground)' }} />
+                }
+              </button>
             </div>
-            {triageExpanded
-              ? <ChevronUp className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted-foreground)' }} />
-              : <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted-foreground)' }} />
-            }
-          </button>
+          </div>
 
-          {triageExpanded && (
+          {triageExpanded && triages.length === 0 && (
+            <div className="px-5 pb-4">
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {lastRunAt ? 'No pending suggestions — inbox is clean.' : 'No suggestions yet. Hit "Run now" to sort your inbox.'}
+              </p>
+            </div>
+          )}
+          {triageExpanded && triages.length > 0 && (
             <div className="px-4 pb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {triages.map((triage: V2EmailTriageItem) => {
                 const meta = BUCKET_META[triage.bucket] ?? BUCKET_META.OTHER;

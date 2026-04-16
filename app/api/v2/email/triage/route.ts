@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const triages = await listPendingTriages();
-    return NextResponse.json({ triages });
+    const result = await listPendingTriages();
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[email:triage:list]', err);
-    return NextResponse.json({ triages: [] });
+    return NextResponse.json({ triages: [], lastRunAt: null });
   }
 }

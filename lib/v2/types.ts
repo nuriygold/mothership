@@ -440,6 +440,7 @@ export type V2EmailTriageItem = {
 
 export type V2EmailTriageFeed = {
   triages: V2EmailTriageItem[];
+  lastRunAt: string | null;
 };
 
 export type V2VisionBoardFeed = {
