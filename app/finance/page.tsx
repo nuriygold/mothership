@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown, Info } from 'lucide-react';
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, Tag, TrendingDown, Info } from 'lucide-react';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 
 const FINANCE_COMMANDS = [
@@ -38,6 +38,29 @@ const PLAN_TYPE_LABELS: Record<string, string> = {
 type QuickAction =
   | { label: string; live: true; onClick: () => void | Promise<void> }
   | { label: string; live: false };
+
+type FocusAction = {
+  title: string;
+  detail: string;
+  anchorId?: string;
+};
+
+type DataReadinessRow = {
+  label: string;
+  status: 'complete' | 'partial' | 'missing';
+  percent: number;
+  detail: string;
+  source: string;
+};
+
+const STARTER_PACK_SEQUENCE = [
+  { title: 'Snapshot first', file: 'net-worth-snapshot.md' },
+  { title: 'Baseline cash flow', file: 'cash-flow-baseline-report.md' },
+  { title: 'Debt + obligations', file: 'debt-inventory-paydown-priorities.md' },
+  { title: 'Budget execution', file: 'budget-operating-plan.md' },
+  { title: 'Weekly execution', file: 'advisor-action-plan.md' },
+  { title: 'Monthly cadence', file: 'monthly-review-template.md' },
+];
 
 function TrendBadge({ trend }: { trend: string }) {
   const isPositive = trend.startsWith('+');
@@ -1321,6 +1344,218 @@ function ActionFeed({
   );
 }
 
+function FocusModeCard({ actions }: { actions: FocusAction[] }) {
+  if (actions.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(8,22,20,0.95)', border: '1px solid rgba(52,211,153,0.24)' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Focus Mode: What to do next</h2>
+        <span
+          className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={{ background: 'rgba(52,211,153,0.16)', color: '#6EE7B7' }}
+        >
+          One step at a time
+        </span>
+      </div>
+      <p className="text-xs mb-4" style={{ color: 'rgba(232,237,245,0.6)' }}>
+        Start at the top. Complete each action before opening new work.
+      </p>
+      <div className="space-y-2.5">
+        {actions.map((action, index) => (
+          <button
+            key={`${action.title}-${index}`}
+            onClick={() => {
+              if (!action.anchorId) return;
+              document.getElementById(action.anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            className="w-full text-left rounded-2xl px-4 py-3 transition-opacity hover:opacity-85"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              cursor: action.anchorId ? 'pointer' : 'default',
+            }}
+          >
+            <div className="flex items-start gap-2.5">
+              <span
+                className="mt-0.5 h-5 w-5 rounded-full text-[11px] font-semibold flex items-center justify-center"
+                style={{ background: 'rgba(52,211,153,0.18)', color: '#6EE7B7' }}
+              >
+                {index + 1}
+              </span>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>{action.title}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(232,237,245,0.58)' }}>{action.detail}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StarterPackSequenceCard() {
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(10,14,30,0.95)', border: '1px solid rgba(99,102,241,0.2)' }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Tag className="w-4 h-4" style={{ color: '#818CF8' }} />
+        <h2 className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>Financial Starter Pack sequence</h2>
+      </div>
+      <p className="text-xs mb-3" style={{ color: 'rgba(232,237,245,0.58)' }}>
+        Follow this order so the page matches your action plan and stays motivational.
+      </p>
+      <div className="space-y-2">
+        {STARTER_PACK_SEQUENCE.map((item, idx) => (
+          <div
+            key={item.file}
+            className="rounded-xl px-3 py-2"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}
+          >
+            <p className="text-xs font-medium" style={{ color: '#E8EDF5' }}>
+              {idx + 1}. {item.title}
+            </p>
+            <p className="text-[11px]" style={{ color: 'rgba(232,237,245,0.45)' }}>
+              {item.file}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhaseBanner({
+  phase,
+  blockers,
+}: {
+  phase: 'PHASE_1_DATA_COMPLETION' | 'PHASE_2_TRUTH' | 'PHASE_3_OPTIMIZATION';
+  blockers: string[];
+}) {
+  const isPhase1 = phase === 'PHASE_1_DATA_COMPLETION';
+  const title =
+    phase === 'PHASE_1_DATA_COMPLETION'
+      ? 'You are in Phase 1: Financial Data Completion'
+      : phase === 'PHASE_2_TRUTH'
+        ? 'You are in Phase 2: Financial Truth'
+        : 'You are in Phase 3: Financial Optimization';
+
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{
+        background: isPhase1 ? 'rgba(56,27,10,0.80)' : 'rgba(8,22,20,0.85)',
+        border: isPhase1 ? '1px solid rgba(251,146,60,0.35)' : '1px solid rgba(52,211,153,0.30)',
+      }}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: isPhase1 ? '#FDBA74' : '#6EE7B7' }}>
+        Emerald Financial Command System
+      </p>
+      <h2 className="text-lg font-semibold mt-1" style={{ color: '#E8EDF5' }}>
+        {title}
+      </h2>
+      <p className="text-xs mt-2" style={{ color: 'rgba(232,237,245,0.72)' }}>
+        {isPhase1
+          ? 'Before forecasts and optimization can be trusted, your core financial dataset must be completed.'
+          : 'Core data coverage is strong enough for deeper analysis and optimization steps.'}
+      </p>
+      {blockers.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {blockers.map((blocker) => (
+            <div
+              key={blocker}
+              className="rounded-xl px-3 py-2 text-xs"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#FECACA' }}
+            >
+              Blocker: {blocker}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmeraldMissionCard({
+  actions,
+}: {
+  actions: Array<{ title: string; source: string }>;
+}) {
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(8,22,20,0.95)', border: '1px solid rgba(52,211,153,0.24)' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Emerald&apos;s Current Mission</h2>
+        <span className="text-[10px] rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(52,211,153,0.16)', color: '#6EE7B7' }}>
+          Phase 1 plan
+        </span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: 'rgba(232,237,245,0.6)' }}>
+        Do these now. They unblock reliable cash flow baseline, debt strategy, and mortgage-readiness modeling.
+      </p>
+      <div className="space-y-2">
+        {actions.map((action, idx) => (
+          <div
+            key={action.title}
+            className="rounded-2xl px-3 py-2.5"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}
+          >
+            <p className="text-sm font-semibold" style={{ color: '#E8EDF5' }}>
+              {idx + 1}. {action.title}
+            </p>
+            <p className="text-[11px]" style={{ color: 'rgba(232,237,245,0.45)' }}>
+              From: {action.source}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DataCompletenessCard({ rows }: { rows: DataReadinessRow[] }) {
+  return (
+    <div
+      className="rounded-3xl p-5"
+      style={{ background: 'rgba(10,14,30,0.97)', border: '1px solid rgba(99,102,241,0.20)' }}
+    >
+      <h2 className="text-base font-semibold mb-1" style={{ color: '#E8EDF5' }}>Data Completeness Tracker</h2>
+      <p className="text-xs mb-4" style={{ color: 'rgba(232,237,245,0.55)' }}>
+        Any advanced analysis below may be inaccurate until missing data is resolved.
+      </p>
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const barColor =
+            row.status === 'complete' ? '#6EE7B7' :
+            row.status === 'partial' ? '#FCD34D' : '#F87171';
+          return (
+            <div key={row.label}>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span style={{ color: '#E8EDF5' }}>{row.label}</span>
+                <span style={{ color: barColor, fontWeight: 700 }}>{row.percent}%</span>
+              </div>
+              <div className="h-1.5 rounded-full mb-1" style={{ background: 'rgba(255,255,255,0.09)' }}>
+                <div className="h-1.5 rounded-full" style={{ width: `${row.percent}%`, background: barColor }} />
+              </div>
+              <p className="text-[11px]" style={{ color: 'rgba(232,237,245,0.48)' }}>
+                {row.detail} · From: {row.source}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function FinancePage() {
   const { data, mutate } = useSWR<V2FinanceOverviewFeed>('/api/v2/finance/overview', fetcher, {
     refreshInterval: 30000,
@@ -1393,8 +1628,141 @@ export default function FinancePage() {
     return { income, expenses };
   }, [data]);
 
+  const dataReadinessRows = useMemo<DataReadinessRow[]>(() => {
+    const txCount = (data?.transactions ?? []).length;
+    const incomeSourcesCount = (data?.incomeSources ?? []).length;
+    const payablesCount = (data?.payables ?? []).length;
+    const debtAccountsCount = (data?.accounts ?? []).filter((a) => ['credit', 'loan'].includes(a.type.toLowerCase())).length;
+
+    const txPercent = Math.round(Math.min(100, (txCount / 90) * 100));
+    const incomePercent = Math.round(
+      Math.min(100, ((incomeSourcesCount > 0 ? 60 : 0) + (monthlySummary.income > 0 ? 40 : 0)))
+    );
+    const obligationsPercent = Math.round(Math.min(100, (payablesCount / 8) * 100));
+    const debtPercent = Math.round(Math.min(100, (debtAccountsCount / 4) * 100));
+
+    function status(percent: number): DataReadinessRow['status'] {
+      if (percent >= 90) return 'complete';
+      if (percent >= 40) return 'partial';
+      return 'missing';
+    }
+
+    return [
+      {
+        label: 'Transactions',
+        percent: txPercent,
+        status: status(txPercent),
+        detail: txCount > 0 ? `${txCount} records loaded` : 'No imported transactions yet',
+        source: 'cash-flow-baseline-report.md',
+      },
+      {
+        label: 'Income Data',
+        percent: incomePercent,
+        status: status(incomePercent),
+        detail: incomeSourcesCount > 0 ? `${incomeSourcesCount} income source(s) mapped` : 'Income map incomplete',
+        source: 'income-map.md',
+      },
+      {
+        label: 'Obligations',
+        percent: obligationsPercent,
+        status: status(obligationsPercent),
+        detail: payablesCount > 0 ? `${payablesCount} obligations captured` : 'Obligations list still sparse',
+        source: 'fixed-obligations-register.md',
+      },
+      {
+        label: 'Debt Data',
+        percent: debtPercent,
+        status: status(debtPercent),
+        detail: debtAccountsCount > 0 ? `${debtAccountsCount} debt account(s) linked` : 'Debt balances and APR coverage missing',
+        source: 'debt-inventory-paydown-priorities.md',
+      },
+    ];
+  }, [data, monthlySummary.income]);
+
+  const systemPhase = useMemo<'PHASE_1_DATA_COMPLETION' | 'PHASE_2_TRUTH' | 'PHASE_3_OPTIMIZATION'>(() => {
+    const hasCriticalGap = dataReadinessRows.some((row) => row.status !== 'complete');
+    if (hasCriticalGap) return 'PHASE_1_DATA_COMPLETION';
+    const activePlanCount = (data?.plans ?? []).filter((p) => p.status === 'ACTIVE').length;
+    if (activePlanCount > 1) return 'PHASE_3_OPTIMIZATION';
+    return 'PHASE_2_TRUTH';
+  }, [data?.plans, dataReadinessRows]);
+
+  const systemBlockers = useMemo(() => {
+    return dataReadinessRows
+      .filter((row) => row.status !== 'complete')
+      .map((row) => `Missing or partial ${row.label.toLowerCase()}`);
+  }, [dataReadinessRows]);
+
+  const missionActions = useMemo(() => {
+    const byLabel = new Map(dataReadinessRows.map((row) => [row.label, row]));
+    const actions: Array<{ title: string; source: string }> = [];
+
+    if ((byLabel.get('Transactions')?.status ?? 'missing') !== 'complete') {
+      actions.push({ title: 'Upload latest bank and card statements', source: 'cash-flow-baseline-report.md' });
+    }
+    if ((byLabel.get('Income Data')?.status ?? 'missing') !== 'complete') {
+      actions.push({ title: 'Upload pay stubs and complete income map', source: 'income-map.md' });
+    }
+    if ((byLabel.get('Debt Data')?.status ?? 'missing') !== 'complete') {
+      actions.push({ title: 'Pull credit report and map debt balances/APRs', source: 'debt-inventory-paydown-priorities.md' });
+    }
+    if ((byLabel.get('Obligations')?.status ?? 'missing') !== 'complete') {
+      actions.push({ title: 'Complete fixed obligations register with due dates', source: 'fixed-obligations-register.md' });
+    }
+
+    if (actions.length === 0) {
+      actions.push({ title: 'Run monthly review and activate optimization plans', source: 'monthly-review-template.md' });
+    }
+    return actions.slice(0, 3);
+  }, [dataReadinessRows]);
+
   const events = data?.events ?? [];
   const pendingMerchants = data?.merchants?.pendingCategorization ?? [];
+  const focusActions = useMemo(() => {
+    const steps: FocusAction[] = [];
+    const overdue = (data?.payables ?? []).find((p) => p.status === 'overdue');
+    if (overdue) {
+      steps.push({
+        title: `Resolve overdue payable: ${overdue.vendor}`,
+        detail: `Due ${overdue.dueDate} · ${overdue.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`,
+        anchorId: 'payables-card',
+      });
+    }
+
+    const unresolvedEvents = (data?.events ?? []).slice(0, 1);
+    if (unresolvedEvents.length > 0) {
+      steps.push({
+        title: 'Clear highest-priority alert',
+        detail: eventSummary(unresolvedEvents[0]),
+        anchorId: undefined,
+      });
+    }
+
+    if (data?.forecast?.lowestPoint && data.forecast.lowestPoint.balance < 1000) {
+      steps.push({
+        title: 'Protect cash before projected low point',
+        detail: `Lowest projection ${data.forecast.lowestPoint.balance.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} on ${new Date(data.forecast.lowestPoint.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        anchorId: 'cashflow-card',
+      });
+    }
+
+    const laggingPlan = (data?.plans ?? []).find((p) => p.status === 'ACTIVE' && (p.progressPercent ?? 0) < 70);
+    if (laggingPlan) {
+      steps.push({
+        title: `Advance active plan: ${laggingPlan.title}`,
+        detail: `${laggingPlan.progressPercent ?? 0}% complete · move one milestone today`,
+        anchorId: undefined,
+      });
+    }
+
+    if (steps.length === 0) {
+      steps.push({
+        title: 'Run weekly financial review',
+        detail: 'Use advisor-action-plan.md and monthly-review-template.md to schedule the next 7 days.',
+      });
+    }
+    return steps.slice(0, 3);
+  }, [data]);
 
   async function handleResolveEvent(id: string) {
     await fetch('/api/v2/finance/events', {
@@ -1490,6 +1858,10 @@ export default function FinancePage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         {/* Left column */}
         <div className="space-y-5">
+          {/* Command-state context */}
+          <PhaseBanner phase={systemPhase} blockers={systemBlockers} />
+          <EmeraldMissionCard actions={missionActions} />
+          <DataCompletenessCard rows={dataReadinessRows} />
 
           {/* New Merchants — categorize once, auto-resolve forever */}
           <MerchantCategorizer merchants={pendingMerchants} onCategorized={mutate} />
@@ -1500,6 +1872,9 @@ export default function FinancePage() {
             onResolve={handleResolveEvent}
             onHighlightCluster={setHighlightCluster}
           />
+
+          {/* Focus mode actions */}
+          <FocusModeCard actions={focusActions} />
 
           {/* Holdings */}
           <div
@@ -1828,12 +2203,12 @@ export default function FinancePage() {
         <div className="space-y-5">
 
           {/* Finance Health Score */}
-          {data?.healthScore && (
+          {systemPhase !== 'PHASE_1_DATA_COMPLETION' && data?.healthScore && (
             <FinanceHealthCard health={data.healthScore} />
           )}
 
           {/* Net Worth */}
-          {(data?.netWorthHistory ?? []).length > 0 && (
+          {systemPhase !== 'PHASE_1_DATA_COMPLETION' && (data?.netWorthHistory ?? []).length > 0 && (
             <NetWorthCard history={data!.netWorthHistory} />
           )}
 
@@ -1936,18 +2311,14 @@ export default function FinancePage() {
           </div>
 
           {/* Monthly Summary */}
-          <div
-            className="rounded-3xl p-5"
-            style={{ background: 'rgba(12,9,22,0.95)', border: '1px solid rgba(123,104,238,0.12)' }}
-          >
-            <h2 className="text-sm font-semibold mb-3" style={{ color: '#E8EDF5' }}>
-              {new Date().toLocaleDateString('en-US', { month: 'long' })} Summary
-            </h2>
-            {!data ? (
-              <p className="text-sm text-center py-4" style={{ color: 'rgba(232,237,245,0.45)' }}>
-                No monthly activity available.
-              </p>
-            ) : (
+          {(monthlySummary.income > 0 || monthlySummary.expenses > 0) && (
+            <div
+              className="rounded-3xl p-5"
+              style={{ background: 'rgba(12,9,22,0.95)', border: '1px solid rgba(123,104,238,0.12)' }}
+            >
+              <h2 className="text-sm font-semibold mb-3" style={{ color: '#E8EDF5' }}>
+                {new Date().toLocaleDateString('en-US', { month: 'long' })} Summary
+              </h2>
               <div className="space-y-2">
                 {[
                   { label: 'Income', value: monthlySummary.income, positive: true },
@@ -1966,9 +2337,11 @@ export default function FinancePage() {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
+          {/* Starter pack sequencing */}
+          <StarterPackSequenceCard />
         </div>
       </div>
     </div>
