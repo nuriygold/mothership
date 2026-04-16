@@ -8,6 +8,10 @@
     {
       "path": "/api/dispatch/worker",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/v2/email/triage/worker",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

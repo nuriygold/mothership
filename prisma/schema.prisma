@@ -621,6 +621,40 @@ model VisionTaskLink {
   @@index([taskId])
 }
 
+enum EmailTriageBucket {
+  MARKETING
+  PERSONAL
+  UPCOMING_EVENT
+  BILLS
+  OTHER
+}
+
+enum EmailTriageStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXECUTED
+}
+
+model EmailAgentTriage {
+  id             String            @id @default(uuid())
+  bucket         EmailTriageBucket
+  status         EmailTriageStatus @default(PENDING)
+  emailIds       Json
+  emailSummaries Json
+  agentName      String
+  recommendation String
+  actionLabel    String
+  actionPayload  Json?
+  approvedAt     DateTime?
+  deniedAt       DateTime?
+  executedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status, createdAt])
+}
+
 model ShoppingItem {
   id             String    @id @default(uuid())
   name           String
