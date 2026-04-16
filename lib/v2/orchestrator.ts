@@ -192,10 +192,6 @@ export function deterministicTemplateDrafts(
     enthusiasticBody = `${greeting}Thanks for reaching out — I'd love to connect! I'm available Tuesday afternoon or Wednesday morning. Let me know which works best and I'll get it on the calendar.\n\nLooking forward to it!${signoff}`;
     measuredBody = `${greeting}Thank you for the note. I'm open to scheduling time this week. Could you share two or three preferred slots along with a brief agenda so I can prepare accordingly?${signoff}`;
     declineBody = `${greeting}Thank you for the invitation. I appreciate you thinking of me, but I'm not able to take on additional meetings at this time. I hope we can reconnect when timing is better.${signoff}`;
-  } else if (isPayment) {
-    enthusiasticBody = `${greeting}Thanks for sending this over — we're on it! I'm reviewing the details now and will confirm payment timing with you shortly.${signoff}`;
-    measuredBody = `${greeting}Thank you for this. We're currently reviewing the details and will follow up with a confirmed response once our review is complete. Please let me know if you need anything in the meantime.${signoff}`;
-    declineBody = `${greeting}Thank you for the note. After careful review, we're not able to proceed with this at this time. I appreciate your understanding.${signoff}`;
   } else if (isPromo) {
     enthusiasticBody = `${greeting}Thanks for sharing this offer! I'll take a closer look and may follow up if it's something I'd like to move on.${signoff}`;
     measuredBody = `${greeting}Thank you for the promotional information. I've noted the details and will follow up if I decide to take action on this.${signoff}`;
@@ -216,6 +212,35 @@ export function deterministicTemplateDrafts(
     enthusiasticBody = `${greeting}Thanks for reaching out about ${subjectRef}. This looks interesting — I'd love to move this forward. I'll review the details and follow up with next steps by end of week.${signoff}`;
     measuredBody = `${greeting}Thank you for your message about ${subjectRef}. I've noted the details and would like to clarify a few points before responding fully. Could you provide a bit more context?${signoff}`;
     declineBody = `${greeting}Thank you for reaching out about ${subjectRef}. After careful consideration, this isn't the right fit at this time. I appreciate you thinking of me and hope we can connect on something in the future.${signoff}`;
+    enthusiasticBody = "Absolutely—happy to meet! I can do Tuesday afternoon or Wednesday morning. Share what works best and I'll lock it in.";
+    measuredBody     = 'Thank you for the note. I can accommodate a meeting this week; please share two preferred slots and any agenda context.';
+    declineBody      = "Thank you for reaching out. I'm not able to take on additional meetings right now, but I appreciate you thinking of me.";
+  } else if (isPayment) {
+    enthusiasticBody = "Thanks for sending this over. We're reviewing now and will confirm payment timing shortly.";
+    measuredBody     = "Received. We're validating the details and will respond with confirmation once the review is complete.";
+    declineBody      = "Thank you for the note. After careful review, we're unable to proceed with this at this time.";
+  } else if (isMarketing) {
+    enthusiasticBody = "Thanks for the heads up! I've bookmarked this and will take a closer look today.";
+    measuredBody     = "Noted—I'll review this offer and circle back if it's a good fit.";
+    declineBody      = "Thanks for sharing, but I'll pass on this one for now.";
+  } else if (isNewsletter) {
+    enthusiasticBody = "Great read—a few of these points are directly relevant to what I'm working on right now. Thanks for keeping me in the loop.";
+    measuredBody     = "Thanks for the update. I'll review the full issue when I get a moment.";
+    declineBody      = "Thanks for keeping me on the list. I'm going to step back for now to keep my inbox focused, but I appreciate the content.";
+  } else if (isDelivery) {
+    enthusiasticBody = "Got it—thanks for the update! Looking forward to receiving this.";
+    measuredBody     = "Thank you for the shipping confirmation. I'll keep an eye out and follow up if anything looks off.";
+    declineBody      = "Hi—there seems to be an issue with this delivery. Could someone from your team please follow up?";
+  } else if (isOpportunity) {
+    enthusiasticBody = "This sounds like a great fit—I'd love to explore this further. Let's find a time to connect this week.";
+    measuredBody     = "Thank you for reaching out. I'm interested in learning more; could you share additional details so I can evaluate properly?";
+    declineBody      = "Thank you for thinking of me. After reviewing the details, this isn't the right fit for where I'm focused right now—I appreciate the outreach.";
+  } else {
+    const senderName = sender.match(/^([^<]+)/)?.[1]?.trim().replace(/^"(.*)"$/, '$1') ?? '';
+    const fromClause = senderName ? ` from ${senderName}` : '';
+    enthusiasticBody = `Thanks for this${fromClause}! I'm on it and will follow up with next steps shortly.`;
+    measuredBody     = `Thank you for this. I've reviewed it and will put together a thoughtful response once I've had a chance to look into the details.`;
+    declineBody      = "Thank you for reaching out. After careful consideration, this isn't the right fit for us at this time—I appreciate you thinking of me.";
   }
 
   return [

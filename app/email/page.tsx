@@ -187,6 +187,21 @@ export default function EmailPage() {
     }, 'Unsubscribed');
   }
 
+  async function handleDeleteAndUnsubscribe() {
+    if (!selected) return;
+    const id = selected.id;
+    await runAction('delete-unsubscribe', async () => {
+      const [unsubRes, delRes] = await Promise.all([
+        fetch(`/api/v2/email/${id}/unsubscribe`, { method: 'POST' }),
+        fetch(`/api/v2/email/${id}`, { method: 'DELETE' }),
+      ]);
+      const delJson = await delRes.json();
+      if (!unsubRes.ok && !delRes.ok) return { ok: false, error: 'Both actions failed' };
+      return delJson;
+    }, 'Unsubscribed & deleted');
+    setTimeout(() => mutateInbox(), 500);
+  }
+
   async function handleMakeTask(type: 'task' | 'financial') {
     if (!selected) return;
     const key = type === 'financial' ? 'financial-task' : 'task';
@@ -595,6 +610,13 @@ export default function EmailPage() {
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>Actions</p>
                 <div className="flex flex-wrap gap-2">
                   <ActionBtn
+                    actionKey="delete-unsubscribe"
+                    icon={<><BellOff className="w-3 h-3" /><Trash2 className="w-3 h-3" /></>}
+                    label="Unsub & Delete"
+                    onClick={handleDeleteAndUnsubscribe}
+                    danger
+                  />
+                  <ActionBtn
                     actionKey="delete"
                     icon={<Trash2 className="w-3 h-3" />}
                     label="Delete"
@@ -737,12 +759,16 @@ export default function EmailPage() {
               ].map(({ tone, title, color }) => {
                 const isDraftReady = drafts.some((d) => d.tone === tone);
                 const isRubyCustom = tone === 'Ruby Custom';
+                const draftsLoading = draftsFeed === undefined;
+                // Disable if: Ruby Custom not ready, OR template draft not ready because drafts haven't loaded yet
+                const isDisabled = !isDraftReady && (isRubyCustom || draftsLoading);
+                const loadingLabel = isRubyCustom ? 'Generating…' : draftsLoading ? 'Loading…' : null;
                 return (
                   <button
                     key={tone}
                     type="button"
                     onClick={() => handleSelectTone(tone)}
-                    disabled={isRubyCustom && !isDraftReady}
+                    disabled={isDisabled}
                     className="w-full text-left rounded-xl p-3 transition-all disabled:opacity-50 disabled:cursor-wait"
                     style={{
                       background: color,
@@ -754,9 +780,9 @@ export default function EmailPage() {
                       <p className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>
                         {title}
                       </p>
-                      {isRubyCustom && !isDraftReady && (
+                      {!isDraftReady && loadingLabel && (
                         <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                          Generating…
+                          {loadingLabel}
                         </span>
                       )}
                     </div>
