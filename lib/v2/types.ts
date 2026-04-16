@@ -415,6 +415,33 @@ export type V2VisionPillar = {
   achievedCount: number;
 };
 
+// ─── Email Agent Triage ────────────────────────────────────────────────────────
+
+export type EmailTriageBucket = 'MARKETING' | 'PERSONAL' | 'UPCOMING_EVENT' | 'BILLS' | 'OTHER';
+export type EmailTriageStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXECUTED';
+
+export type V2EmailTriageSummary = {
+  id: string;
+  subject: string;
+  sender: string;
+  snippet: string;
+};
+
+export type V2EmailTriageItem = {
+  id: string;
+  bucket: EmailTriageBucket;
+  status: EmailTriageStatus;
+  agentName: string;
+  recommendation: string;
+  actionLabel: string;
+  emailSummaries: V2EmailTriageSummary[];
+  createdAt: string;
+};
+
+export type V2EmailTriageFeed = {
+  triages: V2EmailTriageItem[];
+};
+
 export type V2VisionBoardFeed = {
   boardId: string;
   title: string;

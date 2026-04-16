@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { ExternalLink, Reply, Forward, Bot, Trash2, BellOff, CheckSquare, Calendar, ShoppingCart, Zap, DollarSign, Eye, Send, X } from 'lucide-react';
-import type { V2EmailDraft, V2EmailDraftFeed, V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
+import { ExternalLink, Reply, Forward, Bot, Trash2, BellOff, CheckSquare, Calendar, ShoppingCart, Zap, DollarSign, Eye, Send, X, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import type { V2EmailDraft, V2EmailDraftFeed, V2EmailFeed, V2EmailItem, V2EmailTriageFeed, V2EmailTriageItem, EmailTriageBucket } from '@/lib/v2/types';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 
 const EMAIL_COMMANDS = [
@@ -14,6 +14,14 @@ const EMAIL_COMMANDS = [
 ];
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+const BUCKET_META: Record<EmailTriageBucket, { label: string; icon: string; agentColor: string; agentTextColor: string; cardBg: string }> = {
+  MARKETING:      { label: 'Marketing & Promos',    icon: '📣', agentColor: 'var(--color-peach)',    agentTextColor: 'var(--color-peach-text)',    cardBg: 'rgba(255,160,100,0.07)' },
+  PERSONAL:       { label: 'Personal — Needs Reply', icon: '✉️', agentColor: 'var(--color-lavender)', agentTextColor: 'var(--color-lavender-text)', cardBg: 'rgba(180,140,255,0.07)' },
+  UPCOMING_EVENT: { label: 'Upcoming Events',        icon: '📅', agentColor: 'var(--color-mint)',     agentTextColor: 'var(--color-mint-text)',     cardBg: 'rgba(0,217,180,0.07)'   },
+  BILLS:          { label: 'Bills & Payments',       icon: '💳', agentColor: 'var(--color-sky)',      agentTextColor: 'var(--color-sky-text)',      cardBg: 'rgba(80,180,255,0.07)'  },
+  OTHER:          { label: 'Other',                  icon: '📬', agentColor: 'var(--muted)',           agentTextColor: 'var(--muted-foreground)',    cardBg: 'var(--muted)'           },
+};
 
 const TABS = ['Inbox', 'Drafts', 'Sent'] as const;
 
@@ -80,6 +88,12 @@ export default function EmailPage() {
   const [selectedTone, setSelectedTone] = useState<string | null>(null);
   const [draftEditorModal, setDraftEditorModal] = useState<V2EmailDraft | null>(null);
   const [editingBody, setEditingBody] = useState('');
+
+  // Agent triage suggestions
+  const { data: triageFeed, mutate: mutateTriage } = useSWR<V2EmailTriageFeed>('/api/v2/email/triage', fetcher, { refreshInterval: 60000 });
+  const triages = triageFeed?.triages ?? [];
+  const [triageActing, setTriageActing] = useState<Record<string, 'loading' | 'done' | 'error'>>({});
+  const [triageExpanded, setTriageExpanded] = useState(true);
 
   const inbox = data?.inbox ?? [];
 
@@ -332,6 +346,29 @@ export default function EmailPage() {
     }
   }
 
+  async function handleTriageApprove(id: string) {
+    setTriageActing((s) => ({ ...s, [id]: 'loading' }));
+    try {
+      const res = await fetch(`/api/v2/email/triage/${id}/approve`, { method: 'POST' });
+      const data = await res.json();
+      setTriageActing((s) => ({ ...s, [id]: data.ok ? 'done' : 'error' }));
+      if (data.ok) setTimeout(() => mutateTriage(), 1000);
+    } catch {
+      setTriageActing((s) => ({ ...s, [id]: 'error' }));
+    }
+  }
+
+  async function handleTriageDeny(id: string) {
+    setTriageActing((s) => ({ ...s, [id]: 'loading' }));
+    try {
+      await fetch(`/api/v2/email/triage/${id}/deny`, { method: 'POST' });
+      setTriageActing((s) => ({ ...s, [id]: 'done' }));
+      setTimeout(() => mutateTriage(), 500);
+    } catch {
+      setTriageActing((s) => ({ ...s, [id]: 'error' }));
+    }
+  }
+
   function ActionBtn({
     actionKey, icon, label, onClick, danger,
   }: {
@@ -376,6 +413,122 @@ export default function EmailPage() {
         </div>
         <SlashCommandSheet commands={EMAIL_COMMANDS} label="email" />
       </div>
+
+      {/* ── AGENT SUGGESTIONS ── */}
+      {triages.length > 0 && (
+        <div
+          className="rounded-3xl overflow-hidden"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <button
+            type="button"
+            onClick={() => setTriageExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
+              <span className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                Agent Suggestions
+              </span>
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
+              >
+                {triages.length}
+              </span>
+              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                — sorted and grouped by your agents, waiting on your call
+              </span>
+            </div>
+            {triageExpanded
+              ? <ChevronUp className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted-foreground)' }} />
+              : <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted-foreground)' }} />
+            }
+          </button>
+
+          {triageExpanded && (
+            <div className="px-4 pb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {triages.map((triage: V2EmailTriageItem) => {
+                const meta = BUCKET_META[triage.bucket] ?? BUCKET_META.OTHER;
+                const acting = triageActing[triage.id];
+                const isLoading = acting === 'loading';
+                const isDone = acting === 'done';
+                const isError = acting === 'error';
+                const count = triage.emailSummaries.length;
+                return (
+                  <div
+                    key={triage.id}
+                    className="rounded-2xl p-4 flex flex-col gap-3"
+                    style={{ background: meta.cardBg, border: '1px solid var(--border)' }}
+                  >
+                    {/* Header row */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base leading-none">{meta.icon}</span>
+                        <span className="text-xs font-semibold truncate" style={{ color: 'var(--foreground)' }}>
+                          {meta.label}
+                        </span>
+                      </div>
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0 flex items-center gap-1"
+                        style={{ background: meta.agentColor, color: meta.agentTextColor }}
+                      >
+                        <Bot className="w-2.5 h-2.5" /> {triage.agentName}
+                      </span>
+                    </div>
+
+                    {/* Recommendation */}
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--foreground)', opacity: 0.85 }}>
+                      {triage.recommendation}
+                    </p>
+
+                    {/* Email list (collapsed) */}
+                    <div className="space-y-1">
+                      {triage.emailSummaries.slice(0, 3).map((em) => (
+                        <div key={em.id} className="text-[11px] truncate" style={{ color: 'var(--muted-foreground)' }}>
+                          · {em.subject}
+                        </div>
+                      ))}
+                      {count > 3 && (
+                        <div className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+                          · +{count - 3} more
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action row */}
+                    <div className="flex items-center gap-2 mt-auto">
+                      <button
+                        type="button"
+                        disabled={isLoading || isDone}
+                        onClick={() => handleTriageApprove(triage.id)}
+                        className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+                        style={{
+                          background: isDone ? 'var(--color-mint)' : isError ? 'rgba(255,80,80,0.12)' : meta.agentColor,
+                          color: isDone ? 'var(--color-mint-text)' : isError ? '#ff5050' : meta.agentTextColor,
+                        }}
+                      >
+                        {isLoading ? '…' : isDone ? 'Done ✓' : isError ? 'Retry' : triage.actionLabel}
+                      </button>
+                      {!isDone && (
+                        <button
+                          type="button"
+                          disabled={isLoading}
+                          onClick={() => handleTriageDeny(triage.id)}
+                          className="rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-70 disabled:opacity-40"
+                          style={{ color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}
+                        >
+                          Dismiss
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-0 lg:grid-cols-[420px_1fr]" style={{ minHeight: 'calc(100vh - 200px)' }}>
 
