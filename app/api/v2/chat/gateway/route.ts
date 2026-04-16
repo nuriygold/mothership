@@ -1,4 +1,4 @@
-import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
+import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -13,14 +13,14 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: 'text is required' }), { status: 400 });
   }
 
-  const gateway = process.env.OPENCLAW_GATEWAY;
+  const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
   const resolvedAgent = agentForKey(agentId);
   const model = modelForOpenClaw(resolvedAgent);
 
   if (!gateway || !token) {
     // Return a graceful mock stream if gateway not configured
-    const fallback = 'Gateway is not configured yet. Set OPENCLAW_GATEWAY and OPENCLAW_TOKEN in your environment.';
+    const fallback = 'Gateway is not configured yet. Set OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) and OPENCLAW_TOKEN in your environment.';
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ delta: fallback })}\n\ndata: [DONE]\n\n`));
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
+    upstreamRes = await fetch(`${gateway}/v1/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

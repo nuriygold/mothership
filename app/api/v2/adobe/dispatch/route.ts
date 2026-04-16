@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
+import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,13 +16,13 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: 'text is required' }), { status: 400 });
   }
 
-  const gateway = process.env.OPENCLAW_GATEWAY;
+  const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
   const resolvedAgent = agentForKey('adobe');
   const model = modelForOpenClaw(resolvedAgent);
 
   if (!gateway || !token) {
-    const fallback = 'Adobe Pettaway is not reachable — OPENCLAW_GATEWAY or OPENCLAW_TOKEN is not configured.';
+    const fallback = 'Adobe Pettaway is not reachable — OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) and OPENCLAW_TOKEN must be set.';
     const stream = new ReadableStream({
       start(c) {
         c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ delta: fallback })}\n\ndata: [DONE]\n\n`));
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
+    upstreamRes = await fetch(`${gateway}/v1/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

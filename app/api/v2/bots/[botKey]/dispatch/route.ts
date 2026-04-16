@@ -1,4 +1,4 @@
-import { agentForKey, modelForOpenClaw } from '@/lib/services/openclaw';
+import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
     return Response.json({ error: 'text is required' }, { status: 400 });
   }
 
-  const gateway = process.env.OPENCLAW_GATEWAY;
+  const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
 
   // Map bot key to OpenClaw agent ID (adrian uses 'main')
@@ -28,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
 
   if (!gateway || !token) {
     const name = botKey.charAt(0).toUpperCase() + botKey.slice(1);
-    const msg = `${name} is not reachable — OPENCLAW_GATEWAY or OPENCLAW_TOKEN is not configured.`;
+    const msg = `${name} is not reachable — OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) and OPENCLAW_TOKEN must be set.`;
     const stream = new ReadableStream({
       start(c) {
         c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ delta: msg })}\n\ndata: [DONE]\n\n`));
@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(`${gateway.replace(/\/$/, '')}/v1/responses`, {
+    upstreamRes = await fetch(`${gateway}/v1/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
