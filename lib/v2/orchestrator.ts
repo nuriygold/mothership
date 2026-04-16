@@ -168,52 +168,59 @@ function relativeTime(input: Date) {
 export function deterministicTemplateDrafts(
   emailId: string,
   subject: string,
+  senderName: string = '',
   preview: string = '',
-  sender: string = '',
 ): V2EmailDraft[] {
-  const combined = `${subject} ${preview}`.toLowerCase();
+  const lowered = (subject + ' ' + preview).toLowerCase();
+  const firstName = senderName.split(/\s+/)[0] || '';
+  const greeting = firstName ? `Hi ${firstName},\n\n` : 'Hi,\n\n';
+  const signoff = '\n\nBest,';
+  const subjectRef = subject ? `"${subject}"` : 'your message';
 
-  const isMeeting    = /meeting|schedule|calendar|invite|appointment|sync up|catch[- ]?up/.test(combined);
-  const isPayment    = /invoice|payment|billing|charge|receipt|transaction/.test(combined);
-  const isMarketing  = /\d+% off|sale|deal|promo|coupon|discount|shop now|limited.?time|ends today|flash sale|free shipping/.test(combined);
-  const isNewsletter = /newsletter|weekly|monthly|digest|edition|roundup|issue #/.test(combined);
-  const isDelivery   = /delivered|shipped|tracking|your order|package|shipment/.test(combined);
-  const isOpportunity = /opportunity|position|hiring|partnership|collaboration|collab|proposal|pitch/.test(combined);
+  const isMeeting = /\b(meeting|schedule|calendar|call|sync|catch.?up)\b/.test(lowered);
+  const isPayment = /\b(invoice|payment|bill|charge|receipt|transaction|order)\b/.test(lowered);
+  const isPromo = /(\d+%\s*off|\bsale\b|\bdeal\b|discount|promo|checkout|shop now|limited.?time|flash sale|marketing)/.test(lowered);
+  const isNewsletter = /\b(newsletter|weekly|digest|roundup|recap|edition|unsubscribe)\b/.test(lowered);
+  const isDelivery = /\b(shipping|delivery|shipped|tracking|package|dispatch|arrived|out for delivery)\b/.test(lowered);
+  const isOpportunity = /\b(job|opportunity|career|position|role|hiring|candidate|interview|apply|partnership|collaboration)\b/.test(lowered);
+  const isEvent = /\b(event|invite|invitation|conference|webinar|summit|workshop)\b/.test(lowered);
 
   let enthusiasticBody: string;
   let measuredBody: string;
   let declineBody: string;
 
   if (isMeeting) {
-    enthusiasticBody = "Absolutely—happy to meet! I can do Tuesday afternoon or Wednesday morning. Share what works best and I'll lock it in.";
-    measuredBody     = 'Thank you for the note. I can accommodate a meeting this week; please share two preferred slots and any agenda context.';
-    declineBody      = "Thank you for reaching out. I'm not able to take on additional meetings right now, but I appreciate you thinking of me.";
+    enthusiasticBody = `${greeting}Thanks for reaching out — I'd love to connect! I'm available Tuesday afternoon or Wednesday morning. Let me know which works best and I'll get it on the calendar.\n\nLooking forward to it!${signoff}`;
+    measuredBody = `${greeting}Thank you for the note. I'm open to scheduling time this week. Could you share two or three preferred slots along with a brief agenda so I can prepare accordingly?${signoff}`;
+    declineBody = `${greeting}Thank you for the invitation. I appreciate you thinking of me, but I'm not able to take on additional meetings at this time. I hope we can reconnect when timing is better.${signoff}`;
   } else if (isPayment) {
-    enthusiasticBody = "Thanks for sending this over. We're reviewing now and will confirm payment timing shortly.";
-    measuredBody     = "Received. We're validating the details and will respond with confirmation once the review is complete.";
-    declineBody      = "Thank you for the note. After careful review, we're unable to proceed with this at this time.";
-  } else if (isMarketing) {
-    enthusiasticBody = "Thanks for the heads up! I've bookmarked this and will take a closer look today.";
-    measuredBody     = "Noted—I'll review this offer and circle back if it's a good fit.";
-    declineBody      = "Thanks for sharing, but I'll pass on this one for now.";
+    enthusiasticBody = `${greeting}Thanks for sending this over — we're on it! I'm reviewing the details now and will confirm payment timing with you shortly.${signoff}`;
+    measuredBody = `${greeting}Thank you for this. We're currently reviewing the details and will follow up with a confirmed response once our review is complete. Please let me know if you need anything in the meantime.${signoff}`;
+    declineBody = `${greeting}Thank you for the note. After careful review, we're not able to proceed with this at this time. I appreciate your understanding.${signoff}`;
+  } else if (isPromo) {
+    enthusiasticBody = `${greeting}Thanks for sharing this offer! I'll take a closer look and may follow up if it's something I'd like to move on.${signoff}`;
+    measuredBody = `${greeting}Thank you for the promotional information. I've noted the details and will follow up if I decide to take action on this.${signoff}`;
+    declineBody = `${greeting}Thank you for reaching out. I'm not in a position to take advantage of this offer at this time, but I appreciate you sharing it.${signoff}`;
   } else if (isNewsletter) {
-    enthusiasticBody = "Great read—a few of these points are directly relevant to what I'm working on right now. Thanks for keeping me in the loop.";
-    measuredBody     = "Thanks for the update. I'll review the full issue when I get a moment.";
-    declineBody      = "Thanks for keeping me on the list. I'm going to step back for now to keep my inbox focused, but I appreciate the content.";
+    enthusiasticBody = `${greeting}Thanks for this — great content as always! I'll pass it along to a few colleagues who I think would find it valuable.${signoff}`;
+    measuredBody = `${greeting}Thank you for the update. I've reviewed the content and will follow up if anything on our end warrants a response.${signoff}`;
+    declineBody = `${greeting}Thank you for keeping me on the list. I'd like to unsubscribe from future editions as my priorities have shifted. I appreciate the content you've shared.${signoff}`;
   } else if (isDelivery) {
-    enthusiasticBody = "Got it—thanks for the update! Looking forward to receiving this.";
-    measuredBody     = "Thank you for the shipping confirmation. I'll keep an eye out and follow up if anything looks off.";
-    declineBody      = "Hi—there seems to be an issue with this delivery. Could someone from your team please follow up?";
+    enthusiasticBody = `${greeting}Got it — thanks for the update! Looking forward to receiving this.${signoff}`;
+    measuredBody = `${greeting}Thank you for the shipping confirmation. I'll keep an eye out and follow up if anything looks off.${signoff}`;
+    declineBody = `${greeting}There seems to be an issue with this delivery. Could someone from your team please follow up with more details?${signoff}`;
   } else if (isOpportunity) {
-    enthusiasticBody = "This sounds like a great fit—I'd love to explore this further. Let's find a time to connect this week.";
-    measuredBody     = "Thank you for reaching out. I'm interested in learning more; could you share additional details so I can evaluate properly?";
-    declineBody      = "Thank you for thinking of me. After reviewing the details, this isn't the right fit for where I'm focused right now—I appreciate the outreach.";
+    enthusiasticBody = `${greeting}Thank you for reaching out about this opportunity — it sounds genuinely interesting and aligns well with my background. I'd love to learn more. Can we set up a time to connect?${signoff}`;
+    measuredBody = `${greeting}Thank you for getting in touch. I'd need a bit more context before I can give this proper consideration. Could you share additional details?${signoff}`;
+    declineBody = `${greeting}Thank you for thinking of me for this opportunity. After careful consideration, I'm not in a position to pursue this right now. I wish you the best.${signoff}`;
+  } else if (isEvent) {
+    enthusiasticBody = `${greeting}Thanks for the invitation — this sounds like a fantastic event! I'm planning to attend and look forward to connecting with everyone there.${signoff}`;
+    measuredBody = `${greeting}Thank you for the invitation. I'm reviewing my schedule and will confirm my attendance shortly. Could you share any additional details about the agenda?${signoff}`;
+    declineBody = `${greeting}Thank you for the invitation. Unfortunately I'm not able to attend this time, but I'd love to be kept in the loop for future events. I hope it goes well!${signoff}`;
   } else {
-    const senderName = sender.match(/^([^<]+)/)?.[1]?.trim().replace(/^"(.*)"$/, '$1') ?? '';
-    const fromClause = senderName ? ` from ${senderName}` : '';
-    enthusiasticBody = `Thanks for this${fromClause}! I'm on it and will follow up with next steps shortly.`;
-    measuredBody     = `Thank you for this. I've reviewed it and will put together a thoughtful response once I've had a chance to look into the details.`;
-    declineBody      = "Thank you for reaching out. After careful consideration, this isn't the right fit for us at this time—I appreciate you thinking of me.";
+    enthusiasticBody = `${greeting}Thanks for reaching out about ${subjectRef}. This looks interesting — I'd love to move this forward. I'll review the details and follow up with next steps by end of week.${signoff}`;
+    measuredBody = `${greeting}Thank you for your message about ${subjectRef}. I've noted the details and would like to clarify a few points before responding fully. Could you provide a bit more context?${signoff}`;
+    declineBody = `${greeting}Thank you for reaching out about ${subjectRef}. After careful consideration, this isn't the right fit at this time. I appreciate you thinking of me and hope we can connect on something in the future.${signoff}`;
   }
 
   return [
@@ -241,50 +248,52 @@ export function deterministicTemplateDrafts(
   ];
 }
 
-async function generateRubyDraft(emailId: string, subject: string, preview: string, sender: string = '') {
+async function generateRubyDraft(emailId: string, subject: string, preview: string, senderName: string = '') {
   if (pendingRubyDrafts.has(emailId)) return;
   if (sentDrafts.has(emailId)) return;
   pendingRubyDrafts.add(emailId);
 
+  const firstName = senderName.split(/\s+/)[0] || '';
+  const greeting = firstName ? `Hi ${firstName},\n\n` : 'Hi,\n\n';
+  const subjectRef = subject ? `"${subject}"` : 'your message';
+
+  let body: string;
   try {
     const result = await dispatchToOpenClaw({
       agentId: 'ruby',
-      text: `Draft a brief, natural email reply (1–3 sentences, no greeting or sign-off) that is clearly specific to this email's content and sender. Do not use generic filler phrases.\n\nFrom: ${sender || 'unknown sender'}\nSubject: ${subject}\nPreview: ${preview}`,
+      text: `Write a professional email reply to the following message. Be genuinely helpful and contextually appropriate — choose the response style that best fits the content (engaging, informational, action-oriented, declining, etc.). Include a greeting, a 2–3 sentence response, and a sign-off. Write only the reply body; do not include a subject line.\n\nSubject: ${subject}\nMessage preview: ${preview}`,
       sessionKey: `email-${emailId}`,
     });
-
-    const body = result.output || 'Thank you for the note. I cannot commit to this as proposed today, but I can revisit with alternatives shortly.';
-    const rubyDraft: V2EmailDraft = {
-      id: `${emailId}-ruby-custom`,
-      tone: 'Ruby Custom',
-      body,
-      approveWebhook: `/api/v2/email/send/${emailId}/ruby-custom`,
-      source: 'ruby_custom',
-    };
-    rubyDraftStore.set(emailId, rubyDraft);
-    // Persist to DB so draft survives serverless cold starts
-    try {
-      await prisma.emailDraftSuggestion.create({
-        data: {
-          emailExternalId: emailId,
-          tone: 'Ruby Custom',
-          body,
-          source: 'ruby_custom',
-        },
-      });
-    } catch { /* best-effort — in-memory cache is still populated */ }
-    publishV2Event(`email-drafts:${emailId}`, 'draft.generated', {
-      emailId,
-      draft: rubyDraft,
-    });
-  } catch (error) {
-    publishV2Event(`email-drafts:${emailId}`, 'draft.error', {
-      emailId,
-      message: error instanceof Error ? error.message : 'Ruby draft failed',
-    });
-  } finally {
-    pendingRubyDrafts.delete(emailId);
+    body = result.output?.trim() || `${greeting}Thank you for your message about ${subjectRef}. I've reviewed the details and will follow up with a more complete response shortly.\n\nBest,`;
+  } catch {
+    // Fall back to a context-aware draft so the option doesn't hang indefinitely
+    body = `${greeting}Thank you for your message about ${subjectRef}. I've reviewed the details and will follow up with a more complete response shortly.\n\nBest,`;
   }
+
+  const rubyDraft: V2EmailDraft = {
+    id: `${emailId}-ruby-custom`,
+    tone: 'Ruby Custom',
+    body,
+    approveWebhook: `/api/v2/email/send/${emailId}/ruby-custom`,
+    source: 'ruby_custom',
+  };
+  rubyDraftStore.set(emailId, rubyDraft);
+  // Persist to DB so draft survives serverless cold starts
+  try {
+    await prisma.emailDraftSuggestion.create({
+      data: {
+        emailExternalId: emailId,
+        tone: 'Ruby Custom',
+        body,
+        source: 'ruby_custom',
+      },
+    });
+  } catch { /* best-effort — in-memory cache is still populated */ }
+  publishV2Event(`email-drafts:${emailId}`, 'draft.generated', {
+    emailId,
+    draft: rubyDraft,
+  });
+  pendingRubyDrafts.delete(emailId);
 }
 
 function upsertAction(action: Omit<PredictiveActionState, 'id'>) {
@@ -424,12 +433,20 @@ export async function getV2EmailDrafts(emailId: string): Promise<V2EmailDraftFee
   const selected = inbox.inbox.find((item) => item.id === emailId);
   const fallbackSubject = selected?.subject ?? 'New request';
   const fallbackPreview = selected?.preview ?? 'Please draft a response.';
-  const fallbackSender  = selected?.sender ?? '';
+  const rawSender = selected?.sender ?? '';
+  const senderMatch = rawSender.match(/^([^<]+)/);
+  const senderName = senderMatch ? senderMatch[1].trim().replace(/^"(.*)"$/, '$1') : '';
 
-  const drafts = deterministicTemplateDrafts(emailId, fallbackSubject, fallbackPreview, fallbackSender);
-  const rubyDraft = rubyDraftStore.get(emailId);
-  if (rubyDraft) drafts.push(rubyDraft);
-  void generateRubyDraft(emailId, fallbackSubject, fallbackPreview, fallbackSender);
+  const drafts = deterministicTemplateDrafts(emailId, fallbackSubject, senderName, fallbackPreview);
+
+  // Check memory + DB so a previously generated draft is included in the initial response
+  // (avoids the SSE race condition where the event fires before the client subscribes)
+  const rubyDraft = await getRubyDraftWithFallback(emailId);
+  if (rubyDraft) {
+    drafts.push(rubyDraft);
+  } else {
+    void generateRubyDraft(emailId, fallbackSubject, fallbackPreview, senderName);
+  }
 
   return {
     emailId,

@@ -104,13 +104,15 @@ export default function EmailPage() {
     setSelectedTone(null);
     setDraftEditorModal(null);
     setEditingBody('');
+    rubyCustomReadyRef.current = false;
   }, [selectedId]);
 
-  // Drafts polling
+  // Drafts polling — fast interval until Ruby Custom draft arrives, then slow down
+  const rubyCustomReadyRef = useRef(false);
   const { data: draftsFeed } = useSWR<V2EmailDraftFeed>(
     selected ? `/api/v2/email/${selected.id}/ai-drafts` : null,
     fetcher,
-    { refreshInterval: 20000 }
+    { refreshInterval: () => rubyCustomReadyRef.current ? 30000 : 4000 }
   );
 
   // SSE draft stream
@@ -138,8 +140,9 @@ export default function EmailPage() {
 
   const drafts = useMemo(() => {
     const base = draftsFeed?.drafts ?? [];
-    if (liveDraft && !base.some((item) => item.id === liveDraft.id)) return [...base, liveDraft];
-    return base;
+    const combined = liveDraft && !base.some((item) => item.id === liveDraft.id) ? [...base, liveDraft] : base;
+    rubyCustomReadyRef.current = combined.some((d) => d.tone === 'Ruby Custom');
+    return combined;
   }, [draftsFeed?.drafts, liveDraft]);
 
   const inboxCount = inbox.filter((e) => !e.isRead).length || inbox.length;
@@ -699,7 +702,7 @@ export default function EmailPage() {
                         <p className="text-xs mt-0.5" style={{ color: colors.textColor, opacity: 0.75 }}>
                           {desc.subtitle}
                         </p>
-                        <p className="text-xs mt-2 leading-relaxed" style={{ color: colors.textColor, opacity: 0.85 }}>
+                        <p className="text-xs mt-2 leading-relaxed whitespace-pre-wrap" style={{ color: colors.textColor, opacity: 0.85 }}>
                           {draft.body}
                         </p>
                         <div className="flex items-center gap-2 mt-3">
