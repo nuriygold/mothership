@@ -687,3 +687,15 @@ model ChatMessage {
 
   @@index([sessionId, createdAt], map: "ChatMessage_sessionId_createdAt_idx")
 }
+
+model PlaidItem {
+  id              String   @id @default(uuid())
+  itemId          String   @unique
+  accessToken     String
+  institutionName String?
+  cursor          String?
+  status          String   @default("good")
+  errorCode       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
