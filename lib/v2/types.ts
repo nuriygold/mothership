@@ -417,14 +417,16 @@ export type V2VisionPillar = {
 
 // ─── Email Agent Triage ────────────────────────────────────────────────────────
 
-export type EmailTriageBucket = 'MARKETING' | 'PERSONAL' | 'UPCOMING_EVENT' | 'BILLS' | 'OTHER';
+export type EmailTriageBucket = 'MARKETING' | 'PERSONAL' | 'UPCOMING_EVENT' | 'BILLS' | 'OTHER' | 'ACT_SOON' | 'OPPORTUNITY_PILE' | 'NOT_YOUR_SPEED' | 'NEED_HUMAN_EYES' | 'RELATIONSHIP_KEEPER';
 export type EmailTriageStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXECUTED';
+export type EmailTriageConfidence = 'LOCKED_IN' | 'PRETTY_SURE' | 'NEEDS_YOUR_EYES';
 
 export type V2EmailTriageSummary = {
   id: string;
   subject: string;
   sender: string;
   snippet: string;
+  sourceIntegration?: 'Gmail' | 'Zoho' | 'Internal';
 };
 
 export type V2EmailTriageItem = {
@@ -436,6 +438,9 @@ export type V2EmailTriageItem = {
   actionLabel: string;
   emailSummaries: V2EmailTriageSummary[];
   createdAt: string;
+  urgentCount?: number;
+  confidence?: EmailTriageConfidence;
+  subGroups?: { SEND: string[]; REVIEW: string[]; SKIP: string[] };
 };
 
 export type V2EmailTriageFeed = {
