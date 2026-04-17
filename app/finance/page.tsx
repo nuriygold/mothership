@@ -1557,54 +1557,177 @@ function DataCompletenessCard({ rows }: { rows: DataReadinessRow[] }) {
   );
 }
 
-function PlaidConnectButton({ onSuccess }: { onSuccess: () => void }) {
+type PlaidItemInfo = {
+  id: string;
+  itemId: string;
+  institutionName: string | null;
+  status: string;
+  errorCode: string | null;
+  updatedAt: string;
+};
+
+function PlaidLinkButton({
+  itemId,
+  label,
+  onSuccess,
+}: {
+  itemId?: string;
+  label: string;
+  onSuccess: () => void;
+}) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch('/api/plaid/create-link-token', { method: 'POST' })
+    fetch('/api/plaid/create-link-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(itemId ? { itemId } : {}),
+    })
       .then((r) => r.json())
       .then((d) => { if (d.link_token) setLinkToken(d.link_token); })
       .catch(() => {});
-  }, []);
+  }, [itemId]);
 
   const onPlaidSuccess = useCallback(
     async (publicToken: string, metadata: { institution?: { name?: string } | null }) => {
-      setConnecting(true);
+      setBusy(true);
       try {
-        await fetch('/api/plaid/exchange-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            public_token: publicToken,
-            institution_name: metadata?.institution?.name ?? undefined,
-          }),
-        });
+        if (itemId) {
+          // Update mode: clear error status, no token exchange needed
+          await fetch(`/api/plaid/items/${itemId}`, { method: 'PATCH' });
+        } else {
+          await fetch('/api/plaid/exchange-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              public_token: publicToken,
+              institution_name: metadata?.institution?.name ?? undefined,
+            }),
+          });
+        }
         onSuccess();
       } finally {
-        setConnecting(false);
+        setBusy(false);
       }
     },
-    [onSuccess],
+    [itemId, onSuccess],
   );
 
-  const { open, ready } = usePlaidLink({
-    token: linkToken ?? '',
-    onSuccess: onPlaidSuccess,
-  });
+  const { open, ready } = usePlaidLink({ token: linkToken ?? '', onSuccess: onPlaidSuccess });
 
   if (!linkToken) return null;
 
   return (
     <button
       onClick={() => open()}
-      disabled={!ready || connecting}
+      disabled={!ready || busy}
       className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
       style={{ background: 'rgba(56,189,248,0.18)', color: '#7DD3FC', border: '1px solid rgba(56,189,248,0.30)' }}
     >
       <Link2 className="w-3 h-3" />
-      {connecting ? 'Syncing…' : 'Connect Bank'}
+      {busy ? 'Syncing…' : label}
     </button>
+  );
+}
+
+function ConnectedAccountsList({ onRefresh }: { onRefresh: () => void }) {
+  const { data, mutate } = useSWR<{ items: PlaidItemInfo[] }>('/api/plaid/items', (url: string) =>
+    fetch(url).then((r) => r.json()),
+  );
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const items = data?.items ?? [];
+  if (items.length === 0) return null;
+
+  async function handleSync(itemId: string) {
+    setSyncingId(itemId);
+    try {
+      await fetch('/api/plaid/sync-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId }),
+      });
+      onRefresh();
+    } finally {
+      setSyncingId(null);
+    }
+  }
+
+  async function handleRemove(itemId: string) {
+    setRemovingId(itemId);
+    try {
+      await fetch(`/api/plaid/items/${itemId}`, { method: 'DELETE' });
+      await mutate();
+      onRefresh();
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-2">
+      {items.map((item) => {
+        const isError = item.status === 'error' || item.status === 'login_required';
+        const statusColor = isError ? '#F87171' : '#6EE7B7';
+        return (
+          <div
+            key={item.itemId}
+            className="flex items-center justify-between rounded-2xl px-4 py-2.5"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: `1px solid ${isError ? 'rgba(248,113,113,0.25)' : 'rgba(110,231,183,0.15)'}`,
+            }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ background: statusColor }}
+              />
+              <span className="text-xs font-medium truncate" style={{ color: '#E8EDF5' }}>
+                {item.institutionName ?? item.itemId}
+              </span>
+              {isError && (
+                <span
+                  className="text-[10px] rounded-full px-1.5 py-0.5 shrink-0"
+                  style={{ background: 'rgba(248,113,113,0.15)', color: '#F87171' }}
+                >
+                  {item.status === 'login_required' ? 'Login required' : item.errorCode ?? 'Error'}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              {isError ? (
+                <PlaidLinkButton
+                  itemId={item.itemId}
+                  label="Reconnect"
+                  onSuccess={() => { mutate(); onRefresh(); }}
+                />
+              ) : (
+                <button
+                  onClick={() => handleSync(item.itemId)}
+                  disabled={syncingId === item.itemId}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(232,237,245,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  {syncingId === item.itemId ? 'Syncing…' : 'Sync'}
+                </button>
+              )}
+              <button
+                onClick={() => handleRemove(item.itemId)}
+                disabled={removingId === item.itemId}
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: 'rgba(248,113,113,0.10)', color: '#F87171', border: '1px solid rgba(248,113,113,0.20)' }}
+              >
+                {removingId === item.itemId ? '…' : 'Disconnect'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1984,7 +2107,7 @@ export default function FinancePage() {
                 <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
                 <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
               </div>
-              <PlaidConnectButton onSuccess={() => mutate()} />
+              <PlaidLinkButton label="Connect Bank" onSuccess={() => mutate()} />
             </div>
             {data?.accounts && data.accounts.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-3">
@@ -2029,6 +2152,7 @@ export default function FinancePage() {
                 </p>
               </div>
             )}
+            <ConnectedAccountsList onRefresh={() => mutate()} />
           </div>
 
           {/* Obligations */}

@@ -689,10 +689,13 @@ model ChatMessage {
 }
 
 model PlaidItem {
-  id          String   @id @default(uuid())
-  itemId      String   @unique
-  accessToken String
+  id              String   @id @default(uuid())
+  itemId          String   @unique
+  accessToken     String
   institutionName String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  cursor          String?
+  status          String   @default("good")
+  errorCode       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
