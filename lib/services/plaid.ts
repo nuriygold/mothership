@@ -34,11 +34,15 @@ function buildClient(): PlaidApi {
 
 export async function createLinkToken(updateAccessToken?: string): Promise<string> {
   const client = buildClient();
+  const appUrl = process.env.APP_URL;
+  const webhookUrl = appUrl ? `${appUrl}/api/plaid/webhook` : undefined;
+
   const response = await client.linkTokenCreate({
     user: { client_user_id: 'mothership-user' },
     client_name: 'Mothership',
     language: 'en',
     country_codes: [CountryCode.Us],
+    ...(webhookUrl ? { webhook: webhookUrl } : {}),
     ...(updateAccessToken
       ? { access_token: updateAccessToken }
       : { products: [Products.Transactions] }),
