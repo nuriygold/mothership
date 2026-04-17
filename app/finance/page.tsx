@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import useSWR from 'swr';
-import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, Tag, TrendingDown, Info } from 'lucide-react';
+import { usePlaidLink } from 'react-plaid-link';
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, Tag, TrendingDown, Info, Link2 } from 'lucide-react';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 
 const FINANCE_COMMANDS = [
@@ -1556,6 +1557,57 @@ function DataCompletenessCard({ rows }: { rows: DataReadinessRow[] }) {
   );
 }
 
+function PlaidConnectButton({ onSuccess }: { onSuccess: () => void }) {
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/plaid/create-link-token', { method: 'POST' })
+      .then((r) => r.json())
+      .then((d) => { if (d.link_token) setLinkToken(d.link_token); })
+      .catch(() => {});
+  }, []);
+
+  const onPlaidSuccess = useCallback(
+    async (publicToken: string, metadata: { institution?: { name?: string } | null }) => {
+      setConnecting(true);
+      try {
+        await fetch('/api/plaid/exchange-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            public_token: publicToken,
+            institution_name: metadata?.institution?.name ?? undefined,
+          }),
+        });
+        onSuccess();
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [onSuccess],
+  );
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken ?? '',
+    onSuccess: onPlaidSuccess,
+  });
+
+  if (!linkToken) return null;
+
+  return (
+    <button
+      onClick={() => open()}
+      disabled={!ready || connecting}
+      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+      style={{ background: 'rgba(56,189,248,0.18)', color: '#7DD3FC', border: '1px solid rgba(56,189,248,0.30)' }}
+    >
+      <Link2 className="w-3 h-3" />
+      {connecting ? 'Syncing…' : 'Connect Bank'}
+    </button>
+  );
+}
+
 export default function FinancePage() {
   const { data, mutate } = useSWR<V2FinanceOverviewFeed>('/api/v2/finance/overview', fetcher, {
     refreshInterval: 30000,
@@ -1927,9 +1979,12 @@ export default function FinancePage() {
                 </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 mb-4">
-              <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
-              <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
+                <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
+              </div>
+              <PlaidConnectButton onSuccess={() => mutate()} />
             </div>
             {data?.accounts && data.accounts.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-3">
