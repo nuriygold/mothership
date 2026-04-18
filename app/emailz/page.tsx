@@ -137,15 +137,41 @@ export default function EmailzPage() {
     setRules(loadFeedbackRules());
   }, []);
 
-  // Generate recommendations when emails load
+  // Generate AI recommendations when emails load
   useEffect(() => {
-    if (emails.length > 0) {
+    if (emails.length === 0) return;
+
+    const fetchRecommendations = async () => {
       const newRecs = new Map<string, EmailRecommendation>();
-      emails.forEach(email => {
-        newRecs.set(email.id, generateRecommendation(email));
-      });
+
+      // Fetch recommendations for each email
+      for (const email of emails) {
+        try {
+          const response = await fetch('/api/v2/email/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.ok && data.recommendation) {
+              newRecs.set(email.id, data.recommendation);
+            }
+          } else {
+            // Fallback to local recommendation on error
+            newRecs.set(email.id, generateRecommendation(email));
+          }
+        } catch (error) {
+          console.error('[emailz] Failed to get AI recommendation:', error);
+          newRecs.set(email.id, generateRecommendation(email));
+        }
+      }
+
       setRecommendations(newRecs);
-    }
+    };
+
+    fetchRecommendations();
   }, [emails]);
 
   async function handleApprove(emailId: string, addFeedback: boolean = false) {
