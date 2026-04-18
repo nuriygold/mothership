@@ -106,6 +106,16 @@ const BOT_PROFILES: Array<{
     personality: 'Precise and literal',
     strengths: ['Document parsing', 'Entity extraction', 'Validation checks'],
   },
+  {
+    key: 'anchor',
+    name: 'Anchor',
+    role: 'Execution Coordination & Human Follow-through',
+    colorKey: 'lavender',
+    iconKey: 'anchor',
+    workingStyle: 'Grounds execution plans, clarifies ownership, and stabilizes re-entry when momentum drops',
+    personality: 'Warm, firm, and execution-first — reduces friction without dramatizing stalls',
+    strengths: ['Priority sequencing', 'Ownership and accountability coordination', 'Re-entry planning and completion support'],
+  },
 ];
 
 function routeForTask(task: any): BotRouteKey {
@@ -115,6 +125,7 @@ function routeForTask(task: any): BotRouteKey {
   if (assignee === 'ruby') return 'ruby';
   if (assignee === 'emerald') return 'emerald';
   if (assignee === 'adobe' || assignee === 'adobe pettaway') return 'adobe';
+  if (assignee === 'anchor' || assignee === 'ballast') return 'anchor';
 
   // Fall back to keyword inference from title + description
   const title = String(task.title ?? '').toLowerCase();
@@ -126,6 +137,8 @@ function routeForTask(task: any): BotRouteKey {
   if (haystack.match(/email|reply|message|copy|comms|outreach|personal|social|relationship|schedule/)) return 'ruby';
   // Adobe: document parsing and extraction
   if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
+  // Anchor: execution coordination, prioritization, and follow-through
+  if (haystack.match(/prioriti|sequence|coordina|follow.?through|re.?entry|ownership|accountabil|stall|friction|handoff|unblock people/)) return 'anchor';
   // Adrian: automation, infrastructure, system operations
   if (haystack.match(/automat|deploy|infrastructure|script|command|system|health|orchestrat|build|install|setup|run /)) return 'adrian';
   return 'gateway';
@@ -153,7 +166,7 @@ function mapTaskPriority(priority: TaskPriority): V2TaskItem['metadata']['priori
 function categoryFromRoute(route: BotRouteKey): PredictiveActionState['category'] {
   if (route === 'emerald') return 'finance';
   if (route === 'ruby') return 'email';
-  if (route === 'adrian' || route === 'gateway') return 'tasks';
+  if (route === 'adrian' || route === 'anchor' || route === 'gateway') return 'tasks';
   return 'other';
 }
 

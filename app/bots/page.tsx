@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
-  TrendingUp, Mail, Search, FileText,
+  TrendingUp, Mail, Search, FileText, Anchor,
   CheckCircle2, ChevronDown,
   WifiOff, Users, Send, X, Loader2,
 } from 'lucide-react';
@@ -31,6 +31,7 @@ const BOT_ICON: Record<string, React.ElementType> = {
   'mail':        Mail,
   'search':      Search,
   'file-text':   FileText,
+  'anchor':      Anchor,
 };
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -45,6 +46,7 @@ const BOT_DISPATCH_URL: Record<string, string> = {
   'Ruby':           '/api/v2/ruby/dispatch',
   'Emerald':        '/api/v2/emerald/dispatch',
   'Adobe Pettaway': '/api/v2/adobe/dispatch',
+  'Anchor':         '/api/v2/anchor/dispatch',
 };
 
 function BotCardSkeleton() {
@@ -475,7 +477,7 @@ export default function BotsPage() {
       {/* Loading skeleton */}
       {isLoading && (
         <div className="grid gap-5 md:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => <BotCardSkeleton key={i} />)}
+          {[0, 1, 2, 3, 4].map((i) => <BotCardSkeleton key={i} />)}
         </div>
       )}
 

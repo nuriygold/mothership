@@ -60,6 +60,7 @@ Mothership routes work by domain intent:
 - **Comms / Email** -> Ruby
 - **Research / Synthesis** -> Emerald
 - **Document intelligence** -> Adobe Pettaway
+- **Execution coordination / follow-through** -> Anchor
 - **System orchestration / fallback** -> Gateway/default agent
 
 ## Email Drafting (Hybrid V2)
@@ -91,7 +92,7 @@ If Ruby generation fails, template actions still work.
 - `OPENCLAW_DEFAULT_AGENT`
 - `OPENCLAW_AGENT_RUBY`
 - `OPENCLAW_AGENT_EMERALD`
-- optional mappings (recommended): `OPENCLAW_AGENT_ADRIAN`, `OPENCLAW_AGENT_ADOBE`
+- optional mappings (recommended): `OPENCLAW_AGENT_ADRIAN`, `OPENCLAW_AGENT_ADOBE`, `OPENCLAW_AGENT_ANCHOR`
 - optional model override: `OPENCLAW_MODEL`
 
 ### Email

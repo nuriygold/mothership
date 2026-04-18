@@ -1,41 +1,43 @@
+import { prisma } from '@/lib/prisma';
 import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const VALID_KEYS = new Set(['adrian', 'ruby', 'emerald', 'adobe', 'anchor']);
+// Anchor's system prompt is configured at the gateway agent level (OPENCLAW_AGENT_ANCHOR).
+// The dispatch sends only the user's message text; the gateway handles identity + memory.
 
-export async function POST(req: Request, { params }: { params: Promise<{ botKey: string }> }) {
-  const { botKey } = await params;
-
-  if (!VALID_KEYS.has(botKey)) {
-    return Response.json({ error: 'Unknown bot' }, { status: 404 });
-  }
-
+export async function POST(req: Request) {
   const body = await req.json();
   const text = String(body?.text ?? '').trim();
+  const sessionId = body?.sessionId ? String(body.sessionId).trim() : null;
+
   if (!text) {
-    return Response.json({ error: 'text is required' }, { status: 400 });
+    return new Response(JSON.stringify({ error: 'text is required' }), { status: 400 });
   }
 
   const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
-
-  // Map bot key to OpenClaw agent ID (adrian uses 'main')
-  const agentKey = botKey === 'adrian' ? 'main' : botKey;
-  const resolvedAgent = agentForKey(agentKey);
+  const resolvedAgent = agentForKey('anchor');
   const model = modelForOpenClaw(resolvedAgent);
 
   if (!gateway || !token) {
-    const name = botKey.charAt(0).toUpperCase() + botKey.slice(1);
-    const msg = `${name} is not reachable — OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) and OPENCLAW_TOKEN must be set.`;
+    const fallback = 'Anchor is not reachable — OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) and OPENCLAW_TOKEN must be set.';
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ delta: msg })}\n\ndata: [DONE]\n\n`));
+        c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ delta: fallback })}\n\ndata: [DONE]\n\n`));
         c.close();
       },
     });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+  }
+
+  // Persist session + user message (fire-and-forget)
+  if (sessionId) {
+    prisma.chatSession
+      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+      .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
+      .catch(() => {});
   }
 
   let upstreamRes: Response;
@@ -46,6 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         'x-openclaw-agent-id': resolvedAgent,
+        ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
       body: JSON.stringify({ stream: true, model, input: text }),
       signal: AbortSignal.timeout(30_000),
@@ -83,6 +86,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
     async start(controller) {
       const reader = upstreamRes.body!.getReader();
       let buf = '';
+      let accumulated = '';
       let closed = false;
 
       function close() {
@@ -90,6 +94,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
         closed = true;
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
+        if (accumulated && sessionId) {
+          prisma.chatMessage
+            .create({ data: { sessionId, role: 'assistant', content: accumulated } })
+            .catch(() => {});
+        }
       }
 
       try {
@@ -110,9 +119,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ botKey:
               const eventType = payload?.event ?? evt?.type;
               if (eventType === 'response.output_text.delta') {
                 const delta = payload?.data ?? evt?.delta ?? '';
-                if (delta) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+                if (delta) {
+                  accumulated += delta;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+                }
               } else if (eventType === 'response.output_text.done') {
-                if (evt?.text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+                if (!accumulated && evt?.text) {
+                  accumulated = evt.text;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: evt.text })}\n\n`));
+                }
               } else if (eventType === 'response.error') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: payload?.data ?? evt?.error ?? 'Gateway error' })}\n\n`));
               } else if (eventType === 'response.completed') {

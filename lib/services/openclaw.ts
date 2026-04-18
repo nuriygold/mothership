@@ -20,6 +20,9 @@ function normalizeAgentId(value?: string | null) {
       return 'emerald';
     case 'adobe':
       return 'adobe';
+    case 'anchor':
+    case 'ballast':
+      return 'anchor';
     default:
       return raw;
   }
@@ -38,6 +41,9 @@ export function agentForKey(key?: string) {
   }
   if (requested === 'adobe') {
     return normalizeAgentId(process.env.OPENCLAW_AGENT_ADOBE || 'adobe');
+  }
+  if (requested === 'anchor') {
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_ANCHOR || 'anchor');
   }
   return requested;
 }

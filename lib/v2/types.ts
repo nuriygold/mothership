@@ -12,7 +12,7 @@ export type SystemHealthSnapshot = {
   dataSync: number;
 };
 
-export type BotRouteKey = 'adrian' | 'ruby' | 'emerald' | 'adobe' | 'gateway';
+export type BotRouteKey = 'adrian' | 'ruby' | 'emerald' | 'adobe' | 'anchor' | 'gateway';
 
 export type V2BotStatus = 'active' | 'done' | 'pending' | 'working' | 'idle' | 'blocked';
 
@@ -107,7 +107,7 @@ export type V2BotProfile = {
     name: string;
     role: string;
     colorKey: 'mint' | 'pink' | 'sky' | 'lemon' | 'lavender';
-    iconKey: 'trending-up' | 'mail' | 'search' | 'file-text';
+    iconKey: 'trending-up' | 'mail' | 'search' | 'file-text' | 'anchor';
   };
   liveState: {
     currentTask: string;
