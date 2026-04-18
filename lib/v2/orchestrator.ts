@@ -64,7 +64,7 @@ const BOT_PROFILES: Array<{
   personality: string;
   strengths: string[];
   colorKey: 'mint' | 'pink' | 'sky' | 'lemon' | 'lavender';
-  iconKey: 'trending-up' | 'mail' | 'search' | 'file-text';
+  iconKey: 'trending-up' | 'mail' | 'search' | 'file-text' | 'anchor';
 }> = [
   {
     key: 'adrian',
