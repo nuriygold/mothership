@@ -1,9 +1,14 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { usePlaidLink } from 'react-plaid-link';
-import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, Tag, TrendingDown, Info, Link2 } from 'lucide-react';
+<<<<<<< ours
+<<<<<<< ours
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown, Info } from 'lucide-react';
+=======
+=======
+>>>>>>> theirs
+import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, Tag, TrendingDown, Info } from 'lucide-react';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 
 const FINANCE_COMMANDS = [
@@ -13,6 +18,7 @@ const FINANCE_COMMANDS = [
   { cmd: '/plans',    desc: 'Active finance plans & progress' },
   { cmd: '/bill',     args: '<vendor> $<amount> [date]', desc: 'Log a new bill' },
 ];
+>>>>>>> theirs
 import { FinanceEventActionModal } from '@/components/finance/finance-event-action-modal';
 import type {
   V2FinanceOverviewFeed, V2FinancePlan, V2FinanceEvent,
@@ -1557,180 +1563,6 @@ function DataCompletenessCard({ rows }: { rows: DataReadinessRow[] }) {
   );
 }
 
-type PlaidItemInfo = {
-  id: string;
-  itemId: string;
-  institutionName: string | null;
-  status: string;
-  errorCode: string | null;
-  updatedAt: string;
-};
-
-function PlaidLinkButton({
-  itemId,
-  label,
-  onSuccess,
-}: {
-  itemId?: string;
-  label: string;
-  onSuccess: () => void;
-}) {
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/plaid/create-link-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(itemId ? { itemId } : {}),
-    })
-      .then((r) => r.json())
-      .then((d) => { if (d.link_token) setLinkToken(d.link_token); })
-      .catch(() => {});
-  }, [itemId]);
-
-  const onPlaidSuccess = useCallback(
-    async (publicToken: string, metadata: { institution?: { name?: string } | null }) => {
-      setBusy(true);
-      try {
-        if (itemId) {
-          // Update mode: clear error status, no token exchange needed
-          await fetch(`/api/plaid/items/${itemId}`, { method: 'PATCH' });
-        } else {
-          await fetch('/api/plaid/exchange-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              public_token: publicToken,
-              institution_name: metadata?.institution?.name ?? undefined,
-            }),
-          });
-        }
-        onSuccess();
-      } finally {
-        setBusy(false);
-      }
-    },
-    [itemId, onSuccess],
-  );
-
-  const { open, ready } = usePlaidLink({ token: linkToken ?? '', onSuccess: onPlaidSuccess });
-
-  if (!linkToken) return null;
-
-  return (
-    <button
-      onClick={() => open()}
-      disabled={!ready || busy}
-      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
-      style={{ background: 'rgba(56,189,248,0.18)', color: '#7DD3FC', border: '1px solid rgba(56,189,248,0.30)' }}
-    >
-      <Link2 className="w-3 h-3" />
-      {busy ? 'Syncing…' : label}
-    </button>
-  );
-}
-
-function ConnectedAccountsList({ onRefresh }: { onRefresh: () => void }) {
-  const { data, mutate } = useSWR<{ items: PlaidItemInfo[] }>('/api/plaid/items', (url: string) =>
-    fetch(url).then((r) => r.json()),
-  );
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-
-  const items = data?.items ?? [];
-  if (items.length === 0) return null;
-
-  async function handleSync(itemId: string) {
-    setSyncingId(itemId);
-    try {
-      await fetch('/api/plaid/sync-transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId }),
-      });
-      onRefresh();
-    } finally {
-      setSyncingId(null);
-    }
-  }
-
-  async function handleRemove(itemId: string) {
-    setRemovingId(itemId);
-    try {
-      await fetch(`/api/plaid/items/${itemId}`, { method: 'DELETE' });
-      await mutate();
-      onRefresh();
-    } finally {
-      setRemovingId(null);
-    }
-  }
-
-  return (
-    <div className="mt-4 space-y-2">
-      {items.map((item) => {
-        const isError = item.status === 'error' || item.status === 'login_required';
-        const statusColor = isError ? '#F87171' : '#6EE7B7';
-        return (
-          <div
-            key={item.itemId}
-            className="flex items-center justify-between rounded-2xl px-4 py-2.5"
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: `1px solid ${isError ? 'rgba(248,113,113,0.25)' : 'rgba(110,231,183,0.15)'}`,
-            }}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: statusColor }}
-              />
-              <span className="text-xs font-medium truncate" style={{ color: '#E8EDF5' }}>
-                {item.institutionName ?? item.itemId}
-              </span>
-              {isError && (
-                <span
-                  className="text-[10px] rounded-full px-1.5 py-0.5 shrink-0"
-                  style={{ background: 'rgba(248,113,113,0.15)', color: '#F87171' }}
-                >
-                  {item.status === 'login_required' ? 'Login required' : item.errorCode ?? 'Error'}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0 ml-2">
-              {isError ? (
-                <PlaidLinkButton
-                  itemId={item.itemId}
-                  label="Reconnect"
-                  onSuccess={() => { mutate(); onRefresh(); }}
-                />
-              ) : (
-                <button
-                  onClick={() => handleSync(item.itemId)}
-                  disabled={syncingId === item.itemId}
-                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
-                  style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(232,237,245,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  {syncingId === item.itemId ? 'Syncing…' : 'Sync'}
-                </button>
-              )}
-              <button
-                onClick={() => handleRemove(item.itemId)}
-                disabled={removingId === item.itemId}
-                className="rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
-                style={{ background: 'rgba(248,113,113,0.10)', color: '#F87171', border: '1px solid rgba(248,113,113,0.20)' }}
-              >
-                {removingId === item.itemId ? '…' : 'Disconnect'}
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export default function FinancePage() {
   const { data, mutate } = useSWR<V2FinanceOverviewFeed>('/api/v2/finance/overview', fetcher, {
     refreshInterval: 30000,
@@ -2005,14 +1837,11 @@ export default function FinancePage() {
             Financial intelligence under Emerald&apos;s stewardship
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {updatedAgo && (
-            <span className="text-[11px] pb-0.5" style={{ color: 'rgba(232,237,245,0.30)' }}>
-              Updated {updatedAgo}
-            </span>
-          )}
-          <SlashCommandSheet commands={FINANCE_COMMANDS} label="finance" />
-        </div>
+        {updatedAgo && (
+          <span className="text-[11px] pb-0.5" style={{ color: 'rgba(232,237,245,0.30)' }}>
+            Updated {updatedAgo}
+          </span>
+        )}
       </div>
 
       {/* Partial system status banner */}
@@ -2064,79 +1893,26 @@ export default function FinancePage() {
               <p className="text-2xl font-bold" style={{ color: '#6EE7B7' }}>
                 ${liquidity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
-              <div className="flex gap-2 mt-3 flex-wrap">
-                <button
-                  onClick={async () => {
-                    setEmeraldStatus('sending');
-                    try {
-                      const res = await fetch('/api/telegram/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: 'Emerald, quick liquidity check — how does our cash position look right now?', botKey: 'bot3' }),
-                      });
-                      setEmeraldStatus(res.ok ? 'sent' : 'error');
-                    } catch { setEmeraldStatus('error'); }
-                    setTimeout(() => setEmeraldStatus('idle'), 3000);
-                  }}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ background: 'rgba(16,185,129,0.22)', color: '#6EE7B7', border: '1px solid rgba(16,185,129,0.35)' }}
-                >
-                  <Send className="w-3 h-3" />
-                  {emeraldStatus === 'sending' ? 'Asking…' : emeraldStatus === 'sent' ? 'Sent ✓' : 'Ask Emerald'}
-                </button>
-                <button
-                  onClick={() => document.getElementById('cashflow-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.8)', border: '1px solid rgba(255,255,255,0.14)' }}
-                >
-                  <TrendingDown className="w-3 h-3" />
-                  Forecast
-                </button>
-                <button
-                  onClick={handleExport}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(232,237,245,0.8)', border: '1px solid rgba(255,255,255,0.14)' }}
-                >
-                  <Download className="w-3 h-3" />
-                  {exportedFlash ? 'Exported ✓' : 'Export'}
-                </button>
-              </div>
             </div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
-                <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
-              </div>
-              <PlaidLinkButton label="Connect Bank" onSuccess={() => mutate()} />
+            <div className="flex items-center gap-2 mb-4">
+              <RefreshCw className="w-4 h-4" style={{ color: 'rgba(232,237,245,0.6)' }} />
+              <h2 className="text-base font-semibold" style={{ color: '#E8EDF5' }}>Holdings</h2>
             </div>
             {data?.accounts && data.accounts.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-3">
-                {data.accounts.map((account) => {
-                  const typeStyle: Record<string, { border: string; badge: string; badgeText: string; label: string }> = {
-                    checking:   { border: 'rgba(110,231,183,0.35)', badge: 'rgba(110,231,183,0.15)', badgeText: '#6EE7B7', label: 'Checking' },
-                    investment: { border: 'rgba(96,165,250,0.35)',  badge: 'rgba(96,165,250,0.15)',  badgeText: '#93C5FD', label: 'Investment' },
-                    credit:     { border: 'rgba(248,113,113,0.35)', badge: 'rgba(248,113,113,0.15)', badgeText: '#FCA5A5', label: 'Credit' },
-                    loan:       { border: 'rgba(220,38,38,0.30)',   badge: 'rgba(220,38,38,0.12)',   badgeText: '#F87171', label: 'Loan' },
-                    income:     { border: 'rgba(52,211,153,0.40)',  badge: 'rgba(52,211,153,0.15)',  badgeText: '#34D399', label: 'Income' },
-                  };
-                  const ts = typeStyle[account.type] ?? { border: 'rgba(255,255,255,0.10)', badge: 'rgba(255,255,255,0.08)', badgeText: 'rgba(232,237,245,0.5)', label: account.type };
-                  return (
-                    <div
-                      key={account.id}
-                      className="rounded-2xl p-4"
-                      style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid ${ts.border}` }}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.name}</p>
-                        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: ts.badge, color: ts.badgeText }}>{ts.label}</span>
-                      </div>
-                      <p className="text-xl font-bold" style={{ color: '#E8EDF5' }}>
-                        ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                      <TrendBadge trend={account.trendPercentage} />
-                    </div>
-                  );
-                })}
+                {data.accounts.map((account) => (
+                  <div
+                    key={account.id}
+                    className="rounded-2xl p-4"
+                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+                  >
+                    <p className="text-xs mb-1" style={{ color: 'rgba(232,237,245,0.55)' }}>{account.name}</p>
+                    <p className="text-xl font-bold" style={{ color: '#E8EDF5' }}>
+                      ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <TrendBadge trend={account.trendPercentage} />
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 gap-2">
@@ -2152,7 +1928,6 @@ export default function FinancePage() {
                 </p>
               </div>
             )}
-            <ConnectedAccountsList onRefresh={() => mutate()} />
           </div>
 
           {/* Obligations */}
