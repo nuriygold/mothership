@@ -2,12 +2,6 @@
 
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-<<<<<<< ours
-<<<<<<< ours
-import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, CheckCircle2, Tag, TrendingDown, Info } from 'lucide-react';
-=======
-=======
->>>>>>> theirs
 import { RefreshCw, AlertCircle, CreditCard, Lock, Send, Download, ChevronDown, Zap, Tag, TrendingDown, Info } from 'lucide-react';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 
@@ -18,7 +12,6 @@ const FINANCE_COMMANDS = [
   { cmd: '/plans',    desc: 'Active finance plans & progress' },
   { cmd: '/bill',     args: '<vendor> $<amount> [date]', desc: 'Log a new bill' },
 ];
->>>>>>> theirs
 import { FinanceEventActionModal } from '@/components/finance/finance-event-action-modal';
 import type {
   V2FinanceOverviewFeed, V2FinancePlan, V2FinanceEvent,
