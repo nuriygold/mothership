@@ -130,7 +130,7 @@ export default function EmailzPage() {
   const [feedbackText, setFeedbackText] = useState('');
   const [rules, setRules] = useState<FeedbackRule[]>([]);
 
-  const emails = data?.inbox ?? [];
+  const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
 
   // Load feedback rules on mount
   useEffect(() => {
@@ -326,7 +326,7 @@ export default function EmailzPage() {
                         className="text-xs p-3 rounded mt-2"
                         style={{ background: 'var(--background)', fontStyle: 'italic' }}
                       >
-                        "{recommendation.details.draftReply}"
+                        &ldquo;{recommendation.details.draftReply}&rdquo;
                       </div>
                     )}
                   </div>
