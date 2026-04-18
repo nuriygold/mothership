@@ -622,16 +622,16 @@ model VisionTaskLink {
 }
 
 enum EmailTriageBucket {
-  MARKETING
+  ACT_SOON
+  NEED_HUMAN_EYES
+  BILLS
+  RELATIONSHIP_KEEPER
   PERSONAL
   UPCOMING_EVENT
-  BILLS
-  OTHER
-  ACT_SOON
   OPPORTUNITY_PILE
+  MARKETING
   NOT_YOUR_SPEED
-  NEED_HUMAN_EYES
-  RELATIONSHIP_KEEPER
+  OTHER
 }
 
 enum EmailTriageStatus {
@@ -691,4 +691,16 @@ model ChatMessage {
   createdAt DateTime    @default(now())
 
   @@index([sessionId, createdAt], map: "ChatMessage_sessionId_createdAt_idx")
+}
+
+model PlaidItem {
+  id              String   @id @default(uuid())
+  itemId          String   @unique
+  accessToken     String
+  institutionName String?
+  cursor          String?
+  status          String   @default("good")
+  errorCode       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

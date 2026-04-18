@@ -22,6 +22,7 @@ const BOT_COLORS: Record<string, { bg: string; color: string }> = {
   Ruby:    { bg: 'var(--color-lavender)', color: 'var(--color-lavender-text)' },
   Emerald: { bg: 'var(--color-mint)',     color: 'var(--color-mint-text)' },
   Adobe:   { bg: 'var(--color-lemon)',    color: 'var(--color-lemon-text)' },
+  Anchor:  { bg: 'var(--color-purple)',   color: '#FFFFFF' },
 };
 
 const LEFT_BORDER: Record<string, string> = {

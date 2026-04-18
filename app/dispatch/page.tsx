@@ -240,6 +240,35 @@ function statusTone(status: string) {
   return 'bg-slate-800 text-slate-200';
 }
 
+function gatewayGuidance(errorMessage?: string) {
+  if (!errorMessage) return null;
+  const normalized = errorMessage.toLowerCase();
+
+  if (normalized.includes('404') && normalized.includes('/v1/responses')) {
+    return {
+      title: 'Gateway is reachable, but the responses route is missing',
+      steps: [
+        'Set OPENCLAW_INFERENCE_GATEWAY to the inference service URL (not the health-only gateway).',
+        'Confirm the configured endpoint exposes POST /v1/responses.',
+        'Re-run "Check gateway" and then retry dispatch.',
+      ],
+    };
+  }
+
+  if (normalized.includes('gateway unreachable') || normalized.includes('timed out')) {
+    return {
+      title: 'Gateway cannot be reached from Mothership',
+      steps: [
+        'Check OPENCLAW_GATEWAY and OPENCLAW_API_TOKEN environment values.',
+        'Verify the gateway /health endpoint is up from the same network.',
+        'Retry once connectivity is restored.',
+      ],
+    };
+  }
+
+  return null;
+}
+
 function DispatchPageInner() {
   const searchParams = useSearchParams();
   const qc = useQueryClient();
@@ -322,6 +351,13 @@ function DispatchPageInner() {
   const gatewayMutation = useMutation({
     mutationFn: checkGateway,
   });
+  const gatewayErrorText = (
+    (gatewayMutation.error as Error | null)?.message
+    ?? (gateway.error as Error | null)?.message
+    ?? ''
+  );
+  const openClawErrorText = (openClawMutation.error as Error | null)?.message ?? '';
+  const gatewayHelp = gatewayGuidance(openClawErrorText || gatewayErrorText);
 
   const createCampaignMutation = useMutation({
     mutationFn: createDispatchCampaign,
@@ -1034,6 +1070,16 @@ function DispatchPageInner() {
       <Card>
         <CardTitle>OpenClaw dispatch</CardTitle>
         <div className="mt-3 space-y-3">
+          {gatewayHelp && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-100">
+              <p className="font-semibold">{gatewayHelp.title}</p>
+              <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                {gatewayHelp.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <textarea
             className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
             rows={3}
@@ -1051,6 +1097,7 @@ function DispatchPageInner() {
               <option value="ruby">Ruby · ruby · GPT-5.3 Chat</option>
               <option value="emerald">Emerald · emerald · GPT-5.3 Chat</option>
               <option value="adobe">Adobe Pettaway · adobe · Gemini 2.5 Flash</option>
+              <option value="anchor">Anchor · anchor · GPT-5.3 Chat</option>
             </select>
             <input
               className="w-48 rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
@@ -1062,7 +1109,7 @@ function DispatchPageInner() {
               onClick={() =>
                 openClawMutation.mutate({ text: ocText, agentId: ocAgent, sessionKey: ocSession || undefined })
               }
-              disabled={!ocText || openClawMutation.isLoading}
+              disabled={!ocText || openClawMutation.isLoading || gateway.isError}
             >
               Dispatch
             </Button>

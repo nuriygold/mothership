@@ -403,6 +403,7 @@ function routeTaskToBot(task: { title: string; description?: string | null }): s
   if (haystack.match(/analyz|audit|verif|diagnos|investigat|pattern|architecture|dashboard|finance|financial|budget|cash.?flow|debt|invest|ledger|invoice|expense|payment|bill|liquidity|forecast|leverage|reconcil/)) return 'emerald';
   if (haystack.match(/email|reply|message|copy|comms|outreach|personal|social|relationship|schedule/)) return 'ruby';
   if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
+  if (haystack.match(/prioriti|sequence|coordina|follow.?through|re.?entry|ownership|accountabil|stall|friction|handoff|unblock people/)) return 'anchor';
   if (haystack.match(/automat|deploy|infrastructure|script|command|system|health|orchestrat|build|install|setup|run /)) return 'main';
   return 'main';
 }
@@ -455,6 +456,7 @@ export async function recommendBotForCampaign(campaignId: string) {
     emerald: 'Emerald',
     ruby: 'Ruby',
     adobe: 'Adobe Pettaway',
+    anchor: 'Anchor',
   };
 
   return {

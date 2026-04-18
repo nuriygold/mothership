@@ -14,7 +14,7 @@ Use this step-by-step guide for staging/prod launch. Prod stays unseeded; stagin
 
 ## 3) Deploy
 - Push latest code.
-- In prod env: `npm run migrate:deploy` (applies Prisma migrations). Avoid `migrate dev` in prod.
+- In prod env: `npm run migrate:deploy` (applies Prisma migrations) from CI/release workflow; keep Vercel build migration disabled unless `RUN_PRISMA_MIGRATE_DEPLOY=1` is intentionally set. Avoid `migrate dev` in prod.
 - Start app: `npm run start` (hosted) or `npm run dev` locally for verification.
 
 ## 4) Smoke test (prod or staging)

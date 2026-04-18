@@ -60,6 +60,7 @@ Mothership routes work by domain intent:
 - **Comms / Email** -> Ruby
 - **Research / Synthesis** -> Emerald
 - **Document intelligence** -> Adobe Pettaway
+- **Execution coordination / follow-through** -> Anchor
 - **System orchestration / fallback** -> Gateway/default agent
 
 ## Email Drafting (Hybrid V2)
@@ -78,7 +79,7 @@ If Ruby generation fails, template actions still work.
 - **Task source:** set `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
   - Optional: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`
   - Private repo support: `GITHUB_TOKEN`
-- **Migrations (prod):** `npm run migrate:deploy`
+- **Migrations (prod):** run `npm run migrate:deploy` from CI/release job (recommended), or set `RUN_PRISMA_MIGRATE_DEPLOY=1` if you explicitly want Vercel build to run migrations.
 - **Seeding:** never in production; staging-only with `npm run db:seed:staging`
 - **Primary health checks:** `/today`, `/api/openclaw/health`, `/api/v2/dashboard/today`
 
@@ -91,7 +92,7 @@ If Ruby generation fails, template actions still work.
 - `OPENCLAW_DEFAULT_AGENT`
 - `OPENCLAW_AGENT_RUBY`
 - `OPENCLAW_AGENT_EMERALD`
-- optional mappings (recommended): `OPENCLAW_AGENT_ADRIAN`, `OPENCLAW_AGENT_ADOBE`
+- optional mappings (recommended): `OPENCLAW_AGENT_ADRIAN`, `OPENCLAW_AGENT_ADOBE`, `OPENCLAW_AGENT_ANCHOR`
 - optional model override: `OPENCLAW_MODEL`
 
 ### Email
