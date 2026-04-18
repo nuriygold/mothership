@@ -6,6 +6,7 @@ export const BOT_CANONICAL_NAME: Record<string, string> = {
   Emerald: 'Emerald',
   Adobe: 'Adobe',
   'Adobe Pettaway': 'Adobe',
+  Anchor: 'Anchor',
 };
 
 export function normalizeBotName(name: string): string {
@@ -17,19 +18,21 @@ export const BOT_TELEGRAM_KEY: Record<string, string> = {
   Ruby: 'bot2',
   Emerald: 'bot3',
   Adobe: 'botAdobe',
+  Anchor: 'botAnchor',
 };
 
 export const BOT_OWNER_LOGIN: Record<string, string> = Object.fromEntries(
   Object.keys(BOT_CANONICAL_NAME).map((name) => [name, normalizeBotName(name).toLowerCase()])
 ) as Record<string, string>;
 
-export const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe'];
+export const ALL_BOTS = ['Adrian', 'Ruby', 'Emerald', 'Adobe', 'Anchor'];
 
 export const BOT_COLORS: Record<string, { bg: string; text: string }> = {
   Adrian: { bg: 'var(--color-peach)', text: 'var(--color-peach-text)' },
   Ruby: { bg: 'var(--color-pink)', text: 'var(--color-pink-text)' },
   Emerald: { bg: 'var(--color-mint)', text: 'var(--color-mint-text)' },
   Adobe: { bg: 'var(--color-lemon)', text: 'var(--color-lemon-text)' },
+  Anchor: { bg: 'var(--color-lavender)', text: 'var(--color-lavender-text)' },
 };
 
 export const APPROVAL_BG: Record<string, string> = {
@@ -51,6 +54,7 @@ export const BOT_BORDER: Record<string, string> = {
   Ruby: 'var(--color-purple)',
   Emerald: 'var(--color-cyan)',
   Adobe: '#FFB800',
+  Anchor: '#8A6DFF',
   default: 'var(--color-purple)',
 };
 

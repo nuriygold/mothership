@@ -1097,6 +1097,7 @@ function DispatchPageInner() {
               <option value="ruby">Ruby · ruby · GPT-5.3 Chat</option>
               <option value="emerald">Emerald · emerald · GPT-5.3 Chat</option>
               <option value="adobe">Adobe Pettaway · adobe · Gemini 2.5 Flash</option>
+              <option value="anchor">Anchor · anchor · GPT-5.3 Chat</option>
             </select>
             <input
               className="w-48 rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"

@@ -216,6 +216,7 @@ export function JarvisCard() {
             <option value="ruby">Ruby · ruby</option>
             <option value="emerald">Emerald · emerald</option>
             <option value="adobe">Adobe Pettaway · adobe</option>
+            <option value="anchor">Anchor · anchor</option>
           </select>
           <span className="text-xs text-slate-400">{voiceStatus || 'Idle'}</span>
           {voiceError && <span className="text-xs text-rose-400">{voiceError}</span>}
