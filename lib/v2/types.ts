@@ -417,9 +417,20 @@ export type V2VisionPillar = {
 
 // ─── Email Agent Triage ────────────────────────────────────────────────────────
 
-export type EmailTriageBucket = 'MARKETING' | 'PERSONAL' | 'UPCOMING_EVENT' | 'BILLS' | 'OTHER' | 'ACT_SOON' | 'OPPORTUNITY_PILE' | 'NOT_YOUR_SPEED' | 'NEED_HUMAN_EYES' | 'RELATIONSHIP_KEEPER';
-export type EmailTriageStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXECUTED';
+export type EmailTriageBucket =
+  | 'ACT_SOON'
+  | 'NEED_HUMAN_EYES'
+  | 'BILLS'
+  | 'RELATIONSHIP_KEEPER'
+  | 'PERSONAL'
+  | 'UPCOMING_EVENT'
+  | 'OPPORTUNITY_PILE'
+  | 'MARKETING'
+  | 'NOT_YOUR_SPEED'
+  | 'OTHER';
+
 export type EmailTriageConfidence = 'LOCKED_IN' | 'PRETTY_SURE' | 'NEEDS_YOUR_EYES';
+export type EmailTriageStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXECUTED';
 
 export type V2EmailTriageSummary = {
   id: string;
@@ -437,10 +448,10 @@ export type V2EmailTriageItem = {
   recommendation: string;
   actionLabel: string;
   emailSummaries: V2EmailTriageSummary[];
-  createdAt: string;
   urgentCount?: number;
   confidence?: EmailTriageConfidence;
   subGroups?: { SEND: string[]; REVIEW: string[]; SKIP: string[] };
+  createdAt: string;
 };
 
 export type V2EmailTriageFeed = {
