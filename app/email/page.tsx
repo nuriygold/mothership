@@ -60,12 +60,17 @@ function extractSenderName(sender: string) {
 }
 
 export default function EmailPage() {
-  const { data, mutate: mutateInbox } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 30000 });
-  const { data: triageFeed, mutate: mutateTriage } = useSWR<V2EmailTriageFeed>('/api/v2/email/triage', fetcher, { refreshInterval: 60000 });
+  const { data, error: emailError, mutate: mutateInbox } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 30000 });
+  const { data: triageFeed, error: triageError, mutate: mutateTriage } = useSWR<V2EmailTriageFeed>('/api/v2/email/triage', fetcher, { refreshInterval: 60000 });
 
   const inbox = data?.inbox ?? EMPTY_INBOX;
   const triages = triageFeed?.triages ?? EMPTY_TRIAGES;
   const lastRunAt = triageFeed?.lastRunAt ?? null;
+
+  // Debug logging
+  if (typeof window !== 'undefined') {
+    console.log('[Email Page Debug]', { inbox: inbox.length, triages: triages.length, emailError, triageError });
+  }
 
   const [viewMode, setViewMode] = useState<'overview' | 'bucket'>('overview');
   const [activeTriage, setActiveTriage] = useState<V2EmailTriageItem | null>(null);
@@ -166,6 +171,11 @@ export default function EmailPage() {
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
             Bucket-first triage. Active sources: <strong>{sourceLabel}</strong>.
           </p>
+          {(emailError || triageError) && (
+            <p className="text-xs mt-1" style={{ color: 'var(--destructive)' }}>
+              Error loading data: {emailError?.message || triageError?.message}
+            </p>
+          )}
         </div>
         <SlashCommandSheet commands={EMAIL_COMMANDS} label="email" />
       </div>
