@@ -10,6 +10,17 @@ export async function POST() {
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error('[email:triage:run]', err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    const errorMessage = err instanceof Error ? err.message : String(err);
+
+    // Check for common migration-related errors
+    if (errorMessage.includes('emailAgentTriage') || errorMessage.includes('EmailTriageBucket')) {
+      return NextResponse.json({
+        ok: false,
+        error: 'Database migration required. Run: npm run migrate:deploy',
+        details: errorMessage
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
 }
