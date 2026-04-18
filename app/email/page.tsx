@@ -16,11 +16,16 @@ const EMAIL_COMMANDS = [
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 const BUCKET_META: Record<EmailTriageBucket, { label: string; icon: string; agentColor: string; agentTextColor: string; cardBg: string }> = {
-  MARKETING:      { label: 'Marketing & Promos',    icon: '📣', agentColor: 'var(--color-peach)',    agentTextColor: 'var(--color-peach-text)',    cardBg: 'rgba(255,160,100,0.07)' },
-  PERSONAL:       { label: 'Personal — Needs Reply', icon: '✉️', agentColor: 'var(--color-lavender)', agentTextColor: 'var(--color-lavender-text)', cardBg: 'rgba(180,140,255,0.07)' },
-  UPCOMING_EVENT: { label: 'Upcoming Events',        icon: '📅', agentColor: 'var(--color-mint)',     agentTextColor: 'var(--color-mint-text)',     cardBg: 'rgba(0,217,180,0.07)'   },
-  BILLS:          { label: 'Bills & Payments',       icon: '💳', agentColor: 'var(--color-sky)',      agentTextColor: 'var(--color-sky-text)',      cardBg: 'rgba(80,180,255,0.07)'  },
-  OTHER:          { label: 'Other',                  icon: '📬', agentColor: 'var(--muted)',           agentTextColor: 'var(--muted-foreground)',    cardBg: 'var(--muted)'           },
+  MARKETING:          { label: 'Marketing & Promos',    icon: '📣', agentColor: 'var(--color-peach)',    agentTextColor: 'var(--color-peach-text)',    cardBg: 'rgba(255,160,100,0.07)' },
+  PERSONAL:           { label: 'Personal — Needs Reply', icon: '✉️', agentColor: 'var(--color-lavender)', agentTextColor: 'var(--color-lavender-text)', cardBg: 'rgba(180,140,255,0.07)' },
+  UPCOMING_EVENT:     { label: 'Upcoming Events',        icon: '📅', agentColor: 'var(--color-mint)',     agentTextColor: 'var(--color-mint-text)',     cardBg: 'rgba(0,217,180,0.07)'   },
+  BILLS:              { label: 'Bills & Payments',       icon: '💳', agentColor: 'var(--color-sky)',      agentTextColor: 'var(--color-sky-text)',      cardBg: 'rgba(80,180,255,0.07)'  },
+  OTHER:              { label: 'Other',                  icon: '📬', agentColor: 'var(--muted)',           agentTextColor: 'var(--muted-foreground)',    cardBg: 'var(--muted)'           },
+  ACT_SOON:           { label: 'Act Soon',               icon: '⚡', agentColor: 'var(--color-peach)',    agentTextColor: 'var(--color-peach-text)',    cardBg: 'rgba(255,160,100,0.07)' },
+  OPPORTUNITY_PILE:   { label: 'Opportunity Pile',       icon: '💎', agentColor: 'var(--color-mint)',     agentTextColor: 'var(--color-mint-text)',     cardBg: 'rgba(0,217,180,0.07)'   },
+  NOT_YOUR_SPEED:     { label: 'Not Your Speed',         icon: '🚫', agentColor: 'var(--muted)',          agentTextColor: 'var(--muted-foreground)',    cardBg: 'var(--muted)'           },
+  NEED_HUMAN_EYES:    { label: 'Need Human Eyes',        icon: '👁️', agentColor: 'var(--color-sky)',      agentTextColor: 'var(--color-sky-text)',      cardBg: 'rgba(80,180,255,0.07)'  },
+  RELATIONSHIP_KEEPER: { label: 'Relationship Keeper',   icon: '🤝', agentColor: 'var(--color-lavender)', agentTextColor: 'var(--color-lavender-text)', cardBg: 'rgba(180,140,255,0.07)' },
 };
 
 const TABS = ['Inbox', 'Drafts', 'Sent'] as const;
