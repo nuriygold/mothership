@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { Bot, Calendar, Trash2, Send, ExternalLink, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
 import type { V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
