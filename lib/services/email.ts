@@ -243,24 +243,28 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
   });
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  const windowCutoff = new Date(Date.now() - GMAIL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   try {
     await client.connect();
     await client.selectMailbox('INBOX');
 
-    const unseen = await client.search({ seen: false }, { uid: true, signal: controller.signal });
-    const unread = unseen.length;
+    // Fetch all inbox messages within the date window (not just unread)
+    const allInWindow = await client.search({ since: windowCutoff }, { uid: true, signal: controller.signal });
+    const unreadInWindow = await client.search({ seen: false, since: windowCutoff }, { uid: true, signal: controller.signal });
+    const unread = unreadInWindow.length;
 
     const urgentMatches = await client.search(
-      { seen: false, header: ['Subject', 'urgent'] },
+      { seen: false, since: windowCutoff, header: ['Subject', 'urgent'] },
       { uid: true, signal: controller.signal }
     );
     const urgent = urgentMatches.length;
 
     const previews: EmailSummary['previews'] = [];
     const fetchResults = client.fetch(
-      unseen.slice(-GMAIL_MAX_PREVIEWS),
+      allInWindow.slice(-GMAIL_MAX_PREVIEWS),
       { envelope: true, source: false, bodyStructure: false },
       { signal: controller.signal }
     );
@@ -281,10 +285,10 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
     return {
       connected: true,
       unread,
-      needsReply: unread, // heuristic until answered status is parsed
+      needsReply: unread,
       urgent,
       previews,
-      note: 'Live Zoho IMAP counts (unread/urgent).',
+      note: `Live Zoho IMAP — ${previews.length} emails (last ${GMAIL_WINDOW_DAYS} days).`,
     };
   } catch (err) {
     logEmailEvent('error', 'zoho_sync_failed', {
