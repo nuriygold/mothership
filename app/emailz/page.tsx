@@ -2,24 +2,29 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { Calendar, Trash2, Send, ExternalLink, CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft } from 'lucide-react';
+import {
+  Flame, Briefcase, DollarSign, Users, PartyPopper,
+  ShoppingBag, Code2, BookOpen, Plane,
+  CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft, ExternalLink, Calendar, Search,
+} from 'lucide-react';
 import type { V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-type EmailAction =
-  | 'SCHEDULE'
-  | 'REPLY'
-  | 'RSVP'
-  | 'UNSUBSCRIBE'
-  | 'DELETE'
-  | 'ARCHIVE'
-  | 'CREATE_TASK'
-  | 'DEFER';
+type EmailBucket =
+  | 'ON_FIRE'
+  | 'BUSINESS'
+  | 'FINANCIAL'
+  | 'MY_PEOPLE'
+  | 'FUN_EVENTS'
+  | 'SHOPPING_GIFTS'
+  | 'TECH_PROJECTS'
+  | 'GOOD_READS'
+  | 'TRAVEL';
 
 type EmailRecommendation = {
   emailId: string;
-  action: EmailAction;
+  bucket: EmailBucket;
   reasoning: string;
   details?: {
     suggestedTimes?: string[];
@@ -29,198 +34,237 @@ type EmailRecommendation = {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
 };
 
-type FeedbackRule = {
-  pattern: string;
-  action: EmailAction;
-  autoApprove: boolean;
-  createdAt: string;
+const BUCKET_META: Record<EmailBucket, { label: string; icon: any; color: string; description: string; action: string }> = {
+  ON_FIRE:        { label: 'On Fire',        icon: Flame,        color: '#ef4444', description: 'Urgent — needs you today',                    action: 'Handle Now' },
+  BUSINESS:       { label: 'Business',       icon: Briefcase,    color: '#38bdf8', description: 'Work, clients, professional',                 action: 'Reply / Task' },
+  FINANCIAL:      { label: 'Financial',      icon: DollarSign,   color: '#10b981', description: 'Bills, invoices, banking',                   action: 'Review' },
+  MY_PEOPLE:      { label: 'My People',      icon: Users,        color: '#a78bfa', description: 'Friends, family, real humans',               action: 'Reply' },
+  FUN_EVENTS:     { label: 'Fun & Events',   icon: PartyPopper,  color: '#f472b6', description: 'Invites, parties, social plans',            action: 'RSVP + Calendar' },
+  SHOPPING_GIFTS: { label: 'Shopping',       icon: ShoppingBag,  color: '#f59e0b', description: 'Orders, deals, gifts',                      action: 'View / Delete' },
+  TECH_PROJECTS:  { label: 'Tech & Projects',icon: Code2,        color: '#06b6d4', description: 'GitHub, dev tools, side projects, tech events', action: 'Task / Archive' },
+  GOOD_READS:     { label: 'Good Reads',     icon: BookOpen,     color: '#8b5cf6', description: 'Newsletters, articles, content',            action: 'Read / Unsub' },
+  TRAVEL:         { label: 'Travel',         icon: Plane,        color: '#0ea5e9', description: 'Flights, hotels, itineraries',              action: 'Add to Calendar' },
 };
 
-const ACTION_META: Record<EmailAction, { label: string; icon: any; color: string; description: string }> = {
-  SCHEDULE:    { label: 'Schedule Meeting',      icon: Calendar,      color: '#38bdf8', description: 'Add to calendar and send confirmation' },
-  REPLY:       { label: 'Send Reply',            icon: Send,          color: '#a78bfa', description: 'AI-drafted response ready to send' },
-  RSVP:        { label: 'RSVP & Add to Calendar',icon: Calendar,      color: '#10b981', description: 'Accept invitation and block time' },
-  UNSUBSCRIBE: { label: 'Unsubscribe & Delete',  icon: Trash2,        color: '#f59e0b', description: 'Remove from list and clear inbox' },
-  DELETE:      { label: 'Delete',                icon: Trash2,        color: '#ef4444', description: 'Remove from inbox permanently' },
-  ARCHIVE:     { label: 'Archive',               icon: ExternalLink,  color: '#64748b', description: 'Archive for later reference' },
-  CREATE_TASK: { label: 'Create Task',           icon: CheckCircle,   color: '#ec4899', description: 'Add to task pool' },
-  DEFER:       { label: 'Snooze',                icon: MessageSquare, color: '#8b5cf6', description: 'Remind me later' },
-};
+// Ordered by priority for display
+const BUCKET_ORDER: EmailBucket[] = [
+  'ON_FIRE', 'MY_PEOPLE', 'BUSINESS', 'FUN_EVENTS', 'FINANCIAL',
+  'TECH_PROJECTS', 'TRAVEL', 'SHOPPING_GIFTS', 'GOOD_READS',
+];
 
-function generateRecommendation(email: V2EmailItem): EmailRecommendation {
-  const subject = email.subject.toLowerCase();
-  const snippet = (email.snippet || email.preview || '').toLowerCase();
-  const combined = `${subject} ${snippet}`;
+function classify(email: V2EmailItem): EmailBucket {
+  const s = `${email.subject} ${email.snippet || email.preview || ''} ${email.sender}`.toLowerCase();
 
-  if (combined.match(/schedule|meeting|call|zoom|teams|available|calendar/)) {
-    return { emailId: email.id, action: 'SCHEDULE', reasoning: 'Meeting request detected.', details: { suggestedTimes: ['Thursday 2pm', 'Friday 10am'] }, confidence: 'HIGH' };
-  }
-  if (combined.match(/invitation|invite|rsvp|event|conference|webinar/)) {
-    return { emailId: email.id, action: 'RSVP', reasoning: 'Event invitation.', confidence: 'HIGH' };
-  }
-  if (combined.match(/newsletter|unsubscribe|marketing|promo|sale|digest/)) {
-    return { emailId: email.id, action: 'UNSUBSCRIBE', reasoning: 'Marketing email.', confidence: 'MEDIUM' };
-  }
-  if (combined.match(/can you|would you|let me know|following up|quick question/)) {
-    return { emailId: email.id, action: 'REPLY', reasoning: 'Personal message requiring response.', details: { draftReply: 'Thanks for reaching out! Let me get back to you on this.' }, confidence: 'HIGH' };
-  }
-  return { emailId: email.id, action: 'ARCHIVE', reasoning: 'Standard message. Archive for later review.', confidence: 'LOW' };
+  if (s.match(/urgent|asap|action required|immediately|critical|time.?sensitive|deadline/)) return 'ON_FIRE';
+  if (s.match(/flight|hotel|reservation|booking|itinerary|airbnb|trip|check.?in|airline|travel/)) return 'TRAVEL';
+  if (s.match(/invoice|payment|bill|receipt|transaction|bank|charge|subscription fee|renewal|invoice/)) return 'FINANCIAL';
+  if (s.match(/party|invite|invitation|rsvp|event|gathering|birthday|wedding|celebration/)) return 'FUN_EVENTS';
+  if (s.match(/github|deploy|npm|docker|vercel|aws|gcp|azure|pull request|issue|ci\/cd|tech event|hackathon|devops/)) return 'TECH_PROJECTS';
+  if (s.match(/order|shipped|delivery|tracking|amazon|package|gift|shop|deal|sale|promo code/)) return 'SHOPPING_GIFTS';
+  if (s.match(/newsletter|digest|weekly|roundup|article|read|edition|update from/)) return 'GOOD_READS';
+  if (s.match(/contract|proposal|client|meeting|schedule|agenda|follow.?up|brief|report|project update/)) return 'BUSINESS';
+  if (s.match(/hey|hi |hello|hope you|catching up|wanted to reach|family|friend|personal/)) return 'MY_PEOPLE';
+
+  return 'BUSINESS';
 }
 
-function loadFeedbackRules(): FeedbackRule[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem('emailz_feedback_rules');
-    return stored ? JSON.parse(stored) : [];
-  } catch { return []; }
-}
-
-function saveFeedbackRules(rules: FeedbackRule[]) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('emailz_feedback_rules', JSON.stringify(rules));
+function generateFallback(email: V2EmailItem): EmailRecommendation {
+  return { emailId: email.id, bucket: classify(email), reasoning: 'Classified by keyword match.', confidence: 'MEDIUM' };
 }
 
 export default function EmailzPage() {
-  const { data } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 30000 });
+  const { data } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [recommendations, setRecommendations] = useState<Map<string, EmailRecommendation>>(new Map());
   const [processing, setProcessing] = useState<Set<string>>(new Set());
   const [feedbackMode, setFeedbackMode] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
-  const [rules, setRules] = useState<FeedbackRule[]>([]);
-  const [selectedBucket, setSelectedBucket] = useState<EmailAction | null>(null);
+  const [selectedBucket, setSelectedBucket] = useState<EmailBucket | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
-
-  useEffect(() => { setRules(loadFeedbackRules()); }, []);
 
   useEffect(() => {
     if (emails.length === 0) return;
 
     const fetchRecommendations = async () => {
       const newRecs = new Map<string, EmailRecommendation>();
-      for (const email of emails) {
-        try {
-          const response = await fetch('/api/v2/email/recommend', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email }),
-          });
-          if (response.ok) {
-            const json = await response.json();
-            newRecs.set(email.id, json.ok && json.recommendation ? json.recommendation : generateRecommendation(email));
-          } else {
-            newRecs.set(email.id, generateRecommendation(email));
+      await Promise.all(
+        emails.map(async (email) => {
+          try {
+            const res = await fetch('/api/v2/email/recommend', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+            });
+            const json = res.ok ? await res.json() : null;
+            newRecs.set(email.id, json?.ok && json.recommendation ? json.recommendation : generateFallback(email));
+          } catch {
+            newRecs.set(email.id, generateFallback(email));
           }
-        } catch {
-          newRecs.set(email.id, generateRecommendation(email));
-        }
-      }
+        })
+      );
       setRecommendations(newRecs);
     };
 
     fetchRecommendations();
   }, [emails]);
 
-  async function handleApprove(emailId: string, addFeedback = false) {
+  async function handleApprove(emailId: string, withFeedback = false) {
     setProcessing(prev => new Set(prev).add(emailId));
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(r => setTimeout(r, 600));
 
-    if (addFeedback && feedbackText.trim()) {
-      const rec = recommendations.get(emailId);
-      if (rec) {
-        const newRule: FeedbackRule = {
-          pattern: feedbackText,
-          action: rec.action,
-          autoApprove: feedbackText.toLowerCase().includes('auto') || feedbackText.toLowerCase().includes('moving forward'),
-          createdAt: new Date().toISOString(),
-        };
-        const updated = [...rules, newRule];
-        setRules(updated);
-        saveFeedbackRules(updated);
-      }
+    if (withFeedback && feedbackText.trim()) {
       setFeedbackText('');
       setFeedbackMode(null);
     }
 
-    setProcessing(prev => { const next = new Set(prev); next.delete(emailId); return next; });
-    setRecommendations(prev => { const next = new Map(prev); next.delete(emailId); return next; });
+    setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
     if (selectedEmail === emailId) setSelectedEmail(null);
   }
 
-  async function handleApproveAll(action: EmailAction) {
-    const targets = emails.filter(e => recommendations.get(e.id)?.action === action);
+  async function handleApproveAll(bucket: EmailBucket) {
+    const targets = emails.filter(e => recommendations.get(e.id)?.bucket === bucket);
     for (const email of targets) await handleApprove(email.id);
     setSelectedBucket(null);
   }
 
   function handleDeny(emailId: string) {
-    setRecommendations(prev => { const next = new Map(prev); next.delete(emailId); return next; });
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
     if (selectedEmail === emailId) setSelectedEmail(null);
   }
 
-  function handleDenyAll(action: EmailAction) {
-    emails.filter(e => recommendations.get(e.id)?.action === action).forEach(e => handleDeny(e.id));
+  function handleDenyAll(bucket: EmailBucket) {
+    emails.filter(e => recommendations.get(e.id)?.bucket === bucket).forEach(e => handleDeny(e.id));
     setSelectedBucket(null);
   }
 
+  const searchResults = useMemo(() => {
+    if (!search.trim()) return null;
+    const q = search.toLowerCase();
+    return emails.filter(e =>
+      e.sender.toLowerCase().includes(q) ||
+      e.subject.toLowerCase().includes(q) ||
+      (e.snippet || e.preview || '').toLowerCase().includes(q)
+    );
+  }, [emails, search]);
+
   const buckets = useMemo(() => {
-    const grouped = new Map<EmailAction, V2EmailItem[]>();
+    const grouped = new Map<EmailBucket, V2EmailItem[]>();
     emails.forEach(email => {
       const rec = recommendations.get(email.id);
       if (!rec) return;
-      grouped.set(rec.action, [...(grouped.get(rec.action) ?? []), email]);
+      grouped.set(rec.bucket, [...(grouped.get(rec.bucket) ?? []), email]);
     });
     return grouped;
   }, [emails, recommendations]);
 
-  const totalPending = useMemo(() => Array.from(buckets.values()).reduce((sum, b) => sum + b.length, 0), [buckets]);
+  const totalPending = useMemo(() => Array.from(buckets.values()).reduce((s, b) => s + b.length, 0), [buckets]);
+  const orderedBuckets = BUCKET_ORDER.filter(b => buckets.has(b));
 
-  // ── BUCKET OVERVIEW ────────────────────────────────────────────────────────
+  // ── OVERVIEW ───────────────────────────────────────────────────────────────
   if (!selectedBucket) {
     return (
       <div className="space-y-4 p-4 max-w-5xl mx-auto">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
-              Email Autopilot
+              Emailz
             </h1>
             <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
               {emails.length === 0
                 ? 'Loading emails…'
                 : recommendations.size === 0
-                ? 'Analyzing emails…'
-                : `${totalPending} email${totalPending !== 1 ? 's' : ''} sorted into ${buckets.size} bucket${buckets.size !== 1 ? 's' : ''}`}
+                ? `${emails.length} emails — classifying…`
+                : `${totalPending} email${totalPending !== 1 ? 's' : ''} across ${buckets.size} bucket${buckets.size !== 1 ? 's' : ''}`}
             </p>
           </div>
-          {rules.length > 0 && (
-            <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              {rules.length} learned rule{rules.length !== 1 ? 's' : ''}
-            </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--muted-foreground)' }} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search sender, subject, or content…"
+            className="w-full rounded-2xl pl-9 pr-4 py-2.5 text-sm"
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }}>
+              <XCircle className="w-4 h-4" />
+            </button>
           )}
         </div>
 
-        {buckets.size === 0 && recommendations.size > 0 && (
-          <div className="rounded-3xl p-8 text-center" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
-            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>All caught up! No pending actions.</p>
+        {/* Search results */}
+        {searchResults && (
+          <div className="space-y-2">
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</p>
+            {searchResults.length === 0 && (
+              <div className="rounded-2xl p-6 text-center" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No emails match &ldquo;{search}&rdquo;</p>
+              </div>
+            )}
+            {searchResults.map(email => {
+              const rec = recommendations.get(email.id);
+              const bucket = rec?.bucket;
+              const meta = bucket ? BUCKET_META[bucket] : null;
+              return (
+                <div key={email.id} className="rounded-2xl p-3 flex items-start gap-3" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                  {meta && (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${meta.color}20` }}>
+                      <meta.icon className="w-3 h-3" style={{ color: meta.color }} />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">{email.sender}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--muted-foreground)' }}>{email.subject}</p>
+                    {(email.snippet || email.preview) && (
+                      <p className="text-[10px] truncate mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{email.snippet || email.preview}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {meta && <span className="text-[10px]" style={{ color: meta.color }}>{meta.label}</span>}
+                    <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                      {new Date(email.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    {email.gmailLink && (
+                      <a href={email.gmailLink} target="_blank" rel="noreferrer" style={{ color: 'var(--muted-foreground)' }}>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {Array.from(buckets.entries()).map(([action, bucketEmails]) => {
-            const meta = ACTION_META[action];
+        {!searchResults && buckets.size === 0 && recommendations.size > 0 && (
+          <div className="rounded-3xl p-8 text-center" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>All caught up.</p>
+          </div>
+        )}
+
+        {!searchResults && <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {orderedBuckets.map(bucket => {
+            const meta = BUCKET_META[bucket];
             const Icon = meta.icon;
+            const bucketEmails = buckets.get(bucket)!;
             const highCount = bucketEmails.filter(e => recommendations.get(e.id)?.confidence === 'HIGH').length;
             const preview = bucketEmails.slice(0, 3);
 
             return (
               <div
-                key={action}
+                key={bucket}
                 className="rounded-3xl p-5 cursor-pointer transition-opacity hover:opacity-90"
                 style={{ border: `1px solid ${meta.color}40`, background: 'var(--card)' }}
-                onClick={() => { setSelectedBucket(action); setSelectedEmail(null); }}
+                onClick={() => { setSelectedBucket(bucket); setSelectedEmail(null); }}
               >
-                {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${meta.color}20` }}>
@@ -237,7 +281,6 @@ export default function EmailzPage() {
                   </div>
                 </div>
 
-                {/* Confidence bar */}
                 {highCount > 0 && (
                   <div className="flex items-center gap-2 mb-3">
                     <div className="flex-1 h-1 rounded-full" style={{ background: 'var(--muted)' }}>
@@ -247,7 +290,6 @@ export default function EmailzPage() {
                   </div>
                 )}
 
-                {/* Email previews */}
                 <div className="space-y-1.5 mb-3">
                   {preview.map(email => (
                     <div key={email.id} className="flex items-start gap-2">
@@ -263,62 +305,43 @@ export default function EmailzPage() {
                   )}
                 </div>
 
-                {/* Quick actions */}
                 <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                   <button
-                    onClick={() => handleApproveAll(action)}
+                    onClick={() => handleApproveAll(bucket)}
                     className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1"
                     style={{ background: meta.color, color: '#fff' }}
                   >
                     <CheckCircle className="w-3 h-3" />
-                    Approve All
+                    {meta.action}
                   </button>
                   <button
-                    onClick={() => handleDenyAll(action)}
+                    onClick={() => handleDenyAll(bucket)}
                     className="rounded-full px-3 py-1.5 text-xs"
                     style={{ border: '1px solid var(--border)' }}
                   >
                     <XCircle className="w-3 h-3 inline mr-1" />
-                    Deny All
+                    Skip All
                   </button>
                 </div>
               </div>
             );
           })}
-        </div>
-
-        {rules.length > 0 && (
-          <details className="rounded-3xl p-4" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
-            <summary className="text-sm font-semibold cursor-pointer">Learned Rules ({rules.length})</summary>
-            <div className="mt-3 space-y-2">
-              {rules.map((rule, i) => (
-                <div key={i} className="text-xs p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2 py-0.5 rounded text-[10px]" style={{ background: rule.autoApprove ? '#10b98130' : '#64748b30', color: rule.autoApprove ? '#10b981' : '#64748b' }}>
-                      {rule.autoApprove ? 'AUTO-APPROVE' : 'SUGGEST'}
-                    </span>
-                    <span style={{ color: 'var(--muted-foreground)' }}>→ {ACTION_META[rule.action].label}</span>
-                  </div>
-                  <p>{rule.pattern}</p>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
+        </div>}
       </div>
     );
   }
 
-  // ── BUCKET DETAIL VIEW ─────────────────────────────────────────────────────
+  // ── BUCKET DETAIL ──────────────────────────────────────────────────────────
   const bucketEmails = buckets.get(selectedBucket) ?? [];
-  const meta = ACTION_META[selectedBucket];
+  const meta = BUCKET_META[selectedBucket];
   const Icon = meta.icon;
   const detailEmail = selectedEmail ? emails.find(e => e.id === selectedEmail) : null;
   const detailRec = selectedEmail ? recommendations.get(selectedEmail) : null;
+  const isFunEvents = selectedBucket === 'FUN_EVENTS';
+  const isMyPeople = selectedBucket === 'MY_PEOPLE';
 
   return (
     <div className="flex flex-col p-4 max-w-5xl mx-auto space-y-4" style={{ height: 'calc(100vh - 80px)' }}>
-      {/* Header */}
       <div className="flex items-center gap-3 flex-shrink-0">
         <button
           onClick={() => { setSelectedBucket(null); setSelectedEmail(null); }}
@@ -340,24 +363,23 @@ export default function EmailzPage() {
           style={{ background: meta.color, color: '#fff' }}
         >
           <CheckCircle className="w-3 h-3" />
-          Approve All
+          {meta.action} All
         </button>
         <button
           onClick={() => handleDenyAll(selectedBucket)}
           className="rounded-full px-4 py-2 text-xs"
           style={{ border: '1px solid var(--border)' }}
         >
-          Deny All
+          Skip All
         </button>
       </div>
 
-      {/* Split: list + detail */}
       <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Email list */}
         <div className="w-72 flex-shrink-0 space-y-2 overflow-y-auto pr-1">
           {bucketEmails.length === 0 && (
             <div className="rounded-2xl p-6 text-center" style={{ border: '1px solid var(--border)' }}>
-              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>No emails in this bucket.</p>
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>No emails here.</p>
             </div>
           )}
           {bucketEmails.map(email => {
@@ -400,7 +422,7 @@ export default function EmailzPage() {
                     className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
                     style={{ background: meta.color, color: '#fff' }}
                   >
-                    {isProcessing ? '…' : 'Approve'}
+                    {isProcessing ? '…' : meta.action}
                   </button>
                   <button
                     onClick={() => handleDeny(email.id)}
@@ -408,7 +430,7 @@ export default function EmailzPage() {
                     className="rounded-full px-2.5 py-1 text-[10px]"
                     style={{ border: '1px solid var(--border)' }}
                   >
-                    Deny
+                    Skip
                   </button>
                 </div>
               </div>
@@ -444,7 +466,13 @@ export default function EmailzPage() {
                 </div>
                 <p className="text-xs">{detailRec.reasoning}</p>
 
-                {detailRec.details?.suggestedTimes && (
+                {detailRec.details?.draftReply && (isMyPeople || selectedBucket === 'BUSINESS') && (
+                  <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
+                    &ldquo;{detailRec.details.draftReply}&rdquo;
+                  </div>
+                )}
+
+                {detailRec.details?.suggestedTimes && isFunEvents && (
                   <div className="flex gap-2 flex-wrap">
                     {detailRec.details.suggestedTimes.map((time, i) => (
                       <span key={i} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>{time}</span>
@@ -452,29 +480,35 @@ export default function EmailzPage() {
                   </div>
                 )}
 
-                {detailRec.details?.draftReply && (
-                  <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
-                    &ldquo;{detailRec.details.draftReply}&rdquo;
-                  </div>
-                )}
-
                 <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => handleApprove(detailEmail.id)}
-                    disabled={processing.has(detailEmail.id)}
-                    className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
-                    style={{ background: meta.color, color: '#fff' }}
-                  >
-                    <CheckCircle className="w-3 h-3" />
-                    {processing.has(detailEmail.id) ? 'Processing…' : 'Approve'}
-                  </button>
+                  {isFunEvents ? (
+                    <button
+                      onClick={() => handleApprove(detailEmail.id)}
+                      disabled={processing.has(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+                      style={{ background: meta.color, color: '#fff' }}
+                    >
+                      <Calendar className="w-3 h-3" />
+                      {processing.has(detailEmail.id) ? 'Processing…' : 'RSVP + Add to Calendar'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleApprove(detailEmail.id)}
+                      disabled={processing.has(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+                      style={{ background: meta.color, color: '#fff' }}
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      {processing.has(detailEmail.id) ? 'Processing…' : meta.action}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeny(detailEmail.id)}
                     className="rounded-full px-4 py-2 text-xs"
                     style={{ border: '1px solid var(--border)' }}
                   >
                     <XCircle className="w-3 h-3 inline mr-1" />
-                    Deny
+                    Skip
                   </button>
                   <button
                     onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
@@ -482,7 +516,7 @@ export default function EmailzPage() {
                     style={{ border: '1px solid var(--border)' }}
                   >
                     <MessageSquare className="w-3 h-3 inline mr-1" />
-                    Add Feedback
+                    Feedback
                   </button>
                 </div>
 
@@ -491,7 +525,7 @@ export default function EmailzPage() {
                     <textarea
                       value={feedbackText}
                       onChange={e => setFeedbackText(e.target.value)}
-                      placeholder="e.g., 'Moving forward, auto-unsubscribe anything untouched for 6+ months'"
+                      placeholder="e.g. 'This is actually from a friend, move to My People'"
                       className="w-full p-3 text-xs rounded-lg resize-none"
                       style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
                       rows={3}
