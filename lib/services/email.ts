@@ -35,7 +35,9 @@ type LiveEmailCounts = {
 const GMAIL_WINDOW_DAYS = 30;
 const GMAIL_MAX_COUNT_RESULTS = 300;
 const GMAIL_MAX_PREVIEWS = 300;
-const ZOHO_MAX_PREVIEWS = 500;
+const ZOHO_MAX_PREVIEWS = 300;
+const ZOHO_WINDOW_DAYS = 30;
+const ZOHO_MAX_COUNT_RESULTS = 300;
 
 function logEmailEvent(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}) {
   const payload = {
