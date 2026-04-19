@@ -74,11 +74,6 @@ function generateFallback(email: V2EmailItem): EmailRecommendation {
 
 type ActionLink = { label: string; url: string };
 type EmailBody = { html: string | null; text: string | null; actionLinks: ActionLink[] };
-}
-
-function generateFallback(email: V2EmailItem): EmailRecommendation {
-  return { emailId: email.id, bucket: classify(email), reasoning: 'Classified by keyword match.', confidence: 'MEDIUM' };
-}
 
 export default function EmailzPage() {
   const { data } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 60000 });
