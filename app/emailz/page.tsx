@@ -74,6 +74,11 @@ function generateFallback(email: V2EmailItem): EmailRecommendation {
 
 type ActionLink = { label: string; url: string };
 type EmailBody = { html: string | null; text: string | null; actionLinks: ActionLink[] };
+}
+
+function generateFallback(email: V2EmailItem): EmailRecommendation {
+  return { emailId: email.id, bucket: classify(email), reasoning: 'Classified by keyword match.', confidence: 'MEDIUM' };
+}
 
 export default function EmailzPage() {
   const { data } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 60000 });
@@ -556,6 +561,70 @@ export default function EmailzPage() {
                         {processing.has(detailEmail.id) ? 'Processing…' : meta.action}
                       </button>
                     )}
+                {detailRec.details?.draftReply && (isMyPeople || selectedBucket === 'BUSINESS') && (
+                  <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
+                    &ldquo;{detailRec.details.draftReply}&rdquo;
+                  </div>
+                )}
+
+                {detailRec.details?.suggestedTimes && isFunEvents && (
+                  <div className="flex gap-2 flex-wrap">
+                    {detailRec.details.suggestedTimes.map((time, i) => (
+                      <span key={i} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>{time}</span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2 flex-wrap">
+                  {isFunEvents ? (
+                    <button
+                      onClick={() => handleApprove(detailEmail.id)}
+                      disabled={processing.has(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+                      style={{ background: meta.color, color: '#fff' }}
+                    >
+                      <Calendar className="w-3 h-3" />
+                      {processing.has(detailEmail.id) ? 'Processing…' : 'RSVP + Add to Calendar'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleApprove(detailEmail.id)}
+                      disabled={processing.has(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+                      style={{ background: meta.color, color: '#fff' }}
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      {processing.has(detailEmail.id) ? 'Processing…' : meta.action}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeny(detailEmail.id)}
+                    className="rounded-full px-4 py-2 text-xs"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <XCircle className="w-3 h-3 inline mr-1" />
+                    Skip
+                  </button>
+                  <button
+                    onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
+                    className="rounded-full px-4 py-2 text-xs"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <MessageSquare className="w-3 h-3 inline mr-1" />
+                    Feedback
+                  </button>
+                </div>
+
+                {feedbackMode === detailEmail.id && (
+                  <div className="pt-3 border-t" style={{ borderColor: `${meta.color}40` }}>
+                    <textarea
+                      value={feedbackText}
+                      onChange={e => setFeedbackText(e.target.value)}
+                      placeholder="e.g. 'This is actually from a friend, move to My People'"
+                      className="w-full p-3 text-xs rounded-lg resize-none"
+                      style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
+                      rows={3}
+                    />
                     <button
                       onClick={() => handleDeny(detailEmail.id)}
                       className="rounded-full px-4 py-2 text-xs"
