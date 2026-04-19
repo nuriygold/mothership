@@ -122,11 +122,11 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
     const inferredInbox = profile.data.emailAddress ?? undefined;
 
     const windowQuery = `newer_than:${GMAIL_WINDOW_DAYS}d`;
-    const [unreadRes, needsReplyRes, urgentRes] = await Promise.all([
+    const [inboxRes, needsReplyRes, urgentRes] = await Promise.all([
       withTimeout(
         gmail.users.messages.list({
           userId: 'me',
-          q: `in:inbox is:unread ${windowQuery}`,
+          q: `in:inbox ${windowQuery}`,
           maxResults: GMAIL_MAX_COUNT_RESULTS,
         })
       ),
@@ -140,13 +140,13 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
       withTimeout(
         gmail.users.messages.list({
           userId: 'me',
-          q: `in:inbox is:unread ${windowQuery} {subject:urgent subject:asap subject:"action required"}`,
+          q: `in:inbox ${windowQuery} {subject:urgent subject:asap subject:"action required"}`,
           maxResults: GMAIL_MAX_COUNT_RESULTS,
         })
       ),
     ]);
 
-    const unreadMessages = unreadRes.data.messages ?? [];
+    const unreadMessages = inboxRes.data.messages ?? [];
     const previewIds = unreadMessages.slice(0, GMAIL_MAX_PREVIEWS).map((message) => message.id).filter(Boolean) as string[];
 
     const previewResults = await Promise.all(
