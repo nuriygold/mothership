@@ -33,8 +33,9 @@ type LiveEmailCounts = {
 };
 
 const GMAIL_WINDOW_DAYS = 30;
-const GMAIL_MAX_COUNT_RESULTS = 500;
-const GMAIL_MAX_PREVIEWS = 500;
+const GMAIL_MAX_COUNT_RESULTS = 300;
+const GMAIL_MAX_PREVIEWS = 300;
+const ZOHO_MAX_PREVIEWS = 500;
 
 function logEmailEvent(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}) {
   const payload = {
@@ -264,7 +265,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
 
     const previews: EmailSummary['previews'] = [];
     const fetchResults = client.fetch(
-      allInWindow.slice(-GMAIL_MAX_PREVIEWS),
+      allInWindow.slice(-ZOHO_MAX_PREVIEWS),
       { envelope: true, source: false, bodyStructure: false },
       { signal: controller.signal }
     );
@@ -277,7 +278,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
         subject: env?.subject ?? '(no subject)',
         date: env?.date ? new Date(env.date).toISOString() : new Date().toISOString(),
       });
-      if (previews.length >= GMAIL_MAX_PREVIEWS) break;
+      if (previews.length >= ZOHO_MAX_PREVIEWS) break;
     }
 
     await client.logout();
