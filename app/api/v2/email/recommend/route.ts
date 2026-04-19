@@ -2,18 +2,19 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-type EmailAction =
-  | 'SCHEDULE'
-  | 'REPLY'
-  | 'RSVP'
-  | 'UNSUBSCRIBE'
-  | 'DELETE'
-  | 'ARCHIVE'
-  | 'CREATE_TASK'
-  | 'DEFER';
+type EmailBucket =
+  | 'ON_FIRE'
+  | 'BUSINESS'
+  | 'FINANCIAL'
+  | 'MY_PEOPLE'
+  | 'FUN_EVENTS'
+  | 'SHOPPING_GIFTS'
+  | 'TECH_PROJECTS'
+  | 'GOOD_READS'
+  | 'TRAVEL';
 
 type EmailRecommendation = {
-  action: EmailAction;
+  bucket: EmailBucket;
   reasoning: string;
   details?: {
     suggestedTimes?: string[];
@@ -32,44 +33,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Email data required' }, { status: 400 });
     }
 
-    const prompt = `Analyze this email and recommend the best action to take.
+    const prompt = `Classify this email into exactly one life-area bucket.
 
-EMAIL DETAILS:
+EMAIL:
 From: ${email.sender}
 Subject: ${email.subject}
 Preview: ${email.snippet || email.preview || 'N/A'}
 Date: ${new Date(email.timestamp).toLocaleString()}
 
-AVAILABLE ACTIONS:
-- SCHEDULE: Meeting requests that need calendar coordination
-- REPLY: Personal messages that need a response
-- RSVP: Event invitations that need attendance confirmation
-- UNSUBSCRIBE: Marketing emails with no value
-- DELETE: Spam or irrelevant messages
-- ARCHIVE: Information to keep but no action needed
-- CREATE_TASK: Emails that represent work to be done
-- DEFER: Messages to revisit later
+BUCKETS:
+- ON_FIRE: Urgent, time-sensitive, needs attention today
+- BUSINESS: Work, clients, contracts, professional correspondence
+- FINANCIAL: Bills, invoices, payments, banking, investments, receipts
+- MY_PEOPLE: Real emails from real humans — friends, family, personal relationships
+- FUN_EVENTS: Parties, social events, invitations, RSVPs, outings
+- SHOPPING_GIFTS: Orders, shipping, deals, product recommendations, gift ideas
+- TECH_PROJECTS: Developer tools, GitHub, SaaS apps, tech newsletters, side projects, tech events
+- GOOD_READS: General newsletters, articles, reading material, content subscriptions
+- TRAVEL: Flights, hotels, itineraries, booking confirmations, trip planning
 
-Respond with ONLY a JSON object (no markdown, no explanation) in this exact format:
+Respond with ONLY a JSON object (no markdown, no explanation):
 {
-  "action": "SCHEDULE",
-  "reasoning": "Brief explanation of why this action makes sense",
+  "bucket": "BUSINESS",
+  "reasoning": "Brief explanation",
   "confidence": "HIGH",
   "details": {
-    "suggestedTimes": ["Thursday 2pm", "Friday 10am"],
-    "draftReply": "Optional draft response text",
-    "taskTitle": "Optional task title if CREATE_TASK"
+    "draftReply": "Optional draft reply if MY_PEOPLE or BUSINESS",
+    "suggestedTimes": ["Optional time slots if FUN_EVENTS meeting/calendar invite"],
+    "taskTitle": "Optional task title if BUSINESS or TECH_PROJECTS"
   }
 }
 
-Confidence levels:
-- HIGH: Very clear what to do (meeting request, obvious spam, etc)
-- MEDIUM: Reasonable suggestion but could go either way
-- LOW: Not obvious, user should decide
+Confidence: HIGH = very clear, MEDIUM = reasonable guess, LOW = uncertain.`;
 
-Be concise and practical. Focus on clearing inbox efficiently.`;
-
-    // Call Azure OpenAI
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
     const model = process.env.AZURE_OPENAI_MODEL || 'gpt-5.4-mini';
@@ -89,15 +85,12 @@ Be concise and practical. Focus on clearing inbox efficiently.`;
         messages: [
           {
             role: 'system',
-            content: 'You are an expert email triage assistant. Respond only with valid JSON, no markdown formatting.',
+            content: 'You are an expert email classifier. Respond only with valid JSON, no markdown.',
           },
-          {
-            role: 'user',
-            content: prompt,
-          },
+          { role: 'user', content: prompt },
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        temperature: 0.3,
+        max_tokens: 300,
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -110,35 +103,22 @@ Be concise and practical. Focus on clearing inbox efficiently.`;
     const data = await response.json();
     const aiOutput = data.choices?.[0]?.message?.content || '';
 
-    // Parse the AI response
     let recommendation: EmailRecommendation;
     try {
-      // Extract JSON from response (might have extra text)
       const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
-      }
+      if (!jsonMatch) throw new Error('No JSON found in response');
       recommendation = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
+    } catch {
       console.error('[email:recommend] Failed to parse AI response:', aiOutput);
-      // Fallback to simple classification
-      recommendation = {
-        action: 'ARCHIVE',
-        reasoning: 'Unable to parse AI recommendation',
-        confidence: 'LOW',
-      };
+      recommendation = { bucket: 'BUSINESS', reasoning: 'Could not classify', confidence: 'LOW' };
     }
 
     return NextResponse.json({
       ok: true,
-      recommendation: {
-        emailId: email.id,
-        ...recommendation,
-      },
+      recommendation: { emailId: email.id, ...recommendation },
     });
   } catch (err) {
     console.error('[email:recommend]', err);
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
+    return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

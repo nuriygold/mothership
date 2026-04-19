@@ -32,9 +32,9 @@ type LiveEmailCounts = {
   inferredInbox?: string;
 };
 
-const GMAIL_WINDOW_DAYS = 14;
+const GMAIL_WINDOW_DAYS = 30;
 const GMAIL_MAX_COUNT_RESULTS = 100;
-const GMAIL_MAX_PREVIEWS = 50;
+const GMAIL_MAX_PREVIEWS = 100;
 
 function logEmailEvent(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}) {
   const payload = {
