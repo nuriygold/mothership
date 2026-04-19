@@ -72,6 +72,9 @@ function generateFallback(email: V2EmailItem): EmailRecommendation {
   return { emailId: email.id, bucket: classify(email), reasoning: 'Classified by keyword match.', confidence: 'MEDIUM' };
 }
 
+type ActionLink = { label: string; url: string };
+type EmailBody = { html: string | null; text: string | null; actionLinks: ActionLink[] };
+
 export default function EmailzPage() {
   const { data } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [recommendations, setRecommendations] = useState<Map<string, EmailRecommendation>>(new Map());
@@ -81,6 +84,8 @@ export default function EmailzPage() {
   const [selectedBucket, setSelectedBucket] = useState<EmailBucket | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [emailBodies, setEmailBodies] = useState<Map<string, EmailBody>>(new Map());
+  const [bodyLoading, setBodyLoading] = useState<Set<string>>(new Set());
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
 
@@ -109,6 +114,25 @@ export default function EmailzPage() {
 
     fetchRecommendations();
   }, [emails]);
+
+  useEffect(() => {
+    if (!selectedEmail) return;
+    if (emailBodies.has(selectedEmail) || bodyLoading.has(selectedEmail)) return;
+    setBodyLoading(prev => new Set(prev).add(selectedEmail));
+    fetch(`/api/v2/email/${selectedEmail}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json?.ok) {
+          setEmailBodies(prev => new Map(prev).set(selectedEmail, {
+            html: json.html ?? null,
+            text: json.text ?? null,
+            actionLinks: json.actionLinks ?? [],
+          }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setBodyLoading(prev => { const n = new Set(prev); n.delete(selectedEmail); return n; }));
+  }, [selectedEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleApprove(emailId: string, withFeedback = false) {
     setProcessing(prev => new Set(prev).add(emailId));
@@ -440,115 +464,146 @@ export default function EmailzPage() {
 
         {/* Detail panel */}
         <div className="flex-1 min-w-0 overflow-y-auto">
-          {detailEmail && detailRec ? (
-            <div className="rounded-3xl p-5 space-y-4" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
-              <div>
-                <p className="font-semibold">{detailEmail.sender}</p>
-                <p className="text-sm mt-1">{detailEmail.subject}</p>
-                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                  {new Date(detailEmail.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          {detailEmail && detailRec ? (() => {
+            const body = emailBodies.get(detailEmail.id);
+            const isLoadingBody = bodyLoading.has(detailEmail.id);
+            const actionLinks = body?.actionLinks ?? [];
+
+            return (
+              <div className="rounded-3xl p-5 space-y-4" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                <div>
+                  <p className="font-semibold">{detailEmail.sender}</p>
+                  <p className="text-sm mt-1">{detailEmail.subject}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                    {new Date(detailEmail.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                </div>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                  {detailEmail.snippet || detailEmail.preview}
                 </p>
-              </div>
-              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                {detailEmail.snippet || detailEmail.preview}
-              </p>
 
-              <div className="rounded-2xl p-4 space-y-3" style={{ background: `${meta.color}15`, border: `1px solid ${meta.color}40` }}>
-                <div className="flex items-center gap-2">
-                  <Icon className="w-4 h-4" style={{ color: meta.color }} />
-                  <p className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{
-                    background: detailRec.confidence === 'HIGH' ? '#10b98130' : '#64748b30',
-                    color: detailRec.confidence === 'HIGH' ? '#10b981' : '#64748b',
-                  }}>
-                    {detailRec.confidence}
-                  </span>
-                </div>
-                <p className="text-xs">{detailRec.reasoning}</p>
-
-                {detailRec.details?.draftReply && (isMyPeople || selectedBucket === 'BUSINESS') && (
-                  <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
-                    &ldquo;{detailRec.details.draftReply}&rdquo;
+                {/* Action links extracted from email body */}
+                {isLoadingBody && (
+                  <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Scanning for action links…</p>
+                )}
+                {actionLinks.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Actions in this email</p>
+                    <div className="flex flex-wrap gap-2">
+                      {actionLinks.map((link, i) => (
+                        <a
+                          key={i}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1 transition-opacity hover:opacity-80"
+                          style={{ background: `${meta.color}20`, color: meta.color, border: `1px solid ${meta.color}40` }}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                {detailRec.details?.suggestedTimes && isFunEvents && (
-                  <div className="flex gap-2 flex-wrap">
-                    {detailRec.details.suggestedTimes.map((time, i) => (
-                      <span key={i} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>{time}</span>
-                    ))}
+                <div className="rounded-2xl p-4 space-y-3" style={{ background: `${meta.color}15`, border: `1px solid ${meta.color}40` }}>
+                  <div className="flex items-center gap-2">
+                    <Icon className="w-4 h-4" style={{ color: meta.color }} />
+                    <p className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</p>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{
+                      background: detailRec.confidence === 'HIGH' ? '#10b98130' : '#64748b30',
+                      color: detailRec.confidence === 'HIGH' ? '#10b981' : '#64748b',
+                    }}>
+                      {detailRec.confidence}
+                    </span>
                   </div>
-                )}
+                  <p className="text-xs">{detailRec.reasoning}</p>
 
-                <div className="flex gap-2 flex-wrap">
-                  {isFunEvents ? (
-                    <button
-                      onClick={() => handleApprove(detailEmail.id)}
-                      disabled={processing.has(detailEmail.id)}
-                      className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
-                      style={{ background: meta.color, color: '#fff' }}
-                    >
-                      <Calendar className="w-3 h-3" />
-                      {processing.has(detailEmail.id) ? 'Processing…' : 'RSVP + Add to Calendar'}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleApprove(detailEmail.id)}
-                      disabled={processing.has(detailEmail.id)}
-                      className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
-                      style={{ background: meta.color, color: '#fff' }}
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      {processing.has(detailEmail.id) ? 'Processing…' : meta.action}
-                    </button>
+                  {detailRec.details?.draftReply && (isMyPeople || selectedBucket === 'BUSINESS') && (
+                    <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
+                      &ldquo;{detailRec.details.draftReply}&rdquo;
+                    </div>
                   )}
-                  <button
-                    onClick={() => handleDeny(detailEmail.id)}
-                    className="rounded-full px-4 py-2 text-xs"
-                    style={{ border: '1px solid var(--border)' }}
-                  >
-                    <XCircle className="w-3 h-3 inline mr-1" />
-                    Skip
-                  </button>
-                  <button
-                    onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
-                    className="rounded-full px-4 py-2 text-xs"
-                    style={{ border: '1px solid var(--border)' }}
-                  >
-                    <MessageSquare className="w-3 h-3 inline mr-1" />
-                    Feedback
-                  </button>
-                </div>
 
-                {feedbackMode === detailEmail.id && (
-                  <div className="pt-3 border-t" style={{ borderColor: `${meta.color}40` }}>
-                    <textarea
-                      value={feedbackText}
-                      onChange={e => setFeedbackText(e.target.value)}
-                      placeholder="e.g. 'This is actually from a friend, move to My People'"
-                      className="w-full p-3 text-xs rounded-lg resize-none"
-                      style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
-                      rows={3}
-                    />
+                  {detailRec.details?.suggestedTimes && isFunEvents && (
+                    <div className="flex gap-2 flex-wrap">
+                      {detailRec.details.suggestedTimes.map((time, i) => (
+                        <span key={i} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>{time}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 flex-wrap">
+                    {isFunEvents ? (
+                      <button
+                        onClick={() => handleApprove(detailEmail.id)}
+                        disabled={processing.has(detailEmail.id)}
+                        className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+                        style={{ background: meta.color, color: '#fff' }}
+                      >
+                        <Calendar className="w-3 h-3" />
+                        {processing.has(detailEmail.id) ? 'Processing…' : 'RSVP + Add to Calendar'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleApprove(detailEmail.id)}
+                        disabled={processing.has(detailEmail.id)}
+                        className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+                        style={{ background: meta.color, color: '#fff' }}
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        {processing.has(detailEmail.id) ? 'Processing…' : meta.action}
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleApprove(detailEmail.id, true)}
-                      className="mt-2 rounded-full px-4 py-2 text-xs font-semibold"
-                      style={{ background: meta.color, color: '#fff' }}
+                      onClick={() => handleDeny(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs"
+                      style={{ border: '1px solid var(--border)' }}
                     >
-                      Approve with Feedback
+                      <XCircle className="w-3 h-3 inline mr-1" />
+                      Skip
+                    </button>
+                    <button
+                      onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs"
+                      style={{ border: '1px solid var(--border)' }}
+                    >
+                      <MessageSquare className="w-3 h-3 inline mr-1" />
+                      Feedback
                     </button>
                   </div>
+
+                  {feedbackMode === detailEmail.id && (
+                    <div className="pt-3 border-t" style={{ borderColor: `${meta.color}40` }}>
+                      <textarea
+                        value={feedbackText}
+                        onChange={e => setFeedbackText(e.target.value)}
+                        placeholder="e.g. 'This is actually from a friend, move to My People'"
+                        className="w-full p-3 text-xs rounded-lg resize-none"
+                        style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
+                        rows={3}
+                      />
+                      <button
+                        onClick={() => handleApprove(detailEmail.id, true)}
+                        className="mt-2 rounded-full px-4 py-2 text-xs font-semibold"
+                        style={{ background: meta.color, color: '#fff' }}
+                      >
+                        Approve with Feedback
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {detailEmail.gmailLink && (
+                  <a href={detailEmail.gmailLink} target="_blank" rel="noreferrer" className="text-xs flex items-center gap-1" style={{ color: 'var(--color-cyan)' }}>
+                    <ExternalLink className="w-3 h-3" />
+                    Open in Gmail
+                  </a>
                 )}
               </div>
-
-              {detailEmail.gmailLink && (
-                <a href={detailEmail.gmailLink} target="_blank" rel="noreferrer" className="text-xs flex items-center gap-1" style={{ color: 'var(--color-cyan)' }}>
-                  <ExternalLink className="w-3 h-3" />
-                  Open in Gmail
-                </a>
-              )}
-            </div>
-          ) : (
+            );
+          })() : (
             <div className="rounded-3xl p-8 text-center flex items-center justify-center" style={{ border: '1px dashed var(--border)', minHeight: '200px' }}>
               <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Select an email to view details</p>
             </div>

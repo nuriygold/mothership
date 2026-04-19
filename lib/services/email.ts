@@ -402,6 +402,103 @@ function getGmailOAuth() {
   return google.gmail({ version: 'v1', auth: oauth });
 }
 
+function decodeBase64Url(data: string): string {
+  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+}
+
+function extractBodyFromPayload(payload: Record<string, unknown>): { html: string | null; text: string | null } {
+  const result = { html: null as string | null, text: null as string | null };
+  function walk(part: Record<string, unknown>) {
+    if (!part) return;
+    const mimeType = (part.mimeType as string) || '';
+    const bodyData = ((part.body as Record<string, unknown>)?.data as string) ?? null;
+    if (mimeType === 'text/html' && bodyData && !result.html) {
+      result.html = decodeBase64Url(bodyData);
+    } else if (mimeType === 'text/plain' && bodyData && !result.text) {
+      result.text = decodeBase64Url(bodyData);
+    }
+    const parts = part.parts as Record<string, unknown>[] | undefined;
+    if (parts) parts.forEach(walk);
+  }
+  walk(payload);
+  return result;
+}
+
+const ACTION_LINK_PATTERNS = [
+  /\brsvp\b/i, /\baccept\b/i, /\bdecline\b/i, /\bconfirm\b/i, /\battend\b/i,
+  /add to calendar/i, /view invitation/i, /\brespond\b/i,
+  /\bconnect\b/i, /accept invitation/i, /accept connection/i,
+  /view on linkedin/i, /\bjoin\b/i, /\bverify\b/i,
+];
+
+export type ActionLink = { label: string; url: string };
+
+export function extractActionLinks(html: string): ActionLink[] {
+  const links: ActionLink[] = [];
+  const seen = new Set<string>();
+  const anchorRegex = /<a[^>]+href=["']([^"'#][^"']*?)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchorRegex.exec(html)) !== null) {
+    const url = match[1].trim();
+    const label = match[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    if (!url || url.startsWith('mailto:')) continue;
+    if (seen.has(url)) continue;
+    if (!ACTION_LINK_PATTERNS.some(p => p.test(label))) continue;
+    seen.add(url);
+    links.push({ label, url });
+    if (links.length >= 8) break;
+  }
+  return links;
+}
+
+export type EmailFullBody = {
+  html: string | null;
+  text: string | null;
+  actionLinks: ActionLink[];
+};
+
+export async function fetchGmailFullBody(messageId: string): Promise<EmailFullBody> {
+  const gmail = getGmailOAuth();
+  if (!gmail) return { html: null, text: null, actionLinks: [] };
+  try {
+    const result = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
+    const payload = result.data.payload as Record<string, unknown> | undefined;
+    if (!payload) return { html: null, text: null, actionLinks: [] };
+    const body = extractBodyFromPayload(payload);
+    return { ...body, actionLinks: body.html ? extractActionLinks(body.html) : [] };
+  } catch (err) {
+    logEmailEvent('error', 'gmail_full_body_fetch_failed', { messageId, error: err instanceof Error ? err.message : String(err) });
+    return { html: null, text: null, actionLinks: [] };
+  }
+}
+
+export async function fetchZohoFullBody(uid: string): Promise<EmailFullBody> {
+  const host = process.env.ZOHO_IMAP_HOST || 'imap.zoho.com';
+  const port = Number(process.env.ZOHO_IMAP_PORT || 993);
+  const auth = { user: process.env.ZOHO_IMAP_USERNAME || '', pass: process.env.ZOHO_IMAP_PASSWORD || '' };
+  if (!auth.user || !auth.pass) return { html: null, text: null, actionLinks: [] };
+
+  const client = new ImapFlow({ host, port, secure: true, auth, logger: false });
+  try {
+    await client.connect();
+    await client.selectMailbox('INBOX');
+    const message = await client.fetchOne(uid, { bodyStructure: true, source: true }, { uid: true });
+    await client.logout();
+    if (!message?.source) return { html: null, text: null, actionLinks: [] };
+    const raw = message.source.toString('utf-8');
+    // Extract HTML part from raw RFC822 source via boundary splitting
+    const htmlMatch = raw.match(/Content-Type:\s*text\/html[^\r\n]*\r?\n(?:.*\r?\n)*?\r?\n([\s\S]*?)(?=--|\z)/i);
+    const textMatch = raw.match(/Content-Type:\s*text\/plain[^\r\n]*\r?\n(?:.*\r?\n)*?\r?\n([\s\S]*?)(?=--|\z)/i);
+    const html = htmlMatch ? htmlMatch[1].trim() : null;
+    const text = textMatch ? textMatch[1].trim() : null;
+    return { html, text, actionLinks: html ? extractActionLinks(html) : [] };
+  } catch (err) {
+    logEmailEvent('error', 'zoho_full_body_fetch_failed', { uid, error: err instanceof Error ? err.message : String(err) });
+    try { if (client?.loggedIn) await client.logout(); } catch (_e) { /* ignore */ }
+    return { html: null, text: null, actionLinks: [] };
+  }
+}
+
 export async function deleteGmailMessage(messageId: string): Promise<{ ok: boolean; error?: string }> {
   const gmail = getGmailOAuth();
   if (!gmail) return { ok: false, error: 'Gmail OAuth credentials missing.' };
