@@ -16,6 +16,7 @@ import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
 import { JarvisCard } from '@/components/voice/jarvis-card';
+import { NewTaskModal } from '@/components/today/new-task-modal';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
@@ -63,13 +64,14 @@ function toActionItem(task: V2TaskItem): V2DashboardPriorityItem {
 export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
-  const { data: tasksData } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
+  const { data: tasksData, mutate: mutateTasks } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
   const [showTrophy, setShowTrophy] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [actionModalItem, setActionModalItem] = useState<V2DashboardPriorityItem | null>(null);
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const nowRef = useRef<HTMLDivElement>(null);
 
   // EventSource with retry (up to 3 attempts: 2s, 4s, 8s backoff)
@@ -79,7 +81,7 @@ export default function TodayPage() {
     function connect() {
       stream = new EventSource('/api/v2/stream/dashboard');
       stream.addEventListener('connected', () => { attempts = 0; setStreamStatus('live'); });
-      stream.addEventListener('approval.updated', () => void mutate());
+      stream.addEventListener('approval.updated', () => { void mutate(); void mutateTasks(); });
       stream.onerror = () => {
         stream.close();
         if (attempts < 3) {
@@ -187,6 +189,7 @@ export default function TodayPage() {
       if (!res.ok) throw new Error(`Task complete failed (${res.status})`);
       setToastMsg(`✓ "${title}" added to Trophy Collection`);
       await mutate();
+      await mutateTasks();
     } catch (error) {
       setCompletedIds((prev) => {
         const next = new Set(prev);
@@ -219,6 +222,7 @@ export default function TodayPage() {
       });
       if (!res.ok) throw new Error(`Task defer failed (${res.status})`);
       await mutate();
+      await mutateTasks();
       setToastMsg('Task moved back to timeline');
     } catch (error) {
       setCompletedIds((prev) => new Set([...prev, taskId]));
@@ -291,6 +295,7 @@ export default function TodayPage() {
       if (!assignRes.ok) throw new Error(`Assignment failed (${assignRes.status})`);
       const payload = await assignRes.json().catch(() => ({} as AssignTaskResponse));
       await mutate();
+      await mutateTasks();
       if (telegramRes.ok) {
         setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
       } else {
@@ -324,7 +329,7 @@ export default function TodayPage() {
       <TakeActionModal
         item={actionModalItem}
         onClose={() => setActionModalItem(null)}
-        onDone={() => { void mutate(); }}
+        onDone={() => { void mutate(); void mutateTasks(); }}
         onComplete={handleComplete}
         onGateway={(title) => { handleGateway(title); setActionModalItem(null); }}
         onDispatch={(item) => { handleDispatch(item); }}
@@ -335,6 +340,17 @@ export default function TodayPage() {
             body: JSON.stringify({ action: 'vision_board' }),
           });
           if (!res.ok) throw new Error(`Vision board label failed (${res.status})`);
+        }}
+      />
+    )}
+
+    {showNewTaskModal && (
+      <NewTaskModal
+        onClose={() => setShowNewTaskModal(false)}
+        onSuccess={() => {
+          void mutate();
+          void mutateTasks();
+          setToastMsg('Task created successfully');
         }}
       />
     )}
@@ -578,11 +594,14 @@ export default function TodayPage() {
           <CardTitle>Quick Actions</CardTitle>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <Link href="/tasks" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+          <button
+            onClick={() => setShowNewTaskModal(true)}
+            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}
+          >
             <Plus className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
             <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>New Task</span>
-          </Link>
+          </button>
           <Link href="/activity" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
             <ListChecks className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
