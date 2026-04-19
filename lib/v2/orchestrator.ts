@@ -325,7 +325,13 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
   const tasks = (await listTasks()) as any[];
 
   // Build taskId → visionItemId map for badge display
-  const visionLinks = await prisma.visionTaskLink.findMany();
+  // Wrapped in try-catch: DB may be unreachable when using task-pool source
+  let visionLinks: { taskId: string; visionItemId: string }[] = [];
+  try {
+    visionLinks = await prisma.visionTaskLink.findMany();
+  } catch (err) {
+    console.warn('[getV2TasksFeed] visionTaskLink query failed, skipping vision badges:', err instanceof Error ? err.message : String(err));
+  }
   const taskVisionMap = new Map(visionLinks.map((l) => [l.taskId, l.visionItemId]));
 
   const mapped: V2TaskItem[] = tasks.map((task) => {
