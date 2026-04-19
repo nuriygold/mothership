@@ -134,6 +134,27 @@ export default function EmailzPage() {
       .finally(() => setBodyLoading(prev => { const n = new Set(prev); n.delete(selectedEmail); return n; }));
   }, [selectedEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function handleRSVP(emailId: string) {
+    setProcessing(prev => new Set(prev).add(emailId));
+    const body = emailBodies.get(emailId);
+    const actionLinks = body?.actionLinks ?? [];
+    try {
+      const res = await fetch(`/api/v2/email/${emailId}/add-to-calendar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionLinks }),
+      });
+      const json = res.ok ? await res.json() : null;
+      if (json?.ok) {
+        if (json.htmlLink) window.open(json.htmlLink, '_blank');
+        (json.rsvpLinks ?? []).slice(0, 3).forEach((link: { url: string }) => window.open(link.url, '_blank'));
+      }
+    } catch { /* ignore */ }
+    setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    if (selectedEmail === emailId) setSelectedEmail(null);
+  }
+
   async function handleApprove(emailId: string, withFeedback = false) {
     setProcessing(prev => new Set(prev).add(emailId));
     await new Promise(r => setTimeout(r, 600));
@@ -537,13 +558,13 @@ export default function EmailzPage() {
                   <div className="flex gap-2 flex-wrap">
                     {isFunEvents ? (
                       <button
-                        onClick={() => handleApprove(detailEmail.id)}
+                        onClick={() => handleRSVP(detailEmail.id)}
                         disabled={processing.has(detailEmail.id)}
                         className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
                         style={{ background: meta.color, color: '#fff' }}
                       >
                         <Calendar className="w-3 h-3" />
-                        {processing.has(detailEmail.id) ? 'Processing…' : 'RSVP + Add to Calendar'}
+                        {processing.has(detailEmail.id) ? 'Adding to Calendar…' : 'RSVP + Add to Calendar'}
                       </button>
                     ) : (
                       <button
