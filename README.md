@@ -75,7 +75,7 @@ If Ruby generation fails, template actions still work.
 ## Deployment & Operations
 
 - **Secrets location:** host-managed secrets only (Vercel), never committed.
-- **Database:** set `DATABASE_URL` (Supabase service role URL with SSL).
+- **Database:** set `DATABASE_URL` to your runtime database URL. For Supabase, prefer the pooler URL; if you keep `DATABASE_URL` on the direct host (`db.<project>.supabase.co:5432`), set `DATABASE_POOLER_URL` (or `SUPABASE_POOLER_URL`) so Prisma can automatically use the pooler at runtime.
 - **Task source:** set `MOTHERSHIP_TASK_SOURCE=task_pool_repo`.
   - Optional: `TASK_POOL_REPO_OWNER`, `TASK_POOL_REPO_NAME`, `TASK_POOL_REPO_BRANCH`, `TASK_POOL_SNAPSHOT_PATH`
   - Private repo support: `GITHUB_TOKEN`
