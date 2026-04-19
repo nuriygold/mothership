@@ -350,7 +350,7 @@ export default function EmailzPage() {
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
     );
   }
