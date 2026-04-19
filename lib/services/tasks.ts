@@ -33,10 +33,15 @@ export async function listTasks() {
     return [];
   }
 
-  return prisma.task.findMany({
-    include: { workflow: true, owner: true },
-    orderBy: { createdAt: 'desc' },
-  });
+  try {
+    return await prisma.task.findMany({
+      include: { workflow: true, owner: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  } catch (err) {
+    console.warn('[listTasks] DB query failed:', err instanceof Error ? err.message : String(err));
+    return [];
+  }
 }
 
 export async function createTask(input: {
