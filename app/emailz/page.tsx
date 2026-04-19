@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import {
   Flame, Briefcase, DollarSign, Users, PartyPopper,
   ShoppingBag, Code2, BookOpen, Plane,
-  CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft, ExternalLink, Calendar,
+  CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft, ExternalLink, Calendar, Search,
 } from 'lucide-react';
 import type { V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
 
@@ -80,6 +80,7 @@ export default function EmailzPage() {
   const [feedbackText, setFeedbackText] = useState('');
   const [selectedBucket, setSelectedBucket] = useState<EmailBucket | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
 
@@ -139,6 +140,16 @@ export default function EmailzPage() {
     setSelectedBucket(null);
   }
 
+  const searchResults = useMemo(() => {
+    if (!search.trim()) return null;
+    const q = search.toLowerCase();
+    return emails.filter(e =>
+      e.sender.toLowerCase().includes(q) ||
+      e.subject.toLowerCase().includes(q) ||
+      (e.snippet || e.preview || '').toLowerCase().includes(q)
+    );
+  }, [emails, search]);
+
   const buckets = useMemo(() => {
     const grouped = new Map<EmailBucket, V2EmailItem[]>();
     emails.forEach(email => {
@@ -171,13 +182,75 @@ export default function EmailzPage() {
           </div>
         </div>
 
-        {buckets.size === 0 && recommendations.size > 0 && (
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--muted-foreground)' }} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search sender, subject, or content…"
+            className="w-full rounded-2xl pl-9 pr-4 py-2.5 text-sm"
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }}>
+              <XCircle className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Search results */}
+        {searchResults && (
+          <div className="space-y-2">
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</p>
+            {searchResults.length === 0 && (
+              <div className="rounded-2xl p-6 text-center" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No emails match &ldquo;{search}&rdquo;</p>
+              </div>
+            )}
+            {searchResults.map(email => {
+              const rec = recommendations.get(email.id);
+              const bucket = rec?.bucket;
+              const meta = bucket ? BUCKET_META[bucket] : null;
+              return (
+                <div key={email.id} className="rounded-2xl p-3 flex items-start gap-3" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                  {meta && (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${meta.color}20` }}>
+                      <meta.icon className="w-3 h-3" style={{ color: meta.color }} />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">{email.sender}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--muted-foreground)' }}>{email.subject}</p>
+                    {(email.snippet || email.preview) && (
+                      <p className="text-[10px] truncate mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{email.snippet || email.preview}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {meta && <span className="text-[10px]" style={{ color: meta.color }}>{meta.label}</span>}
+                    <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                      {new Date(email.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    {email.gmailLink && (
+                      <a href={email.gmailLink} target="_blank" rel="noreferrer" style={{ color: 'var(--muted-foreground)' }}>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {!searchResults && buckets.size === 0 && recommendations.size > 0 && (
           <div className="rounded-3xl p-8 text-center" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
             <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>All caught up.</p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {!searchResults && <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {orderedBuckets.map(bucket => {
             const meta = BUCKET_META[bucket];
             const Icon = meta.icon;
@@ -253,7 +326,7 @@ export default function EmailzPage() {
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
     );
   }

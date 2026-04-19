@@ -260,7 +260,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
 
     const previews: EmailSummary['previews'] = [];
     const fetchResults = client.fetch(
-      unseen.slice(-50),
+      unseen.slice(-GMAIL_MAX_PREVIEWS),
       { envelope: true, source: false, bodyStructure: false },
       { signal: controller.signal }
     );
@@ -273,7 +273,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
         subject: env?.subject ?? '(no subject)',
         date: env?.date ? new Date(env.date).toISOString() : new Date().toISOString(),
       });
-      if (previews.length >= 50) break;
+      if (previews.length >= GMAIL_MAX_PREVIEWS) break;
     }
 
     await client.logout();
@@ -354,7 +354,7 @@ export async function getEmailSummary(): Promise<EmailSummary> {
     ]);
     const mergedPreviews = [...gmail.previews, ...zoho.previews]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 50);
+      .slice(0, GMAIL_MAX_PREVIEWS);
     const resolvedInboxes =
       configuredInboxes.length > 0
         ? configuredInboxes
