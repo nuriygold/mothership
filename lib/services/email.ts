@@ -254,7 +254,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
-  const windowCutoff = new Date(Date.now() - GMAIL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const windowCutoff = new Date(Date.now() - ZOHO_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   try {
     await client.connect();
@@ -297,7 +297,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
       needsReply: unread,
       urgent,
       previews,
-      note: `Live Zoho IMAP — ${previews.length} emails (last ${GMAIL_WINDOW_DAYS} days).`,
+      note: `Live Zoho IMAP — ${previews.length} emails (last ${ZOHO_WINDOW_DAYS} days).`,
     };
   } catch (err) {
     logEmailEvent('error', 'zoho_sync_failed', {
