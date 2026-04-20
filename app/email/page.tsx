@@ -630,8 +630,16 @@ export default function EmailPage() {
                     }}>
                       {detailRec.confidence}
                     </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{
+                      background: detailRec.reasoning.includes('keyword') ? '#f59e0b20' : '#3b82f620',
+                      color: detailRec.reasoning.includes('keyword') ? '#f59e0b' : '#3b82f6',
+                    }}>
+                      {detailRec.reasoning.includes('keyword') ? 'Keyword' : 'AI'}
+                    </span>
                   </div>
-                  <p className="text-xs">{detailRec.reasoning}</p>
+                  <p className="text-xs" style={{ color: detailRec.reasoning.includes('keyword') ? '#f59e0b' : 'inherit' }}>
+                    {detailRec.reasoning}
+                  </p>
 
                   {detailRec.details?.draftReply && (isMyPeople || selectedBucket === 'BUSINESS') && (
                     <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
