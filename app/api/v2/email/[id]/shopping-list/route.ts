@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { addShoppingItem } from '@/lib/services/shopping';
+import { createTask } from '@/lib/services/tasks';
 import { getV2EmailFeed } from '@/lib/v2/orchestrator';
+import { TaskPriority } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,16 +16,15 @@ export async function POST(
   const feed = await getV2EmailFeed();
   const email = feed.inbox.find((item) => item.id === emailId);
 
-  const name = body.name?.trim() || (email ? email.subject : `Item from email ${emailId}`);
-  const notes = body.notes ?? (email ? `From: ${email.sender}` : undefined);
+  const title = body.name?.trim() || (email ? `Buy: ${email.subject}` : `Shopping item from email ${emailId}`);
+  const description = body.notes ?? (email ? `From: ${email.sender}\n\nEmail: ${email.snippet ?? email.subject}` : undefined);
 
-  const item = await addShoppingItem({
-    name,
-    notes,
-    source: 'email',
-    emailId,
-    emailSubject: email?.subject,
+  const task = await createTask({
+    title,
+    description,
+    priority: TaskPriority.MEDIUM,
+    labels: ['domain:shopping'],
   });
 
-  return NextResponse.json({ ok: true, item });
+  return NextResponse.json({ ok: true, task });
 }
