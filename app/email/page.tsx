@@ -75,7 +75,7 @@ function generateFallback(email: V2EmailItem): EmailRecommendation {
 type ActionLink = { label: string; url: string };
 type EmailBody = { html: string | null; text: string | null; actionLinks: ActionLink[] };
 
-export default function EmailzPage() {
+export default function EmailPage() {
   const { data } = useSWR<V2EmailFeed>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [recommendations, setRecommendations] = useState<Map<string, EmailRecommendation>>(new Map());
   const [processing, setProcessing] = useState<Set<string>>(new Set());
@@ -215,7 +215,7 @@ export default function EmailzPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
-              Emailz
+              Email
             </h1>
             <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
               {emails.length === 0
