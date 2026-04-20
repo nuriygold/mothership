@@ -99,28 +99,23 @@ export default function EmailPage() {
       const emailsToFetch = emails.filter(email => !recommendations.has(email.id));
       if (emailsToFetch.length === 0) return;
 
-      const newRecs = new Map<string, EmailRecommendation>(recommendations);
-      const BATCH_SIZE = 3;
-      for (let i = 0; i < emailsToFetch.length; i += BATCH_SIZE) {
-        const batch = emailsToFetch.slice(i, i + BATCH_SIZE);
-        await Promise.all(
-          batch.map(async (email) => {
-            try {
-              const res = await fetch('/api/v2/email/recommend', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
-              });
-              const json = res.ok ? await res.json() : null;
-              newRecs.set(email.id, json?.ok && json.recommendation ? json.recommendation : generateFallback(email));
-            } catch {
-              newRecs.set(email.id, generateFallback(email));
-            }
-          })
-        );
-        setRecommendations(new Map(newRecs));
-        if (i + BATCH_SIZE < emailsToFetch.length) await new Promise(r => setTimeout(r, 500));
-      }
+      const newRecs = new Map<string, EmailRecommendation>(recommendations); // Start with existing
+      await Promise.all(
+        emailsToFetch.map(async (email) => {
+          try {
+            const res = await fetch('/api/v2/email/recommend', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+            });
+            const json = res.ok ? await res.json() : null;
+            newRecs.set(email.id, json?.ok && json.recommendation ? json.recommendation : generateFallback(email));
+          } catch {
+            newRecs.set(email.id, generateFallback(email));
+          }
+        })
+      );
+      setRecommendations(newRecs);
     };
 
     fetchRecommendations();
