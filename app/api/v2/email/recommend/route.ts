@@ -74,7 +74,7 @@ Confidence: HIGH = very clear, MEDIUM = reasonable guess, LOW = uncertain.`;
       throw new Error('Azure OpenAI not configured');
     }
 
-    const response = await fetch(`${endpoint}chat/completions`, {
+    const response = await fetch(`${endpoint}openai/responses?api-version=2025-04-01-preview`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
