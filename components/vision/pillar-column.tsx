@@ -8,32 +8,29 @@ import { PILLAR_COLORS } from './pillar-colors';
 
 interface PillarColumnProps {
   pillar: V2VisionPillar;
+  items?: V2VisionItem[];
   onItemClick: (item: V2VisionItem) => void;
   onAddItem: (pillarId: string) => void;
   visionMode?: boolean;
+  hideAddButton?: boolean;
 }
 
-export function PillarColumn({ pillar, onItemClick, onAddItem, visionMode = false }: PillarColumnProps) {
+export function PillarColumn({ pillar, items: itemsOverride, onItemClick, onAddItem, visionMode = false, hideAddButton = false }: PillarColumnProps) {
   const colors = PILLAR_COLORS[pillar.color];
+  const items = itemsOverride ?? pillar.items;
 
   return (
     <div
-      className="flex flex-col rounded-3xl flex-shrink-0"
-      style={{
-        minWidth: '240px',
-        maxWidth: '280px',
-        width: '260px',
-        border: `1px solid ${colors.border}`,
-      }}
+      className="flex flex-col rounded-3xl w-full md:flex-shrink-0 md:min-w-[240px] md:max-w-[280px] md:w-[260px]"
+      style={{ border: `1px solid ${colors.border}` }}
     >
       <PillarHeader pillar={pillar} />
 
-      {/* Items */}
       <div
         className="flex flex-col gap-2 p-3 flex-1"
         style={{ background: 'var(--background)', borderRadius: '0 0 1.5rem 1.5rem' }}
       >
-        {pillar.items.length === 0 && (
+        {items.length === 0 && (
           <div
             className="rounded-2xl border-2 border-dashed flex flex-col items-center justify-center py-8 px-3 text-center"
             style={{ borderColor: colors.border }}
@@ -45,7 +42,7 @@ export function PillarColumn({ pillar, onItemClick, onAddItem, visionMode = fals
           </div>
         )}
 
-        {pillar.items.map((item) => (
+        {items.map((item) => (
           <VisionItemCard
             key={item.id}
             item={item}
@@ -55,22 +52,23 @@ export function PillarColumn({ pillar, onItemClick, onAddItem, visionMode = fals
           />
         ))}
 
-        {/* Add item button */}
-        <button
-          onClick={() => onAddItem(pillar.id)}
-          className="flex items-center justify-center gap-1.5 w-full rounded-2xl py-2.5 text-xs font-medium transition-all duration-200 mt-1"
-          style={{
-            color: colors.text,
-            background: colors.bg,
-            border: `1px dashed ${colors.border}`,
-            opacity: 0.75,
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.75')}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add goal
-        </button>
+        {!hideAddButton && (
+          <button
+            onClick={() => onAddItem(pillar.id)}
+            className="flex items-center justify-center gap-1.5 w-full rounded-2xl py-2.5 text-xs font-medium transition-all duration-200 mt-1"
+            style={{
+              color: colors.text,
+              background: colors.bg,
+              border: `1px dashed ${colors.border}`,
+              opacity: 0.75,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.75')}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add goal
+          </button>
+        )}
       </div>
     </div>
   );
