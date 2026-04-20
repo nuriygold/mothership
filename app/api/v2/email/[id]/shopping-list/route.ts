@@ -23,7 +23,7 @@ export async function POST(
     title,
     description,
     priority: TaskPriority.MEDIUM,
-    labels: ['domain:shopping'],
+    workflowId: 'tpw_shopping', // Creates domain:shopping label
   });
 
   return NextResponse.json({ ok: true, task });
