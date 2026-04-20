@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { checkGateway } from '@/lib/services/openclaw';
-import { getEmailSummary } from '@/lib/services/email';
+import { checkGmailConnectivity, checkZohoConnectivity } from '@/lib/services/email';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -51,21 +51,13 @@ async function checkGitHub(): Promise<{ ok: boolean; reason?: string }> {
 }
 
 async function checkZoho(): Promise<{ ok: boolean; reason?: string }> {
-  const user = process.env.ZOHO_EMAIL_USER ?? process.env.ZOHO_IMAP_USER;
-  const pass = process.env.ZOHO_EMAIL_PASS ?? process.env.ZOHO_IMAP_PASS ?? process.env.ZOHO_APP_PASSWORD;
-  if (!user || !pass) return { ok: false, reason: 'ZOHO_EMAIL_USER or ZOHO_EMAIL_PASS not configured' };
-  // Credentials present — mark as configured (IMAP test requires a network TCP call, not safe in serverless)
-  return { ok: true, reason: `Configured for ${user}` };
+  const status = await checkZohoConnectivity();
+  return { ok: status.connected, reason: status.note };
 }
 
 async function checkGmail(): Promise<{ ok: boolean; reason?: string }> {
-  try {
-    const summary = await getEmailSummary();
-    if (summary.connected) return { ok: true, reason: 'OAuth token valid, inbox reachable' };
-    return { ok: false, reason: summary.note ?? 'Gmail OAuth token invalid or expired' };
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  }
+  const status = await checkGmailConnectivity();
+  return { ok: status.connected, reason: status.note };
 }
 
 export async function GET() {
