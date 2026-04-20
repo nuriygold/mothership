@@ -6,6 +6,7 @@ import {
   Flame, Briefcase, DollarSign, Users, PartyPopper,
   ShoppingBag, Code2, BookOpen, Plane,
   CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft, ExternalLink, Calendar, Search,
+  ListPlus, Trash2, Eye, UserX, Sparkles,
 } from 'lucide-react';
 import type { V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
 
@@ -86,6 +87,7 @@ export default function EmailzPage() {
   const [search, setSearch] = useState('');
   const [emailBodies, setEmailBodies] = useState<Map<string, EmailBody>>(new Map());
   const [bodyLoading, setBodyLoading] = useState<Set<string>>(new Set());
+  const [expandedBodies, setExpandedBodies] = useState<Set<string>>(new Set());
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
 
@@ -183,6 +185,47 @@ export default function EmailzPage() {
   function handleDenyAll(bucket: EmailBucket) {
     emails.filter(e => recommendations.get(e.id)?.bucket === bucket).forEach(e => handleDeny(e.id));
     setSelectedBucket(null);
+  }
+
+  async function handleCreateTask(emailId: string) {
+    setProcessing(prev => new Set(prev).add(emailId));
+    try {
+      await fetch(`/api/v2/email/${emailId}/create-task`, { method: 'POST' });
+    } catch { /* ignore */ }
+    setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    if (selectedEmail === emailId) setSelectedEmail(null);
+  }
+
+  async function handleUnsubscribe(emailId: string) {
+    setProcessing(prev => new Set(prev).add(emailId));
+    try {
+      const res = await fetch(`/api/v2/email/${emailId}/unsubscribe`, { method: 'POST' });
+      const json = res.ok ? await res.json() : null;
+      if (json?.unsubscribeUrl) window.open(json.unsubscribeUrl, '_blank');
+    } catch { /* ignore */ }
+    setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    if (selectedEmail === emailId) setSelectedEmail(null);
+  }
+
+  async function handleAddToShoppingList(emailId: string) {
+    setProcessing(prev => new Set(prev).add(emailId));
+    try {
+      await fetch(`/api/v2/email/${emailId}/shopping-list`, { method: 'POST' });
+    } catch { /* ignore */ }
+    setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    if (selectedEmail === emailId) setSelectedEmail(null);
+  }
+
+  function toggleFullBody(emailId: string) {
+    setExpandedBodies(prev => {
+      const next = new Set(prev);
+      if (next.has(emailId)) next.delete(emailId);
+      else next.add(emailId);
+      return next;
+    });
   }
 
   const searchResults = useMemo(() => {
@@ -493,15 +536,60 @@ export default function EmailzPage() {
             return (
               <div className="rounded-3xl p-5 space-y-4" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
                 <div>
-                  <p className="font-semibold">{detailEmail.sender}</p>
-                  <p className="text-sm mt-1">{detailEmail.subject}</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                    {new Date(detailEmail.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="font-semibold">{detailEmail.sender}</p>
+                      <p className="text-sm mt-1">{detailEmail.subject}</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                        {new Date(detailEmail.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    {detailEmail.gmailLink && (
+                      <a
+                        href={detailEmail.gmailLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs flex items-center gap-1 transition-opacity hover:opacity-70 flex-shrink-0"
+                        style={{ color: meta.color }}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Gmail
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  {detailEmail.snippet || detailEmail.preview}
-                </p>
+                <div>
+                  {expandedBodies.has(detailEmail.id) && body ? (
+                    <div className="text-sm space-y-2" style={{ color: 'var(--muted-foreground)' }}>
+                      {body.text && (
+                        <div className="whitespace-pre-wrap" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          {body.text}
+                        </div>
+                      )}
+                      {body.html && !body.text && (
+                        <div
+                          className="prose prose-sm max-w-none"
+                          style={{ maxHeight: '400px', overflowY: 'auto' }}
+                          dangerouslySetInnerHTML={{ __html: body.html }}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                      {detailEmail.snippet || detailEmail.preview}
+                    </p>
+                  )}
+                  {body && (
+                    <button
+                      onClick={() => toggleFullBody(detailEmail.id)}
+                      className="text-xs mt-2 flex items-center gap-1 transition-opacity hover:opacity-70"
+                      style={{ color: meta.color }}
+                    >
+                      <Eye className="w-3 h-3" />
+                      {expandedBodies.has(detailEmail.id) ? 'Hide Full Email' : 'View Full Email'}
+                    </button>
+                  )}
+                </div>
 
                 {/* Action links extracted from email body */}
                 {isLoadingBody && (
@@ -585,6 +673,39 @@ export default function EmailzPage() {
                       <XCircle className="w-3 h-3 inline mr-1" />
                       Skip
                     </button>
+                    {(selectedBucket === 'BUSINESS' || selectedBucket === 'TECH_PROJECTS') && (
+                      <button
+                        onClick={() => handleCreateTask(detailEmail.id)}
+                        disabled={processing.has(detailEmail.id)}
+                        className="rounded-full px-4 py-2 text-xs"
+                        style={{ border: '1px solid var(--border)' }}
+                      >
+                        <ListPlus className="w-3 h-3 inline mr-1" />
+                        Create Task
+                      </button>
+                    )}
+                    {selectedBucket === 'SHOPPING_GIFTS' && (
+                      <button
+                        onClick={() => handleAddToShoppingList(detailEmail.id)}
+                        disabled={processing.has(detailEmail.id)}
+                        className="rounded-full px-4 py-2 text-xs"
+                        style={{ border: '1px solid var(--border)' }}
+                      >
+                        <ShoppingBag className="w-3 h-3 inline mr-1" />
+                        Add to List
+                      </button>
+                    )}
+                    {selectedBucket === 'GOOD_READS' && (
+                      <button
+                        onClick={() => handleUnsubscribe(detailEmail.id)}
+                        disabled={processing.has(detailEmail.id)}
+                        className="rounded-full px-4 py-2 text-xs"
+                        style={{ border: '1px solid var(--border)' }}
+                      >
+                        <UserX className="w-3 h-3 inline mr-1" />
+                        Unsubscribe
+                      </button>
+                    )}
                     <button
                       onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
                       className="rounded-full px-4 py-2 text-xs"
