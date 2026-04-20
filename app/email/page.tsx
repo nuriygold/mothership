@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import {
   Flame, Briefcase, DollarSign, Users, PartyPopper,
@@ -90,17 +90,19 @@ export default function EmailPage() {
   const [expandedBodies, setExpandedBodies] = useState<Set<string>>(new Set());
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
+  const fetchedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (emails.length === 0) return;
 
-    const fetchRecommendations = async () => {
-      // Only fetch for emails we don't have recommendations for yet
-      const emailsToFetch = emails.filter(email => !recommendations.has(email.id));
-      if (emailsToFetch.length === 0) return;
+    const emailsToFetch = emails.filter(email => !fetchedIds.current.has(email.id));
+    if (emailsToFetch.length === 0) return;
 
-      const newRecs = new Map<string, EmailRecommendation>(recommendations);
-      const BATCH_SIZE = 3;
+    emailsToFetch.forEach(e => fetchedIds.current.add(e.id));
+
+    const fetchRecommendations = async () => {
+      const newRecs = new Map<string, EmailRecommendation>();
+      const BATCH_SIZE = 5;
       for (let i = 0; i < emailsToFetch.length; i += BATCH_SIZE) {
         const batch = emailsToFetch.slice(i, i + BATCH_SIZE);
         await Promise.all(
@@ -118,13 +120,13 @@ export default function EmailPage() {
             }
           })
         );
-        setRecommendations(new Map(newRecs));
-        if (i + BATCH_SIZE < emailsToFetch.length) await new Promise(r => setTimeout(r, 500));
+        setRecommendations(prev => new Map([...prev, ...newRecs]));
+        if (i + BATCH_SIZE < emailsToFetch.length) await new Promise(r => setTimeout(r, 300));
       }
     };
 
     fetchRecommendations();
-  }, [emails, recommendations]);
+  }, [emails]);
 
   useEffect(() => {
     if (!selectedEmail) return;
