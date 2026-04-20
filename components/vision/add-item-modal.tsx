@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { X } from 'lucide-react';
-import type { VisionItemStatus } from '@/lib/v2/types';
+import { useState, useEffect } from 'react';
+import { X, Plus, ChevronDown } from 'lucide-react';
+import type { VisionItemStatus, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 
 interface AddItemModalProps {
   pillarId: string;
@@ -29,6 +29,24 @@ export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddI
   const [targetDate, setTargetDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTaskPicker, setShowTaskPicker] = useState(false);
+  const [poolTasks, setPoolTasks] = useState<V2TaskItem[]>([]);
+  const [poolTasksLoading, setPoolTasksLoading] = useState(false);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showTaskPicker || poolTasks.length > 0) return;
+    setPoolTasksLoading(true);
+    fetch('/api/v2/tasks')
+      .then(r => r.json())
+      .then((data: V2TasksFeed) => {
+        const all = [...(data.active ?? []), ...(data.today ?? []), ...(data.backlog ?? [])];
+        setPoolTasks(all.filter(t => t.visionBoardLinked));
+      })
+      .catch(() => setPoolTasks([]))
+      .finally(() => setPoolTasksLoading(false));
+  }, [showTaskPicker, poolTasks.length]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,9 +65,17 @@ export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddI
           targetDate: targetDate || undefined,
         }),
       });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data?.error?.message ?? 'Failed to create item');
+      }
+      const { item } = data;
+      if (selectedTaskId && item?.id) {
+        await fetch(`/api/v2/vision/items/${item.id}/link-task`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: selectedTaskId }),
+        });
       }
       onCreated();
     } catch (err) {
@@ -182,6 +208,84 @@ export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddI
                 }}
               />
             </div>
+          </div>
+
+          {/* Link a task */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowTaskPicker(v => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+              style={{ color: 'var(--foreground)', opacity: 0.6 }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Link a task from pool
+              <ChevronDown
+                className="w-3.5 h-3.5 transition-transform"
+                style={{ transform: showTaskPicker ? 'rotate(180deg)' : 'none' }}
+              />
+            </button>
+
+            {selectedTaskId && !showTaskPicker && (
+              <div className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}>
+                <p className="flex-1 text-xs truncate" style={{ color: 'var(--foreground)' }}>
+                  {poolTasks.find(t => t.taskId === selectedTaskId)?.title ?? selectedTaskId}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTaskId(null)}
+                  className="opacity-40 hover:opacity-70 transition-opacity"
+                >
+                  <X className="w-3.5 h-3.5" style={{ color: 'var(--foreground)' }} />
+                </button>
+              </div>
+            )}
+
+            {showTaskPicker && (
+              <div className="mt-2 flex flex-col gap-2 rounded-xl p-3" style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}>
+                <input
+                  type="text"
+                  value={taskSearch}
+                  onChange={(e) => setTaskSearch(e.target.value)}
+                  placeholder="Search tasks…"
+                  className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+                  style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
+                />
+                <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+                  {poolTasksLoading && (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--foreground)', opacity: 0.4 }}>Loading…</p>
+                  )}
+                  {!poolTasksLoading && poolTasks.length === 0 && (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--foreground)', opacity: 0.4 }}>
+                      No vision board tasks found
+                    </p>
+                  )}
+                  {!poolTasksLoading && poolTasks
+                    .filter(t => !taskSearch || t.title.toLowerCase().includes(taskSearch.toLowerCase()))
+                    .map(t => (
+                      <button
+                        key={t.taskId}
+                        type="button"
+                        onClick={() => { setSelectedTaskId(t.taskId === selectedTaskId ? null : t.taskId); setShowTaskPicker(false); }}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-opacity hover:opacity-80"
+                        style={{
+                          background: selectedTaskId === t.taskId ? 'var(--color-cyan)' : 'var(--card)',
+                          border: '1px solid var(--card-border)',
+                        }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate" style={{ color: selectedTaskId === t.taskId ? '#0A0E1A' : 'var(--foreground)' }}>
+                            {t.title}
+                          </p>
+                          <p className="text-[10px] mt-0.5" style={{ color: selectedTaskId === t.taskId ? '#0A0E1A' : 'var(--foreground)', opacity: 0.55 }}>
+                            {t.status} · {t.metadata.priority}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && (
