@@ -82,15 +82,10 @@ Confidence: HIGH = very clear, MEDIUM = reasonable guess, LOW = uncertain.`;
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert email classifier. Respond only with valid JSON, no markdown.',
-          },
-          { role: 'user', content: prompt },
-        ],
+        instructions: 'You are an expert email classifier. Respond only with valid JSON, no markdown.',
+        input: prompt,
         temperature: 0.3,
-        max_tokens: 300,
+        max_output_tokens: 300,
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -101,7 +96,7 @@ Confidence: HIGH = very clear, MEDIUM = reasonable guess, LOW = uncertain.`;
     }
 
     const data = await response.json();
-    const aiOutput = data.choices?.[0]?.message?.content || '';
+    const aiOutput = data.output?.[0]?.content?.[0]?.text || '';
 
     let recommendation: EmailRecommendation;
     try {
