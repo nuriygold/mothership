@@ -100,7 +100,9 @@ If Ruby generation fails, template actions still work.
 - `EMAIL_PROVIDER` (`gmail` or `zoho`)
 - `EMAIL_INBOXES`
 - Gmail: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
-- Zoho: `ZOHO_IMAP_USERNAME`, `ZOHO_IMAP_PASSWORD`
+- Zoho IMAP (inbox sync): `ZOHO_IMAP_HOST`, `ZOHO_IMAP_PORT`, `ZOHO_IMAP_USERNAME`, `ZOHO_IMAP_PASSWORD`
+- Zoho SMTP (send/reply): `ZOHO_SMTP_HOST`, `ZOHO_SMTP_PORT`, `ZOHO_SMTP_SECURE`, `ZOHO_EMAIL_USER`, `ZOHO_EMAIL_PASS`
+  - Current defaults in code are `port 587` with STARTTLS (`secure: false`), and it auto-enables SSL when `ZOHO_SMTP_PORT=465`.
 
 ### Voice (Azure)
 

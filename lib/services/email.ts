@@ -22,6 +22,12 @@ export type EmailSummary = {
   }>;
 };
 
+export type EmailProviderHealth = {
+  configured: boolean;
+  connected: boolean;
+  note: string;
+};
+
 type LiveEmailCounts = {
   connected: boolean;
   unread: number;
@@ -315,6 +321,43 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
   }
 }
 
+export async function checkZohoConnectivity(): Promise<EmailProviderHealth> {
+  const user = process.env.ZOHO_IMAP_USERNAME || '';
+  const pass = process.env.ZOHO_IMAP_PASSWORD || '';
+  if (!user || !pass) {
+    return {
+      configured: false,
+      connected: false,
+      note: 'Zoho IMAP credentials missing. Set ZOHO_IMAP_USERNAME and ZOHO_IMAP_PASSWORD.',
+    };
+  }
+  const result = await fetchZohoCounts();
+  return {
+    configured: true,
+    connected: result.connected,
+    note: result.note,
+  };
+}
+
+export async function checkGmailConnectivity(): Promise<EmailProviderHealth> {
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || '';
+  if (!clientId || !clientSecret || !refreshToken) {
+    return {
+      configured: false,
+      connected: false,
+      note: 'Gmail OAuth credentials missing. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.',
+    };
+  }
+  const result = await fetchGmailCounts(parseInboxes(process.env.EMAIL_INBOXES));
+  return {
+    configured: true,
+    connected: result.connected,
+    note: result.note,
+  };
+}
+
 export async function getEmailSummary(): Promise<EmailSummary> {
   const provider = ((process.env.EMAIL_PROVIDER ?? 'gmail').toLowerCase() as EmailProvider) || 'none';
   const configuredInboxes = parseInboxes(process.env.EMAIL_INBOXES);
@@ -556,7 +599,19 @@ export async function sendZohoReply(options: ZohoSendOptions): Promise<ZohoSendR
   const user = process.env.ZOHO_EMAIL_USER ?? process.env.ZOHO_IMAP_USERNAME ?? '';
   const pass = process.env.ZOHO_EMAIL_PASS ?? process.env.ZOHO_IMAP_PASSWORD ?? process.env.ZOHO_APP_PASSWORD ?? '';
   if (!user || !pass) return { ok: false, error: 'Zoho SMTP credentials not configured. Set ZOHO_EMAIL_USER and ZOHO_EMAIL_PASS (or ZOHO_IMAP_USERNAME / ZOHO_IMAP_PASSWORD).' };
-  const transporter = nodemailer.createTransport({ host: process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com', port: Number(process.env.ZOHO_SMTP_PORT || 587), secure: false, auth: { user, pass } });
+  const smtpPort = Number(process.env.ZOHO_SMTP_PORT || 587);
+  const smtpSecure =
+    (process.env.ZOHO_SMTP_SECURE ?? '').toLowerCase() === 'true'
+      ? true
+      : (process.env.ZOHO_SMTP_SECURE ?? '').toLowerCase() === 'false'
+        ? false
+        : smtpPort === 465;
+  const transporter = nodemailer.createTransport({
+    host: process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com',
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: { user, pass },
+  });
   try {
     const info = await transporter.sendMail({ from: options.from ?? `Adrian Cole <${user}>`, to: options.to, subject: options.subject.startsWith('Re:') ? options.subject : `Re: ${options.subject}`, text: options.body, ...(options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}), ...(options.references ? { references: options.references } : {}) });
     return { ok: true, messageId: info.messageId };
