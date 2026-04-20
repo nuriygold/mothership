@@ -699,17 +699,15 @@ export default function EmailPage() {
                         Add to List
                       </button>
                     )}
-                    {selectedBucket === 'GOOD_READS' && (
-                      <button
-                        onClick={() => handleUnsubscribe(detailEmail.id)}
-                        disabled={processing.has(detailEmail.id)}
-                        className="rounded-full px-4 py-2 text-xs"
-                        style={{ border: '1px solid var(--border)' }}
-                      >
-                        <UserX className="w-3 h-3 inline mr-1" />
-                        Unsubscribe
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleUnsubscribe(detailEmail.id)}
+                      disabled={processing.has(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs"
+                      style={{ border: '1px solid var(--border)' }}
+                    >
+                      <UserX className="w-3 h-3 inline mr-1" />
+                      Unsubscribe
+                    </button>
                     <button
                       onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
                       className="rounded-full px-4 py-2 text-xs"
