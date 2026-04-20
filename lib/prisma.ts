@@ -8,6 +8,9 @@ declare global {
 export const prisma =
   global.prisma ||
   new PrismaClient({
+    datasources: process.env.DATABASE_POOLER_URL
+      ? { db: { url: process.env.DATABASE_POOLER_URL } }
+      : undefined,
     log: ['error', 'warn'],
   });
 
