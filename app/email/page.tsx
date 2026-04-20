@@ -95,9 +95,13 @@ export default function EmailPage() {
     if (emails.length === 0) return;
 
     const fetchRecommendations = async () => {
-      const newRecs = new Map<string, EmailRecommendation>();
+      // Only fetch for emails we don't have recommendations for yet
+      const emailsToFetch = emails.filter(email => !recommendations.has(email.id));
+      if (emailsToFetch.length === 0) return;
+
+      const newRecs = new Map<string, EmailRecommendation>(recommendations); // Start with existing
       await Promise.all(
-        emails.map(async (email) => {
+        emailsToFetch.map(async (email) => {
           try {
             const res = await fetch('/api/v2/email/recommend', {
               method: 'POST',
@@ -115,7 +119,7 @@ export default function EmailPage() {
     };
 
     fetchRecommendations();
-  }, [emails]);
+  }, [emails, recommendations]);
 
   useEffect(() => {
     if (!selectedEmail) return;
