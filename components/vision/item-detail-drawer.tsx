@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, ExternalLink, Unlink, Zap, ChevronRight, ImageIcon, RefreshCw, Plus, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import type { V2VisionItem, V2VisionPillar, V2VisionEmeraldSuggestion, VisionItemStatus } from '@/lib/v2/types';
+import type { V2VisionItem, V2VisionPillar, V2VisionEmeraldSuggestion, VisionItemStatus, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import { ProgressRing } from './progress-ring';
 import { PILLAR_COLORS } from './pillar-colors';
 import { EmeraldSuggestionRow, EmeraldThinking } from './emerald-suggestion-row';
@@ -36,6 +36,11 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
   const [liveImageUrl, setLiveImageUrl] = useState<string | null>(item.imageUrl ?? null);
   const [customPrompt, setCustomPrompt] = useState('');
   const [addingTask, setAddingTask] = useState(false);
+  const [taskPickerMode, setTaskPickerMode] = useState<'pick' | 'create'>('pick');
+  const [poolTasks, setPoolTasks] = useState<V2TaskItem[]>([]);
+  const [poolTasksLoading, setPoolTasksLoading] = useState(false);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [linkingTaskId, setLinkingTaskId] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [savingTask, setSavingTask] = useState(false);
@@ -83,6 +88,36 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       body: JSON.stringify({ taskId }),
     });
     onUpdated();
+  }
+
+  useEffect(() => {
+    if (!addingTask || taskPickerMode !== 'pick') return;
+    setPoolTasksLoading(true);
+    fetch('/api/v2/tasks')
+      .then(r => r.json())
+      .then((data: V2TasksFeed) => {
+        const all = [...(data.active ?? []), ...(data.today ?? []), ...(data.backlog ?? [])];
+        const alreadyLinked = new Set(item.linkedTasks.map(t => t.id));
+        setPoolTasks(all.filter(t => t.visionBoardLinked && !alreadyLinked.has(t.taskId)));
+      })
+      .catch(() => setPoolTasks([]))
+      .finally(() => setPoolTasksLoading(false));
+  }, [addingTask, taskPickerMode, item.linkedTasks]);
+
+  async function handleLinkExistingTask(taskId: string) {
+    setLinkingTaskId(taskId);
+    try {
+      await fetch(`/api/v2/vision/items/${item.id}/link-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      });
+      setAddingTask(false);
+      setTaskSearch('');
+      onUpdated();
+    } finally {
+      setLinkingTaskId(null);
+    }
   }
 
   async function handleCreateTask(e: React.FormEvent) {
@@ -520,12 +555,16 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
                 Linked Tasks
               </h3>
               <button
-                onClick={() => setAddingTask((v) => !v)}
+                onClick={() => {
+                  const next = !addingTask;
+                  setAddingTask(next);
+                  if (next) { setTaskPickerMode('pick'); setTaskSearch(''); }
+                }}
                 className="text-[11px] flex items-center gap-1 rounded-full px-2.5 py-1 transition-opacity hover:opacity-80"
                 style={{ background: `${colors.bg}`, color: colors.text }}
               >
                 <Plus className="w-3 h-3" />
-                Add task
+                {addingTask ? 'Cancel' : 'Add task'}
               </button>
             </div>
 
@@ -588,45 +627,122 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
             )}
 
             {addingTask && (
-              <form onSubmit={handleCreateTask} className="flex flex-col gap-2 rounded-xl p-3" style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Task title…"
-                  className="rounded-lg px-3 py-2 text-sm outline-none w-full"
-                  style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
-                />
-                <div className="flex gap-2 items-center">
-                  <select
-                    value={newTaskPriority}
-                    onChange={(e) => setNewTaskPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')}
-                    className="flex-1 rounded-lg px-2 py-1.5 text-xs outline-none"
-                    style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
-                  >
-                    <option value="LOW">Low priority</option>
-                    <option value="MEDIUM">Medium priority</option>
-                    <option value="HIGH">High priority</option>
-                  </select>
+              <div className="flex flex-col gap-2 rounded-xl p-3" style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}>
+                {/* Mode tabs */}
+                <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--card)' }}>
                   <button
-                    type="button"
-                    onClick={() => setAddingTask(false)}
-                    className="rounded-full px-3 py-1.5 text-xs transition-opacity hover:opacity-70"
-                    style={{ background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--card-border)' }}
+                    onClick={() => setTaskPickerMode('pick')}
+                    className="flex-1 rounded-md py-1 text-xs font-medium transition-all"
+                    style={{
+                      background: taskPickerMode === 'pick' ? colors.bg : 'transparent',
+                      color: taskPickerMode === 'pick' ? colors.text : 'var(--foreground)',
+                      opacity: taskPickerMode === 'pick' ? 1 : 0.55,
+                    }}
                   >
-                    Cancel
+                    From task pool
                   </button>
                   <button
-                    type="submit"
-                    disabled={savingTask || !newTaskTitle.trim()}
-                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
-                    style={{ background: colors.accent, color: '#fff' }}
+                    onClick={() => setTaskPickerMode('create')}
+                    className="flex-1 rounded-md py-1 text-xs font-medium transition-all"
+                    style={{
+                      background: taskPickerMode === 'create' ? colors.bg : 'transparent',
+                      color: taskPickerMode === 'create' ? colors.text : 'var(--foreground)',
+                      opacity: taskPickerMode === 'create' ? 1 : 0.55,
+                    }}
                   >
-                    {savingTask ? '…' : 'Add'}
+                    Create new
                   </button>
                 </div>
-              </form>
+
+                {taskPickerMode === 'pick' && (
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={taskSearch}
+                      onChange={(e) => setTaskSearch(e.target.value)}
+                      placeholder="Search tasks…"
+                      className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+                      style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
+                    />
+                    <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                      {poolTasksLoading && (
+                        <p className="text-xs text-center py-3" style={{ color: 'var(--foreground)', opacity: 0.4 }}>Loading tasks…</p>
+                      )}
+                      {!poolTasksLoading && poolTasks.length === 0 && (
+                        <p className="text-xs text-center py-3" style={{ color: 'var(--foreground)', opacity: 0.4 }}>
+                          No vision board tasks available.{' '}
+                          <button
+                            onClick={() => setTaskPickerMode('create')}
+                            className="underline"
+                            style={{ color: colors.text }}
+                          >
+                            Create one instead
+                          </button>
+                        </p>
+                      )}
+                      {!poolTasksLoading && poolTasks
+                        .filter(t => !taskSearch || t.title.toLowerCase().includes(taskSearch.toLowerCase()))
+                        .map(t => (
+                          <div
+                            key={t.taskId}
+                            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+                            style={{ background: 'var(--card)', border: '1px solid var(--card-border)' }}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate" style={{ color: 'var(--foreground)' }}>{t.title}</p>
+                              <p className="text-[10px] mt-0.5" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
+                                {t.status} · {t.metadata.priority}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleLinkExistingTask(t.taskId)}
+                              disabled={linkingTaskId === t.taskId}
+                              className="rounded-full px-2.5 py-1 text-[11px] font-medium flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+                              style={{ background: colors.bg, color: colors.text }}
+                            >
+                              {linkingTaskId === t.taskId ? '…' : 'Link'}
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
+
+                {taskPickerMode === 'create' && (
+                  <form onSubmit={handleCreateTask} className="flex flex-col gap-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Task title…"
+                      className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+                      style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
+                    />
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={newTaskPriority}
+                        onChange={(e) => setNewTaskPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')}
+                        className="flex-1 rounded-lg px-2 py-1.5 text-xs outline-none"
+                        style={{ background: 'var(--card)', border: '1px solid var(--card-border)', color: 'var(--foreground)' }}
+                      >
+                        <option value="LOW">Low priority</option>
+                        <option value="MEDIUM">Medium priority</option>
+                        <option value="HIGH">High priority</option>
+                      </select>
+                      <button
+                        type="submit"
+                        disabled={savingTask || !newTaskTitle.trim()}
+                        className="rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                        style={{ background: colors.accent, color: '#fff' }}
+                      >
+                        {savingTask ? '…' : 'Create'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             )}
 
             {item.linkedTasks.length === 0 && !addingTask && (
