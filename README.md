@@ -11,12 +11,21 @@ Mothership is now running a dual-layer architecture:
 
 Primary UI routes:
 
-- `/today`
-- `/tasks`
-- `/bots`
-- `/email`
-- `/finance`
-- `/activity`
+- `/` - Root/Home
+- `/today` - Today's dashboard
+- `/dashboard` - Main dashboard
+- `/tasks` - Task management
+- `/bots` - Bot orchestration
+- `/email` - Email handling
+- `/finance` - Financial overview
+- `/activity` - Activity log
+- `/command-center` - Command center
+- `/dispatch` - Dispatch interface
+- `/runs` - Execution runs
+- `/workflows` - Workflow management
+- `/vision` - Vision interface
+- `/ruby` - Ruby agent interface
+- `/marco` - Marco interface
 
 ## Tech Stack
 
