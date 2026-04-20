@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
-import { Plus, RefreshCw, Sparkles, LayoutList } from 'lucide-react';
+import { Plus, RefreshCw, Sparkles, LayoutList, Search, X } from 'lucide-react';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
 
 const VISION_COMMANDS = [
@@ -10,7 +10,7 @@ const VISION_COMMANDS = [
   { cmd: '/add',    args: '<title>', desc: 'Add task to task pool' },
   { cmd: '/buy',    args: '<item>',  desc: 'Add item to shopping list' },
 ];
-import type { V2VisionBoardFeed, V2VisionItem, V2VisionPillar } from '@/lib/v2/types';
+import type { V2VisionBoardFeed, V2VisionItem, V2VisionPillar, VisionItemStatus } from '@/lib/v2/types';
 import { PillarColumn } from '@/components/vision/pillar-column';
 import { BoardSummaryBar } from '@/components/vision/board-summary-bar';
 import { ItemDetailDrawer } from '@/components/vision/item-detail-drawer';
@@ -22,6 +22,14 @@ const fetcher = async (url: string) => {
   if (!res.ok) throw new Error(json?.error?.message ?? 'Failed to load vision board');
   return json;
 };
+
+const STATUS_FILTERS: { label: string; value: VisionItemStatus | 'ALL' }[] = [
+  { label: 'All',      value: 'ALL' },
+  { label: 'Active',   value: 'ACTIVE' },
+  { label: 'Dreaming', value: 'DREAMING' },
+  { label: 'Achieved', value: 'ACHIEVED' },
+  { label: 'On Hold',  value: 'ON_HOLD' },
+];
 
 export default function VisionPage() {
   const { data, isLoading, error, mutate } = useSWR<V2VisionBoardFeed>(
@@ -35,8 +43,11 @@ export default function VisionPage() {
   const [addingToPillarId, setAddingToPillarId] = useState<string | null>(null);
   const [addingToPillarLabel, setAddingToPillarLabel] = useState('');
   const [visionMode, setVisionMode] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<VisionItemStatus | 'ALL'>('ALL');
 
-  // Persist mode preference
+  const isFiltering = Boolean(search) || statusFilter !== 'ALL';
+
   useEffect(() => {
     const saved = localStorage.getItem('vision-board-mode');
     if (saved === 'vision') setVisionMode(true);
@@ -69,6 +80,28 @@ export default function VisionPage() {
     setAddingToPillarLabel('');
   }
 
+  const filteredPillars = useMemo(() => {
+    if (!data?.pillars) return [];
+    return data.pillars
+      .map(pillar => ({
+        ...pillar,
+        items: pillar.items.filter(item => {
+          const q = search.toLowerCase();
+          const matchesSearch = !search ||
+            item.title.toLowerCase().includes(q) ||
+            (item.description ?? '').toLowerCase().includes(q);
+          const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
+          return matchesSearch && matchesStatus;
+        }),
+      }))
+      .filter(pillar => !isFiltering || pillar.items.length > 0);
+  }, [data?.pillars, search, statusFilter, isFiltering]);
+
+  const totalFiltered = useMemo(
+    () => filteredPillars.reduce((sum, p) => sum + p.items.length, 0),
+    [filteredPillars]
+  );
+
   if (error) {
     return (
       <div className="flex flex-col gap-4">
@@ -95,17 +128,12 @@ export default function VisionPage() {
     return (
       <div className="flex flex-col gap-6">
         <VisionPageHeader onRefresh={() => mutate()} />
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto md:pb-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-3xl flex-shrink-0 animate-pulse"
-              style={{
-                minWidth: '240px',
-                width: '260px',
-                height: '360px',
-                background: 'var(--muted)',
-              }}
+              className="rounded-3xl animate-pulse w-full md:flex-shrink-0 md:w-[260px]"
+              style={{ height: '360px', background: 'var(--muted)' }}
             />
           ))}
         </div>
@@ -117,25 +145,90 @@ export default function VisionPage() {
     <div className="flex flex-col gap-2">
       <VisionPageHeader title={data.title} onRefresh={() => mutate()} visionMode={visionMode} onToggleMode={toggleMode} />
 
-      <BoardSummaryBar summary={data.summary} />
-
-      {/* Board — horizontal scroll */}
-      <div className="flex gap-4 overflow-x-auto pb-6" style={{ minHeight: '400px' }}>
-        {data.pillars.map((pillar) => (
-          <PillarColumn
-            key={pillar.id}
-            pillar={pillar}
-            onItemClick={(item) => handleItemClick(item, pillar)}
-            onAddItem={handleAddItem}
-            visionMode={visionMode}
+      {/* Search + Status filter */}
+      <div className="flex flex-col sm:flex-row gap-2 mt-1">
+        <div className="relative flex-1">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
+            style={{ color: 'var(--foreground)', opacity: 0.4 }}
           />
-        ))}
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search goals…"
+            className="w-full rounded-2xl pl-8 pr-8 py-2 text-sm outline-none"
+            style={{
+              background: 'var(--muted)',
+              border: '1px solid var(--card-border)',
+              color: 'var(--foreground)',
+            }}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70 transition-opacity"
+            >
+              <X className="w-3.5 h-3.5" style={{ color: 'var(--foreground)' }} />
+            </button>
+          )}
+        </div>
 
-        {/* + Add Pillar */}
-        <AddPillarButton onCreated={() => mutate()} />
+        <div className="flex gap-1 flex-wrap">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className="rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 whitespace-nowrap"
+              style={{
+                background: statusFilter === f.value ? 'var(--color-cyan)' : 'var(--muted)',
+                color: statusFilter === f.value ? '#0A0E1A' : 'var(--foreground)',
+                border: '1px solid var(--card-border)',
+                opacity: statusFilter === f.value ? 1 : 0.65,
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Item detail drawer */}
+      {isFiltering && (
+        <p className="text-xs" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
+          {totalFiltered} {totalFiltered === 1 ? 'goal' : 'goals'} found
+          {search && ` for "${search}"`}
+          {statusFilter !== 'ALL' && ` · ${STATUS_FILTERS.find(f => f.value === statusFilter)?.label}`}
+        </p>
+      )}
+
+      <BoardSummaryBar summary={data.summary} />
+
+      {/* Board — stacked on mobile, horizontal scroll on desktop */}
+      <div className="flex flex-col gap-4 md:flex-row md:overflow-x-auto md:pb-6" style={{ minHeight: '200px' }}>
+        {filteredPillars.length === 0 && isFiltering ? (
+          <div
+            className="rounded-3xl flex items-center justify-center py-16 w-full text-sm"
+            style={{ border: '2px dashed var(--card-border)', color: 'var(--foreground)', opacity: 0.4 }}
+          >
+            No goals match your search
+          </div>
+        ) : (
+          filteredPillars.map((pillar) => (
+            <PillarColumn
+              key={pillar.id}
+              pillar={pillar}
+              items={pillar.items}
+              onItemClick={(item) => handleItemClick(item, pillar)}
+              onAddItem={handleAddItem}
+              visionMode={visionMode}
+              hideAddButton={isFiltering}
+            />
+          ))
+        )}
+
+        {!isFiltering && <AddPillarButton onCreated={() => mutate()} />}
+      </div>
+
       {selectedItem && selectedItemPillar && (
         <ItemDetailDrawer
           item={selectedItem}
@@ -143,13 +236,11 @@ export default function VisionPage() {
           onClose={handleCloseDrawer}
           onUpdated={() => {
             mutate();
-            // Re-find the updated item after refresh so the drawer reflects new data
             handleCloseDrawer();
           }}
         />
       )}
 
-      {/* Add item modal */}
       {addingToPillarId && (
         <AddItemModal
           pillarId={addingToPillarId}
@@ -177,7 +268,7 @@ function VisionPageHeader({
   onToggleMode?: () => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 mb-1">
+    <div className="flex items-start justify-between gap-4 mb-1 flex-wrap">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--foreground)' }}>
           {title}
@@ -187,8 +278,7 @@ function VisionPageHeader({
         </p>
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Vision / Ops toggle */}
+      <div className="flex items-center gap-2 flex-wrap">
         <div
           className="flex items-center rounded-full p-1 gap-0.5"
           style={{ background: 'var(--muted)', border: '1px solid var(--card-border)' }}
@@ -264,12 +354,8 @@ function AddPillarButton({ onCreated }: { onCreated: () => void }) {
     return (
       <form
         onSubmit={handleSubmit}
-        className="rounded-3xl flex-shrink-0 flex flex-col p-4 gap-3"
-        style={{
-          minWidth: '200px',
-          width: '220px',
-          border: '2px dashed var(--card-border)',
-        }}
+        className="rounded-3xl flex flex-col p-4 gap-3 w-full md:flex-shrink-0 md:w-[200px]"
+        style={{ border: '2px dashed var(--card-border)' }}
       >
         <input
           autoFocus
@@ -309,11 +395,9 @@ function AddPillarButton({ onCreated }: { onCreated: () => void }) {
   return (
     <button
       onClick={() => setAdding(true)}
-      className="rounded-3xl flex-shrink-0 flex flex-col items-center justify-center gap-2 transition-opacity hover:opacity-60"
+      className="rounded-3xl flex flex-col items-center justify-center gap-2 transition-opacity hover:opacity-60 w-full md:flex-shrink-0 md:w-[140px]"
       style={{
-        minWidth: '120px',
-        width: '140px',
-        minHeight: '200px',
+        minHeight: '120px',
         border: '2px dashed var(--card-border)',
         color: 'var(--foreground)',
         opacity: 0.35,
