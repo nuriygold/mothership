@@ -22,6 +22,12 @@ export type EmailSummary = {
   }>;
 };
 
+export type EmailProviderHealth = {
+  configured: boolean;
+  connected: boolean;
+  note: string;
+};
+
 type LiveEmailCounts = {
   connected: boolean;
   unread: number;
@@ -313,6 +319,43 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function checkZohoConnectivity(): Promise<EmailProviderHealth> {
+  const user = process.env.ZOHO_IMAP_USERNAME || '';
+  const pass = process.env.ZOHO_IMAP_PASSWORD || '';
+  if (!user || !pass) {
+    return {
+      configured: false,
+      connected: false,
+      note: 'Zoho IMAP credentials missing. Set ZOHO_IMAP_USERNAME and ZOHO_IMAP_PASSWORD.',
+    };
+  }
+  const result = await fetchZohoCounts();
+  return {
+    configured: true,
+    connected: result.connected,
+    note: result.note,
+  };
+}
+
+export async function checkGmailConnectivity(): Promise<EmailProviderHealth> {
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || '';
+  if (!clientId || !clientSecret || !refreshToken) {
+    return {
+      configured: false,
+      connected: false,
+      note: 'Gmail OAuth credentials missing. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.',
+    };
+  }
+  const result = await fetchGmailCounts(parseInboxes(process.env.EMAIL_INBOXES));
+  return {
+    configured: true,
+    connected: result.connected,
+    note: result.note,
+  };
 }
 
 export async function getEmailSummary(): Promise<EmailSummary> {
