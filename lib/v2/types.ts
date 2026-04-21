@@ -5,13 +5,6 @@ export type V2ErrorResponse = {
   };
 };
 
-export type SystemHealthSnapshot = {
-  primarySystems: number;
-  botPerformance: number;
-  emailProcessing: number;
-  dataSync: number;
-};
-
 export type BotRouteKey = 'adrian' | 'ruby' | 'emerald' | 'adobe' | 'anchor' | 'gateway';
 
 export type V2BotStatus = 'active' | 'done' | 'pending' | 'working' | 'idle' | 'blocked';
@@ -43,18 +36,6 @@ export type V2DashboardPriorityItem = {
   taskStatus?: 'Active' | 'Queued' | 'Blocked' | 'Done';
 };
 
-export type V2DashboardBotActivity = {
-  botName: string;
-  currentTask: string;
-  status: 'active' | 'done' | 'pending';
-};
-
-export type V2PendingApprovalSummary = {
-  count: number;
-  description: string;
-  category: 'email' | 'finance' | 'tasks' | 'other';
-};
-
 export type V2TodayFeed = {
   userContext: {
     userName: string;
@@ -62,10 +43,6 @@ export type V2TodayFeed = {
     affirmation: string;
   };
   timeline: V2DashboardTimelineItem[];
-  topPriorities: V2DashboardPriorityItem[];
-  liveBotActivity: V2DashboardBotActivity[];
-  systemHealth: SystemHealthSnapshot | null;
-  pendingApprovals: V2PendingApprovalSummary[];
 };
 
 export type V2TaskItem = {
