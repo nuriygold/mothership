@@ -27,6 +27,7 @@ const navItems = [
   { label: 'Ruby', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
+  { label: 'Projects', href: '/projects' },
   { label: 'Marco', href: '/marco' },
 ];
 
