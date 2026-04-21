@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import { LogOut } from 'lucide-react';
 
 interface ServiceStatus {
@@ -158,15 +157,8 @@ function buildServices(data: Record<string, { ok: boolean; reason?: string }> | 
 }
 
 export function Header() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [now, setNow] = useState('');
   const router = useRouter();
-
-  useEffect(() => {
-    const saved = (localStorage.getItem('mothership-theme') as 'light' | 'dark') || 'light';
-    setTheme(saved);
-    document.documentElement.setAttribute('data-theme', saved);
-  }, []);
 
   useEffect(() => {
     const fmt = () => {
@@ -181,23 +173,6 @@ export function Header() {
     const t = setInterval(fmt, 30000);
     return () => clearInterval(t);
   }, []);
-
-  const toggleTheme = () => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    localStorage.setItem('mothership-theme', next);
-    document.documentElement.setAttribute('data-theme', next);
-  };
-
-  const { data } = useQuery({
-    queryKey: ['header-services'],
-    queryFn: checkAllServices,
-    staleTime: 30000,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
-  });
-
-  const services = buildServices(data);
 
   return (
     <header
@@ -251,7 +226,7 @@ export function Header() {
           }}
           className="rounded-lg border p-2 transition-opacity hover:opacity-80"
           style={{
-            borderColor: 'var(--ice-border)',
+            borderColor: '#b8e0f5',
             color: 'var(--ice-text3)',
             background: 'rgba(255,255,255,0.8)',
           }}

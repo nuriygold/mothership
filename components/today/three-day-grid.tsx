@@ -82,7 +82,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
     return d;
   }, []);
 
-  const [offset, setOffset] = useState(0); // step in multiples of 3
+  const [offset, setOffset] = useState(-1); // -1 = yesterday|today|tomorrow (today in center)
   const nowLineRef = useRef<HTMLDivElement>(null);
 
   // Current time in minutes from midnight
@@ -140,7 +140,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid #b8e0f5' }}>
         <button
           type="button"
-          onClick={() => setOffset((o) => o - 3)}
+          onClick={() => setOffset((o) => o - 1)}
           style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid #7ab8d8', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer', color: '#085070', display: 'flex', alignItems: 'center' }}
         >
           <ChevronLeft className="w-4 h-4" />
@@ -184,7 +184,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
 
         <button
           type="button"
-          onClick={() => setOffset((o) => o + 3)}
+          onClick={() => setOffset((o) => o + 1)}
           style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid #7ab8d8', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer', color: '#085070', display: 'flex', alignItems: 'center' }}
         >
           <ChevronRight className="w-4 h-4" />
@@ -192,7 +192,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
       </div>
 
       {/* Grid body */}
-      <div style={{ overflowY: 'auto', maxHeight: '360px', position: 'relative' }}>
+      <div style={{ overflowY: 'auto', maxHeight: '360px', position: 'relative', overscrollBehavior: 'contain' }}>
         <div style={{ position: 'relative', height: totalHeight }}>
           {/* Hour grid lines */}
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'grid', gridTemplateColumns: `${GUTTER_W}px repeat(3, 1fr)` }}>

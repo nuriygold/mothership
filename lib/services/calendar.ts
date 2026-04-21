@@ -99,18 +99,19 @@ export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEven
     const now = new Date();
     const tz = process.env.APP_TIMEZONE || 'America/New_York';
 
-    // Fetch events from start of today through end of today (timezone-aware)
+    // Fetch events from yesterday through 2 days from now (3-day window centered on today)
     const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tz });
     const todayStart = new Date(localDateStr + 'T00:00:00');
-    const todayEnd = new Date(localDateStr + 'T23:59:59');
+    const windowStart = new Date(todayStart); windowStart.setDate(windowStart.getDate() - 1);
+    const windowEnd = new Date(todayStart); windowEnd.setDate(windowEnd.getDate() + 2); windowEnd.setSeconds(windowEnd.getSeconds() - 1);
 
     const res = await cal.events.list({
       calendarId,
-      timeMin: todayStart.toISOString(),
-      timeMax: todayEnd.toISOString(),
+      timeMin: windowStart.toISOString(),
+      timeMax: windowEnd.toISOString(),
       singleEvents: true,
       orderBy: 'startTime',
-      maxResults: 20,
+      maxResults: 50,
     });
 
     const items = res.data.items ?? [];

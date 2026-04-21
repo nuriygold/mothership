@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  Calendar, Star, CheckCircle2, Zap, Video,
+  Calendar, CheckCircle2, Zap, Video,
   Trophy, Plus,
   ListChecks, MessageSquare,
   Send, Sparkles, Rocket,
@@ -22,7 +22,6 @@ import { ThreeDayGrid } from '@/components/today/three-day-grid';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
-import { TaskCard } from '@/components/tasks/task-card';
 
 type CalendarTimelineItem = {
   _calEvent: true;
@@ -506,57 +505,8 @@ export default function TodayPage() {
       {/* ── 3-Day Calendar Grid ── */}
       <ThreeDayGrid events={calEvents} />
 
-      {/* ── Active Tasks + SSE Stream — two-column grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-        {/* Active Tasks */}
-        <div style={{
-          background: 'rgba(255,255,255,0.70)',
-          border: '1px solid #b8d8e8',
-          borderRadius: '12px',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          boxShadow: '0 2px 16px rgba(64,168,200,0.08)',
-          padding: '14px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Star className="w-4 h-4" style={{ color: 'var(--ice)' }} />
-              <span style={{ fontFamily: 'var(--font-rajdhani)', fontWeight: 700, fontSize: '14px', letterSpacing: '0.06em', color: 'var(--ice-text)', textTransform: 'uppercase' }}>
-                Active Tasks
-              </span>
-            </div>
-            {tasksData && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', background: 'var(--ice-bg2)', color: 'var(--ice-text2)', borderRadius: '9999px', padding: '1px 8px' }}>
-                {tasksData.active.length}
-              </span>
-            )}
-          </div>
-          <div className="space-y-2">
-            {!tasksData ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-24 rounded-xl animate-pulse" style={{ background: 'var(--ice-bg2)' }} />
-                ))}
-              </div>
-            ) : tasksData.active.length === 0 ? (
-              <p style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--ice-text3)' }}>No active tasks right now.</p>
-            ) : (
-              tasksData.active.map((task) => (
-                <TaskCard
-                  key={task.taskId}
-                  task={task}
-                  onTakeAction={(t) => handleTakeAction(toActionItem(t))}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* SSE Stream Box */}
-        <div>
-          <SseLiveBox streamStatus={streamStatus} />
-        </div>
-      </div>
+      {/* ── SSE Stream ── */}
+      <SseLiveBox streamStatus={streamStatus} />
 
       {/* ── Timeline + Pending approvals — two-column grid ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
