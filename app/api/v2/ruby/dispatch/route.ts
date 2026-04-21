@@ -43,11 +43,7 @@ export async function POST(req: Request) {
       .catch(() => {});
   }
 
-  const input = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: text },
-  ];
+  // input is plain text — gateway handles system prompt via x-openclaw-agent-id
 
   let upstreamRes: Response;
   try {
@@ -59,7 +55,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input }),
+      body: JSON.stringify({ stream: true, model, input: text }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
