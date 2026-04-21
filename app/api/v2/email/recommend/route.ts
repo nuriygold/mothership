@@ -58,13 +58,14 @@ Respond with ONLY a JSON object (no markdown, no explanation):
   "reasoning": "Brief explanation",
   "confidence": "HIGH",
   "details": {
-    "draftReply": "Optional draft reply if MY_PEOPLE or BUSINESS",
+    "draftReply": "Optional draft reply if MY_PEOPLE or BUSINESS — never use em dashes (—)",
     "suggestedTimes": ["Optional time slots if FUN_EVENTS meeting/calendar invite"],
     "taskTitle": "Optional task title if BUSINESS or TECH_PROJECTS"
   }
 }
 
-Confidence: HIGH = very clear, MEDIUM = reasonable guess, LOW = uncertain.`;
+Confidence: HIGH = very clear, MEDIUM = reasonable guess, LOW = uncertain.
+Never use em dashes (—) anywhere in your response.`;
 
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
