@@ -187,7 +187,7 @@ export async function generateDispatchPlans(campaignId: string) {
   try {
     const result = await dispatchToOpenClaw({
       text: prompt,
-      agentId: 'anchor',
+      agentId: 'adrian',
       timeoutMs: 90_000,
     });
 
@@ -506,7 +506,7 @@ export async function replanDispatchTask(campaignId: string, taskId: string) {
 
   const result = await dispatchToOpenClaw({
     text: prompt,
-    agentId: 'anchor',
+    agentId: 'adrian',
     timeoutMs: 60_000,
   });
 
@@ -605,7 +605,7 @@ export async function reviewDispatchTask(taskId: string): Promise<string | null>
 
   const review = await dispatchToOpenClaw({
     text: reviewPrompt,
-    agentId: 'anchor',
+    agentId: 'adrian',
     timeoutMs: 90_000,
   });
 
