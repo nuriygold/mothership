@@ -89,8 +89,18 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
   const [response, setResponse] = useState('');
   const [responseError, setResponseError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Stable session ID for this card — persists across instructions within the same page session
-  const sessionIdRef = useRef<string>(crypto.randomUUID());
+  const sessionIdRef = useRef<string>('');
+
+  // Fetch a stable, DB-backed session ID for this device+bot on mount
+  useEffect(() => {
+    const botKey = Object.entries(BOT_DISPATCH_URL).find(([name]) => name === bot.identity.name)?.[1]
+      ?.split('/').at(-2) ?? bot.identity.name.toLowerCase();
+    fetch(`/api/v2/bots/session?bot=${botKey}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.sessionId) sessionIdRef.current = d.sessionId; })
+      .catch(() => { sessionIdRef.current = crypto.randomUUID(); }); // fallback
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scheme = COLOR_SCHEME[bot.identity.colorKey] ?? COLOR_SCHEME.lavender;
   const BotIcon = BOT_ICON[bot.identity.iconKey] ?? FileText;
