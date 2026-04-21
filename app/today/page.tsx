@@ -466,12 +466,10 @@ export default function TodayPage() {
                       );
                     }
 
-                    // ── Task / focus-block row ──
+                    // ── Task row ──
                     const taskEntry = entry as V2DashboardTimelineItem;
                     const isCurrent = taskEntry.status === 'current';
                     const isDone = taskEntry.status === 'done';
-                    const isFocus = taskEntry.type === 'focus-block';
-                    const isTask = taskEntry.type === 'task';
                     const normalizedTaskBot = taskEntry.assignedBot ? normalizeBotName(taskEntry.assignedBot) : '';
                     const botColors = normalizedTaskBot ? BOT_COLORS[normalizedTaskBot] : null;
 
@@ -480,19 +478,19 @@ export default function TodayPage() {
                         {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
                         <div className="rounded-xl p-3 transition-all group"
                           style={{
-                            border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
-                            background: isCurrent ? 'rgba(0,217,255,0.06)' : isFocus ? 'rgba(123,104,238,0.04)' : 'var(--input-background)',
+                            border: isCurrent ? '1.5px solid var(--color-cyan)' : '1px solid var(--border)',
+                            background: isCurrent ? 'rgba(0,217,255,0.06)' : 'var(--input-background)',
                             opacity: isDone ? 0.5 : 1,
                           }}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 min-w-0">
                               <span className="text-sm font-semibold w-16 flex-shrink-0"
-                                style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)', opacity: showTime ? 1 : 0 }}>
+                                style={{ color: 'var(--color-cyan)', opacity: showTime ? 1 : 0 }}>
                                 {taskEntry.time}
                               </span>
                               <div className="min-w-0">
                                 <span className="text-sm block truncate"
-                                  style={{ color: isFocus ? 'var(--color-purple)' : 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none', fontStyle: isFocus ? 'italic' : 'normal' }}>
+                                  style={{ color: 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none' }}>
                                   {taskEntry.title}
                                 </span>
                                 {taskEntry.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{taskEntry.time} – {taskEntry.endTime}</span>}
@@ -504,20 +502,20 @@ export default function TodayPage() {
                           {/* Action buttons row */}
                           {!isDone && (
                             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                              {isTask && (
-                                <button onClick={() => handleComplete(taskEntry.taskId)}
+                              {taskEntry.taskId && (
+                                <button type="button" onClick={() => handleComplete(taskEntry.taskId)}
                                   className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity"
                                   style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}>
                                   <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Done</span>
                                 </button>
                               )}
-                              <button onClick={() => handleGateway(taskEntry.title)}
+                              <button type="button" onClick={() => handleGateway(taskEntry.title)}
                                 className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity opacity-0 group-hover:opacity-100"
                                 style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
                                 <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Ask Ruby</span>
                               </button>
                               {taskEntry.assignedBot && botColors && (
-                                <button onClick={() => handleBotTelegram(normalizedTaskBot, taskEntry.title)}
+                                <button type="button" onClick={() => handleBotTelegram(normalizedTaskBot, taskEntry.title)}
                                   className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 transition-opacity cursor-pointer"
                                   style={{ background: botColors.bg, color: botColors.text }}
                                   title={`Message ${normalizedTaskBot} on Telegram`}>
@@ -531,7 +529,7 @@ export default function TodayPage() {
                                   <Video className="w-3 h-3" /> Join
                                 </a>
                               )}
-                              {isTask && taskEntry.taskId && (
+                              {taskEntry.taskId && (
                                 <AssignToDropdown currentBot={normalizedTaskBot || taskEntry.assignedBot} taskTitle={taskEntry.title}
                                   onAssign={(bot) => handleAssign(taskEntry.taskId!, taskEntry.title, bot)} />
                               )}
@@ -596,6 +594,7 @@ export default function TodayPage() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           <button
+            type="button"
             onClick={() => setShowNewTaskModal(true)}
             className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}
@@ -623,7 +622,7 @@ export default function TodayPage() {
             <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
             <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Draft Reply</span>
           </Link>
-          <button onClick={() => setShowTrophy(true)}
+          <button type="button" onClick={() => setShowTrophy(true)}
             className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95 relative"
             style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
             {completedTitles.length > 0 && (
