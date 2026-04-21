@@ -1223,7 +1223,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
         })
       : Promise.resolve([]),
     allTaskIds.length
-      ? prisma.task.findMany({ where: { id: { in: allTaskIds } } })
+      ? listTasks().then(all => (all as any[]).filter(t => allTaskIds.includes(String(t.id))))
       : Promise.resolve([]),
   ]);
 
