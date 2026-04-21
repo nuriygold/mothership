@@ -4,8 +4,12 @@ import { createDispatchCampaign, listDispatchCampaigns } from '@/lib/services/di
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const campaigns = await listDispatchCampaigns();
-  return NextResponse.json(campaigns);
+  try {
+    const campaigns = await listDispatchCampaigns();
+    return NextResponse.json(campaigns);
+  } catch {
+    return NextResponse.json([]);
+  }
 }
 
 export async function POST(req: Request) {
