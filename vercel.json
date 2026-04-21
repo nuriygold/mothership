@@ -1,7 +1,7 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "buildCommand": "prisma generate && npm run build",
+  "buildCommand": "DATABASE_URL=$DATABASE_POOLER_URL prisma migrate deploy && prisma generate && npm run build",
   "installCommand": "npm install --ignore-scripts",
   "outputDirectory": ".next",
   "crons": [
