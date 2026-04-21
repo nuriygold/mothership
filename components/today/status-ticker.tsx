@@ -17,8 +17,11 @@ async function fetchServices(): Promise<Record<string, { ok: boolean; reason?: s
 
 const SERVICE_KEYS = [
   { key: 'gateway',  label: 'OVO GATEWAY' },
-  { key: 'ruby',     label: 'OPENCLAW' },
-  { key: 'supabase', label: 'SUPABASE' },
+  { key: 'ruby',     label: 'DRIZZY' },
+  { key: 'telegram', label: 'TELEGRAM' },
+  { key: 'github',   label: 'GITHUB' },
+  { key: 'zoho',     label: 'ZOHO' },
+  { key: 'gmail',    label: 'GMAIL' },
 ];
 
 const MARKET_ITEMS = [
