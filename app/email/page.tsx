@@ -178,14 +178,35 @@ export default function EmailPage() {
     setSelectedBucket(null);
   }
 
-  function handleDeny(emailId: string) {
+  function dismissEmail(emailId: string) {
     setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    fetchedIds.current.delete(emailId);
     if (selectedEmail === emailId) setSelectedEmail(null);
   }
 
+  function handleDeny(emailId: string) {
+    dismissEmail(emailId);
+  }
+
   function handleDenyAll(bucket: EmailBucket) {
-    emails.filter(e => recommendations.get(e.id)?.bucket === bucket).forEach(e => handleDeny(e.id));
+    emails.filter(e => recommendations.get(e.id)?.bucket === bucket).forEach(e => dismissEmail(e.id));
     setSelectedBucket(null);
+  }
+
+  async function handleArchive(emailId: string) {
+    const email = emails.find(e => e.id === emailId);
+    dismissEmail(emailId);
+    if (email?.sourceIntegration === 'Gmail') {
+      await fetch(`/api/v2/email/${emailId}/archive`, { method: 'POST' }).catch(() => {});
+    }
+  }
+
+  async function handleDelete(emailId: string) {
+    const email = emails.find(e => e.id === emailId);
+    dismissEmail(emailId);
+    if (email?.sourceIntegration === 'Gmail') {
+      await fetch(`/api/v2/email/${emailId}/delete`, { method: 'POST' }).catch(() => {});
+    }
   }
 
   async function handleCreateTask(emailId: string) {
@@ -404,12 +425,12 @@ export default function EmailPage() {
                     {meta.action}
                   </button>
                   <button
-                    onClick={() => handleDenyAll(bucket)}
+                    onClick={() => { emails.filter(e => recommendations.get(e.id)?.bucket === bucket).forEach(e => handleArchive(e.id)); setSelectedBucket(null); }}
                     className="rounded-full px-3 py-1.5 text-xs"
                     style={{ border: '1px solid var(--border)' }}
                   >
                     <XCircle className="w-3 h-3 inline mr-1" />
-                    Skip All
+                    Archive All
                   </button>
                 </div>
               </div>
@@ -455,11 +476,11 @@ export default function EmailPage() {
           {meta.action} All
         </button>
         <button
-          onClick={() => handleDenyAll(selectedBucket)}
+          onClick={() => { bucketEmails.forEach(e => handleArchive(e.id)); setSelectedBucket(null); }}
           className="rounded-full px-4 py-2 text-xs"
           style={{ border: '1px solid var(--border)' }}
         >
-          Skip All
+          Archive All
         </button>
       </div>
 
@@ -514,12 +535,22 @@ export default function EmailPage() {
                     {isProcessing ? '…' : meta.action}
                   </button>
                   <button
-                    onClick={() => handleDeny(email.id)}
+                    onClick={() => handleArchive(email.id)}
                     disabled={isProcessing}
                     className="rounded-full px-2.5 py-1 text-[10px]"
                     style={{ border: '1px solid var(--border)' }}
+                    title="Archive"
                   >
-                    Skip
+                    Archive
+                  </button>
+                  <button
+                    onClick={() => handleDelete(email.id)}
+                    disabled={isProcessing}
+                    className="rounded-full p-1 transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--border)', color: '#ef4444' }}
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -675,12 +706,20 @@ export default function EmailPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleDeny(detailEmail.id)}
-                      className="rounded-full px-4 py-2 text-xs"
+                      onClick={() => handleArchive(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs flex items-center gap-1"
                       style={{ border: '1px solid var(--border)' }}
                     >
-                      <XCircle className="w-3 h-3 inline mr-1" />
-                      Skip
+                      <XCircle className="w-3 h-3" />
+                      Archive
+                    </button>
+                    <button
+                      onClick={() => handleDelete(detailEmail.id)}
+                      className="rounded-full px-4 py-2 text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                      style={{ border: '1px solid #ef444460', color: '#ef4444' }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
                     </button>
                     {(selectedBucket === 'BUSINESS' || selectedBucket === 'TECH_PROJECTS') && (
                       <button
