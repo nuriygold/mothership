@@ -39,7 +39,7 @@ const BUCKET_META: Record<EmailBucket, { label: string; icon: any; color: string
   ON_FIRE:        { label: 'On Fire',        icon: Flame,        color: '#ef4444', description: 'Urgent — needs you today',                    action: 'Handle Now' },
   BUSINESS:       { label: 'Business',       icon: Briefcase,    color: '#38bdf8', description: 'Work, clients, professional',                 action: 'Reply / Task' },
   FINANCIAL:      { label: 'Financial',      icon: DollarSign,   color: '#10b981', description: 'Bills, invoices, banking',                   action: 'Review' },
-  MY_PEOPLE:      { label: 'My People',      icon: Users,        color: '#a78bfa', description: 'Friends, family, real humans',               action: 'Reply' },
+  MY_PEOPLE:      { label: 'My People',      icon: Users,        color: '#a78bfa', description: 'Friends, family, real humans',               action: 'Done' },
   FUN_EVENTS:     { label: 'Fun & Events',   icon: PartyPopper,  color: '#f472b6', description: 'Invites, parties, social plans',            action: 'RSVP + Calendar' },
   SHOPPING_GIFTS: { label: 'Shopping',       icon: ShoppingBag,  color: '#f59e0b', description: 'Orders, deals, gifts',                      action: 'View / Delete' },
   TECH_PROJECTS:  { label: 'Tech & Projects',icon: Code2,        color: '#06b6d4', description: 'GitHub, dev tools, side projects, tech events', action: 'Task / Archive' },
@@ -213,8 +213,33 @@ export default function EmailPage() {
     }
   }
 
+  async function handleDeleteAll(bucket: EmailBucket) {
+    const targets = emails.filter(e => recommendations.get(e.id)?.bucket === bucket);
+    targets.forEach(e => dismissEmail(e.id));
+    setSelectedBucket(null);
+    await Promise.all(
+      targets
+        .filter(e => e.sourceIntegration === 'Gmail')
+        .map(e => fetch(`/api/v2/email/${e.id}/delete`, { method: 'POST' }).catch(() => {}))
+    );
+  }
+
+  async function handleUnsubscribeAll(bucket: EmailBucket) {
+    const targets = emails.filter(e => recommendations.get(e.id)?.bucket === bucket);
+    await Promise.all(
+      targets.map(async e => {
+        try {
+          const res = await fetch(`/api/v2/email/${e.id}/unsubscribe`, { method: 'POST' });
+          const json = res.ok ? await res.json() : null;
+          if (json?.unsubscribeUrl) window.open(json.unsubscribeUrl, '_blank');
+        } catch { /* ignore */ }
+      })
+    );
+  }
+
   async function handleSendReply(emailId: string) {
-    const text = replyDrafts.get(emailId)?.trim();
+    const rec = recommendations.get(emailId);
+    const text = (replyDrafts.get(emailId) ?? rec?.details?.draftReply)?.trim();
     if (!text) return;
     setSendingReply(prev => new Set(prev).add(emailId));
     setReplyError(prev => { const n = new Map(prev); n.delete(emailId); return n; });
@@ -463,6 +488,22 @@ export default function EmailPage() {
                     <XCircle className="w-3 h-3 inline mr-1" />
                     Archive All
                   </button>
+                  <button
+                    onClick={() => handleDeleteAll(bucket)}
+                    className="rounded-full px-3 py-1.5 text-xs"
+                    style={{ border: '1px solid #ef444460', color: '#ef4444' }}
+                  >
+                    <Trash2 className="w-3 h-3 inline mr-1" />
+                    Delete All
+                  </button>
+                  <button
+                    onClick={() => handleUnsubscribeAll(bucket)}
+                    className="rounded-full px-3 py-1.5 text-xs"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <UserX className="w-3 h-3 inline mr-1" />
+                    Unsub All
+                  </button>
                 </div>
               </div>
             );
@@ -512,6 +553,22 @@ export default function EmailPage() {
           style={{ border: '1px solid var(--border)' }}
         >
           Archive All
+        </button>
+        <button
+          onClick={() => handleDeleteAll(selectedBucket)}
+          className="rounded-full px-4 py-2 text-xs"
+          style={{ border: '1px solid #ef444460', color: '#ef4444' }}
+        >
+          <Trash2 className="w-3 h-3 inline mr-1" />
+          Delete All
+        </button>
+        <button
+          onClick={() => handleUnsubscribeAll(selectedBucket)}
+          className="rounded-full px-4 py-2 text-xs"
+          style={{ border: '1px solid var(--border)' }}
+        >
+          <UserX className="w-3 h-3 inline mr-1" />
+          Unsub All
         </button>
       </div>
 
