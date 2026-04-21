@@ -116,14 +116,15 @@ function AlertBanner({ alert }: { alert: AlertConfig }) {
 
   return (
     <div
-      className="flex items-center gap-3 rounded-2xl px-4 py-2.5"
+      className="flex items-center gap-3 rounded-xl px-4 py-2.5"
       style={{
-        background: styles.bg,
-        border: `1px solid ${styles.border}`,
+        background: alert.level === 'critical' ? 'rgba(253,240,208,0.9)' : alert.level === 'warning' ? '#fdf0d0' : styles.bg,
+        border: alert.level === 'critical' ? '1px solid var(--ice-gold)' : alert.level === 'warning' ? '1px solid var(--ice-gold)' : `1px solid ${styles.border}`,
+        borderLeft: `3px solid ${alert.level !== 'info' ? 'var(--ice-gold)' : styles.border}`,
       }}
     >
       <Icon className="w-4 h-4 flex-shrink-0" style={{ color: styles.iconColor }} />
-      <span className="flex-1 text-sm" style={{ color: 'var(--foreground)' }}>
+      <span className="flex-1 text-sm" style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: alert.level !== 'info' ? 'var(--ice-brown)' : 'var(--ice-text)' }}>
         {alert.message}
       </span>
       <Link

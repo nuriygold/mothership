@@ -59,7 +59,7 @@ function StatusDot({ service }: { service: ServiceStatus }) {
           boxShadow: `0 0 6px ${service.color}80`,
         }}
       />
-      <span className="text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
+      <span className="text-[11px]" style={{ fontFamily: 'var(--font-mono)', color: 'var(--ice-text2)', opacity: 0.8 }}>
         {service.name}
       </span>
 
@@ -201,17 +201,20 @@ export function Header() {
 
   return (
     <header
-      className="flex-shrink-0 h-11 flex items-center justify-between px-4 border-b"
+      className="flex-shrink-0 flex items-center justify-between px-4 border-b"
       style={{
-        background: 'var(--sidebar)',
-        borderColor: 'var(--sidebar-border)',
+        height: '46px',
+        background: 'rgba(255,255,255,0.65)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        borderColor: '#b8e0f5',
         overflow: 'visible',
         position: 'relative',
         zIndex: 40,
       }}
     >
-      {/* Left: service status dots with tooltips */}
-      <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
+      {/* Left: service status as horizontal tab-style row */}
+      <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
         {services.map((s) => (
           <StatusDot key={s.name} service={s} />
         ))}
@@ -219,17 +222,22 @@ export function Header() {
 
       {/* Right: date/time + theme toggle + sign out */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <span className="hidden sm:inline text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
+        <span
+          className="hidden sm:inline text-[11px]"
+          style={{ fontFamily: 'var(--font-body)', color: 'var(--ice-text2)', opacity: 0.8 }}
+        >
           {now}
         </span>
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border px-3 py-2 text-xs min-h-[44px] transition-opacity hover:opacity-80"
+          className="rounded-lg border px-3 py-1.5 text-xs transition-opacity hover:opacity-80"
           style={{
-            borderColor: 'var(--sidebar-border)',
-            color: 'var(--sidebar-foreground)',
-            opacity: 0.7,
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            borderColor: 'var(--ice-border)',
+            color: 'var(--ice-text2)',
+            background: 'rgba(255,255,255,0.8)',
           }}
         >
           {theme === 'light' ? 'Dark' : 'Light'}
@@ -241,11 +249,11 @@ export function Header() {
             await fetch('/api/v2/auth/logout', { method: 'POST' });
             router.push('/login' as Parameters<typeof router.push>[0]);
           }}
-          className="rounded-full border p-2 transition-opacity hover:opacity-80"
+          className="rounded-lg border p-2 transition-opacity hover:opacity-80"
           style={{
-            borderColor: 'var(--sidebar-border)',
-            color: 'var(--sidebar-foreground)',
-            opacity: 0.55,
+            borderColor: 'var(--ice-border)',
+            color: 'var(--ice-text3)',
+            background: 'rgba(255,255,255,0.8)',
           }}
         >
           <LogOut className="w-3.5 h-3.5" />
