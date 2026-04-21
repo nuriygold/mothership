@@ -123,7 +123,7 @@ function StatusDot({ service }: { service: ServiceStatus }) {
 
 const SERVICE_DEFINITIONS: Array<{ key: string; name: string; feed: string }> = [
   { key: 'gateway',  name: 'Gateway',  feed: 'OpenClaw gateway /health endpoint — core routing layer' },
-  { key: 'ruby',     name: 'Ruby',     feed: 'Task DB query — counts active tasks assigned to Ruby bot' },
+  { key: 'ruby',     name: 'Drizzy',   feed: 'Task DB query — counts active tasks assigned to Drizzy bot' },
   { key: 'telegram', name: 'Telegram', feed: 'Telegram Bot API — validates bot token via getMe call' },
   { key: 'github',   name: 'GitHub',   feed: 'GitHub API — checks task-pool repo access & auth token' },
   { key: 'zoho',     name: 'Zoho',     feed: 'Zoho Mail — verifies IMAP credentials are configured' },
