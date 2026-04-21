@@ -75,9 +75,13 @@ interface KanbanColumnProps {
   onTakeAction: (task: V2TaskItem) => void;
   /** Opens the detail modal when a card body is clicked */
   onCardClick: (task: V2TaskItem) => void;
+  /** When true, cards show checkboxes for multi-select */
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (taskId: string) => void;
 }
 
-export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction, onCardClick }: KanbanColumnProps) {
+export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction, onCardClick, selectMode, selectedIds, onToggleSelect }: KanbanColumnProps) {
   const colors = KANBAN_COLUMN_COLORS[title];
 
   return (
@@ -152,6 +156,9 @@ export function KanbanColumn({ title, tasks, visionLinkedIds, onTakeAction, onCa
               visionBoardLinked={visionLinkedIds.has(task.taskId)}
               onTakeAction={onTakeAction}
               onCardClick={onCardClick}
+              selectMode={selectMode}
+              selected={selectedIds?.has(task.taskId)}
+              onToggleSelect={onToggleSelect}
             />
           ))
         )}
