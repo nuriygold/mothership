@@ -54,52 +54,52 @@ const BOT_PROFILES: Array<{
 }> = [
   {
     key: 'adrian',
-    name: 'Adrian',
+    name: 'Drake',
     role: 'Automation & System Operations',
     colorKey: 'mint',
     iconKey: 'trending-up',
-    workingStyle: 'Executes commands, scripts, and infrastructure operations end-to-end',
-    personality: 'Reliable, action-first executor — runs the machine',
+    workingStyle: 'Executes commands, shifts mode by task — calm, surgical, or full-send depending on what the moment demands',
+    personality: 'Full-spectrum operator — he chooses the mode, then owns it completely',
     strengths: ['Automation & orchestration', 'Infrastructure & deployment', 'System health monitoring'],
   },
   {
     key: 'ruby',
-    name: 'Ruby',
+    name: 'Drizzy',
     role: 'Personal Communication & Life Management',
     colorKey: 'pink',
     iconKey: 'mail',
-    workingStyle: 'Tone-aware, fast iteration on messages and social coordination',
-    personality: 'Warm, direct, and relationship-aware — talks to people',
+    workingStyle: 'Tone-aware navigation of relationships, messages, and life logistics — keeps everything flowing',
+    personality: 'Warm, disarming, and relationship-first — talks to people, not at them',
     strengths: ['Personal messaging', 'Social & life coordination', 'Relationship interactions'],
   },
   {
     key: 'emerald',
-    name: 'Emerald',
+    name: 'Champagne Papi',
     role: 'Analysis, Verification & Financial Intelligence',
     colorKey: 'sky',
     iconKey: 'search',
-    workingStyle: 'Traces problems layer by layer — data, schema, API, frontend — before reaching conclusions',
-    personality: 'Precise, auditable, decision-ready — understands what is happening and why',
+    workingStyle: 'Reads the numbers for leverage — data, risk, and positioning before anyone else sees it',
+    personality: 'Calculated and expensive — sees through the surface to what the money is actually saying',
     strengths: ['Financial intelligence & cash flow analysis', 'System verification & QA', 'Strategic diagnostics & pattern detection'],
   },
   {
     key: 'adobe',
-    name: 'Adobe Pettaway',
+    name: 'Aubrey Graham',
     role: 'Document Intelligence',
     colorKey: 'lemon',
     iconKey: 'file-text',
-    workingStyle: 'Extraction and schema validation',
-    personality: 'Precise and literal',
+    workingStyle: "Quiet, precise extraction — reads what's there, reports what's true",
+    personality: 'No persona, no performance — just what the document actually says',
     strengths: ['Document parsing', 'Entity extraction', 'Validation checks'],
   },
   {
     key: 'anchor',
-    name: 'Anchor',
+    name: '6 God',
     role: 'Execution Coordination & Human Follow-through',
     colorKey: 'lavender',
     iconKey: 'anchor',
-    workingStyle: 'Grounds execution plans, clarifies ownership, and stabilizes re-entry when momentum drops',
-    personality: 'Warm, firm, and execution-first — reduces friction without dramatizing stalls',
+    workingStyle: 'No softness, no overthinking — collapses indecision and forces movement on stalled execution',
+    personality: 'Dominant and pressure-first — she runs this, no discussion',
     strengths: ['Priority sequencing', 'Ownership and accountability coordination', 'Re-entry planning and completion support'],
   },
 ];
@@ -107,11 +107,11 @@ const BOT_PROFILES: Array<{
 function routeForTask(task: any): BotRouteKey {
   // Explicit assignee takes priority over keyword inference
   const assignee = String(task.assignee ?? '').toLowerCase().trim();
-  if (assignee === 'adrian' || assignee === 'main') return 'adrian';
-  if (assignee === 'ruby') return 'ruby';
-  if (assignee === 'emerald') return 'emerald';
-  if (assignee === 'adobe' || assignee === 'adobe pettaway') return 'adobe';
-  if (assignee === 'anchor' || assignee === 'ballast') return 'anchor';
+  if (assignee === 'adrian' || assignee === 'main' || assignee === 'drake') return 'adrian';
+  if (assignee === 'ruby' || assignee === 'drizzy') return 'ruby';
+  if (assignee === 'emerald' || assignee === 'champagne papi') return 'emerald';
+  if (assignee === 'adobe' || assignee === 'adobe pettaway' || assignee === 'aubrey graham') return 'adobe';
+  if (assignee === 'anchor' || assignee === 'ballast' || assignee === '6 god') return 'anchor';
 
   // Fall back to keyword inference from title + description
   const title = String(task.title ?? '').toLowerCase();
@@ -770,7 +770,6 @@ export async function getV2Activity(page = 1, pageSize = 25): Promise<V2Activity
 
 export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   const tasksFeed = await getV2TasksFeed();
-
   const timeline = await buildTimeline(tasksFeed);
 
   return {
