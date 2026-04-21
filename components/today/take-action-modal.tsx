@@ -70,7 +70,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
   }
 
   const normalizedBot = normalizeBotName(item.assignedBot);
-  const botC = BOT_COLORS[normalizedBot] ?? BOT_COLORS.Adrian;
+  const botC = BOT_COLORS[normalizedBot] ?? BOT_COLORS['Drake'] ?? { bg: 'var(--color-mint)', text: 'var(--color-mint-text)' };
   // Which status-change actions make sense for the current task state
   const showDone    = item.taskId && taskStatus !== 'Done';
   const showStart   = item.taskId && taskStatus !== 'Active' && taskStatus !== 'Done';

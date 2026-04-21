@@ -11,6 +11,8 @@ export interface CalendarEvent {
   status: 'done' | 'current' | 'upcoming';
   meetingUrl: string | null;
   location: string | null;
+  description: string | null;
+  htmlLink: string | null; // Google Calendar event URL for viewing/editing
 }
 
 export function isCalendarConfigured(): boolean {
@@ -139,6 +141,8 @@ export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEven
           status: isAllDay ? 'upcoming' : computeStatus(startIso, endIso, now),
           meetingUrl,
           location: ev.location ?? null,
+          description: ev.description ?? null,
+          htmlLink: ev.htmlLink ?? null,
         };
       });
     return { events };
