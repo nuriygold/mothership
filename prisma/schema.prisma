@@ -261,6 +261,20 @@ model Command {
   run         Run?  @relation(fields: [runId], references: [id])
 }
 
+model Project {
+  id          String             @id @default(uuid())
+  title       String
+  description String?
+  color       String             @default("lavender")
+  icon        String             @default("folder")
+  sortOrder   Int                @default(0)
+  isDefault   Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  campaigns   DispatchCampaign[]
+}
+
 model DispatchCampaign {
   id                  String                 @id @default(uuid())
   title               String
@@ -275,12 +289,14 @@ model DispatchCampaign {
   approvedPlanName    String?
   approvedPlanAt      DateTime?
   visionItemId        String?
+  projectId           String?
   queuedAt            DateTime?
   scheduledAt         DateTime?
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
-  tasks DispatchTask[]
+  tasks   DispatchTask[]
+  project Project?       @relation(fields: [projectId], references: [id])
 }
 
 model DispatchTask {
