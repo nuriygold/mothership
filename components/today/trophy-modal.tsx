@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
 import { Trophy, X, CheckCircle2, Award, Sparkles, RotateCcw } from 'lucide-react';
 
@@ -21,7 +22,7 @@ interface TrophyModalProps {
 }
 
 export function TrophyModal({ onClose, localCompletions, completedIds, onUndoTask }: TrophyModalProps) {
-  const { data, isLoading } = useSWR<TrophyData>('/api/v2/trophy', fetcher, { revalidateOnMount: true });
+  const { data, isLoading } = useSWR<TrophyData>('/api/v2/trophy?mode=day', fetcher, { revalidateOnMount: true });
 
   // Restore focus to the element that opened the modal
   const previousFocusRef = useRef<Element | null>(null);
@@ -192,7 +193,14 @@ export function TrophyModal({ onClose, localCompletions, completedIds, onUndoTas
 
         {/* Footer */}
         <div className="px-5 py-3 flex-shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
-          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Resets at midnight</p>
+          <a
+            href="/trophy"
+            onClick={onClose}
+            className="text-xs font-medium transition-opacity hover:opacity-70"
+            style={{ color: 'var(--color-cyan)' }}
+          >
+            View full history →
+          </a>
           <button
             onClick={onClose}
             className="rounded-xl px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-80"

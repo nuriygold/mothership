@@ -13,6 +13,7 @@ import {
   Send,
   Telescope,
   FolderKanban,
+  Trophy,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -32,6 +33,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/vision': Telescope,
   '/dispatch': Send,
   '/projects': FolderKanban,
+  '/trophy':   Trophy,
 };
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
