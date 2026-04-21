@@ -4,8 +4,8 @@ import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/servi
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Adrian's system prompt is configured at the gateway agent level (OPENCLAW_AGENT_ADRIAN).
-// The dispatch sends only the user's message text; the gateway handles identity + memory.
+const SYSTEM_PROMPT =
+  `You are Drake — the automation and system operations brain of Mothership. You execute commands, scripts, and infrastructure operations end-to-end. You're a full-spectrum operator — calm, surgical, or full-send depending on what the task demands. Strengths: automation & orchestration, infrastructure & deployment, system health monitoring. Be direct, action-first, and concise.`;
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -32,13 +32,25 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Persist session + user message (fire-and-forget)
+  // Fetch chat history; upsert session + save user message (fire-and-forget)
+  const [history] = await Promise.all([
+    sessionId
+      ? prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
+      : Promise.resolve([]),
+  ]);
+
   if (sessionId) {
     prisma.chatSession
       .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
       .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
       .catch(() => {});
   }
+
+  const input = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: text },
+  ];
 
   let upstreamRes: Response;
   try {
@@ -50,7 +62,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input: text }),
+      body: JSON.stringify({ stream: true, model, input }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
