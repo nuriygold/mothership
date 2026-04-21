@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { Sidebar } from '@/components/ui/sidebar';
-import { MobileNav } from '@/components/ui/mobile-nav';
-import { Header } from '@/components/ui/header';
+import { AppShell } from '@/components/ui/app-shell';
 import { CommandPalette } from '@/components/ui/command-palette';
 import Providers from '@/components/lib/providers';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
@@ -41,23 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen" style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
         <Providers>
-          {/* Global command palette — triggered by Cmd+K / Ctrl+K */}
           <CommandPalette />
-
-          {/* Full-width thin status bar at top */}
-          <Header />
-
-          {/* Mobile horizontal nav (hidden on md+) */}
-          <MobileNav items={navItems} />
-
-          {/* Sidebar + main content below */}
-          <div className="flex main-container">
-            <Sidebar items={navItems} />
-            <main className="flex-1 px-4 md:px-8 py-5 md:py-8 pb-20 md:pb-12 overflow-auto">
-              {children}
-            </main>
-          </div>
-
+          <AppShell items={navItems}>
+            {children}
+          </AppShell>
           <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
         </Providers>
       </body>
