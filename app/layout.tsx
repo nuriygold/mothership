@@ -32,6 +32,7 @@ const navItems = [
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
   { label: 'Projects', href: '/projects' },
+  { label: 'Trophy', href: '/trophy' },
   { label: 'Marco', href: '/marco' },
 ];
 

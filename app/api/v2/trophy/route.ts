@@ -4,60 +4,87 @@ import { TaskStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+// Returns Monday 00:00:00 ET for the given week offset (0 = current, -1 = last, etc.)
+function weekBounds(weekOffset: number): { start: Date; end: Date } {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  const daysToMonday = (dayOfWeek + 6) % 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysToMonday + weekOffset * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 7);
+  return { start: monday, end: sunday };
+}
 
-  const [doneTasks, completedCommands, auditEvents] = await Promise.allSettled([
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const weekOffset = parseInt(searchParams.get('week') ?? '0', 10);
+  const mode = searchParams.get('mode') ?? 'week';
+
+  let start: Date;
+  let end: Date;
+
+  if (mode === 'day') {
+    end = new Date();
+    start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  } else {
+    ({ start, end } = weekBounds(isNaN(weekOffset) ? 0 : weekOffset));
+  }
+
+  const [doneTasks, completedCommands] = await Promise.allSettled([
     prisma.task.findMany({
-      where: { status: TaskStatus.DONE, updatedAt: { gte: since } },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, title: true, description: true, priority: true, updatedAt: true },
+      where: {
+        status: TaskStatus.DONE,
+        OR: [
+          { completedAt: { gte: start, lt: end } },
+          { completedAt: null, updatedAt: { gte: start, lt: end } },
+        ],
+      },
+      orderBy: { completedAt: 'desc' },
+      select: { id: true, title: true, priority: true, completedAt: true, updatedAt: true },
     }),
     prisma.command.findMany({
-      where: { completedAt: { gte: since } },
+      where: { completedAt: { gte: start, lt: end } },
       orderBy: { completedAt: 'desc' },
       select: { id: true, input: true, completedAt: true, sourceChannel: true },
-    }),
-    prisma.auditEvent.findMany({
-      where: {
-        eventType: { in: ['approved', 'completed', 'done', 'resolved'] },
-        createdAt: { gte: since },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: { id: true, entityType: true, eventType: true, metadata: true, createdAt: true },
     }),
   ]);
 
   const tasks = doneTasks.status === 'fulfilled' ? doneTasks.value : [];
   const commands = completedCommands.status === 'fulfilled' ? completedCommands.value : [];
-  const events = auditEvents.status === 'fulfilled' ? auditEvents.value : [];
+
+  // Group tasks by YYYY-MM-DD in ET
+  const byDay: Record<string, Array<{ id: string; title: string; priority: string; completedAt: string }>> = {};
+  for (const t of tasks) {
+    const ts = t.completedAt ?? t.updatedAt;
+    const day = ts.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push({
+      id: t.id,
+      title: t.title,
+      priority: t.priority,
+      completedAt: ts.toISOString(),
+    });
+  }
 
   return NextResponse.json({
-    since: since.toISOString(),
-    totals: {
-      tasks: tasks.length,
-      commands: commands.length,
-      events: events.length,
-    },
+    weekOffset: isNaN(weekOffset) ? 0 : weekOffset,
+    weekStart: start.toISOString(),
+    weekEnd: end.toISOString(),
+    totals: { tasks: tasks.length, commands: commands.length },
+    byDay,
     tasks: tasks.map((t) => ({
       id: t.id,
       title: t.title,
-      description: t.description,
       priority: t.priority,
-      completedAt: t.updatedAt.toISOString(),
+      completedAt: (t.completedAt ?? t.updatedAt).toISOString(),
     })),
     commands: commands.map((c) => ({
       id: c.id,
       input: c.input,
       channel: c.sourceChannel,
       completedAt: c.completedAt?.toISOString() ?? null,
-    })),
-    events: events.map((e) => ({
-      id: e.id,
-      entityType: e.entityType,
-      eventType: e.eventType,
-      completedAt: e.createdAt.toISOString(),
     })),
   });
 }

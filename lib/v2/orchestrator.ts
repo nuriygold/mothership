@@ -912,7 +912,7 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
   } else if (action === 'defer') {
     await updateTask({ id: taskId, status: TaskStatus.TODO });
   } else if (action === 'complete') {
-    await updateTask({ id: taskId, status: TaskStatus.DONE });
+    await prisma.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE, completedAt: new Date() } });
   } else if (action === 'unblock') {
     await updateTask({ id: taskId, status: TaskStatus.IN_PROGRESS });
   }

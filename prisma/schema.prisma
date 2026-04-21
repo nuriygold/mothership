@@ -176,6 +176,7 @@ model Task {
   assignee     String?
   dueAt        DateTime?
   visionItemId String?
+  completedAt  DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -184,6 +185,8 @@ model Task {
   approvals  Approval[]
   run        Run?
   visionLink VisionTaskLink[]
+
+  @@index([completedAt])
 }
 
 model Run {
