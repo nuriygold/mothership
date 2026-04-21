@@ -12,7 +12,6 @@ import { prisma } from '@/lib/prisma';
 import { getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
 import type {
   BotRouteKey,
-  SystemHealthSnapshot,
   V2ActivityFeed,
   V2BotProfile,
   V2BotsFeed,
@@ -27,7 +26,6 @@ import type {
   V2HealthScore,
   V2IncomeSource,
   V2NetWorthPoint,
-  V2PendingApprovalSummary,
   V2Subscription,
   V2TaskItem,
   V2TasksFeed,
@@ -40,18 +38,6 @@ import type {
   V2VisionPillar,
 } from '@/lib/v2/types';
 
-type PredictiveActionState = {
-  id: string;
-  dedupeKey: string;
-  title: string;
-  source: string;
-  bot: string;
-  category: 'email' | 'finance' | 'tasks' | 'other';
-  approvedAt?: string;
-};
-
-const actionStore = new Map<string, PredictiveActionState>();
-const dedupeStore = new Map<string, string>();
 const pendingRubyDrafts = new Set<string>();
 const rubyDraftStore = new Map<string, V2EmailDraft>();
 const sentDrafts = new Set<string>();
@@ -161,13 +147,6 @@ function mapTaskPriority(priority: TaskPriority): V2TaskItem['metadata']['priori
   if (priority === TaskPriority.HIGH) return 'high';
   if (priority === TaskPriority.LOW) return 'low';
   return 'medium';
-}
-
-function categoryFromRoute(route: BotRouteKey): PredictiveActionState['category'] {
-  if (route === 'emerald') return 'finance';
-  if (route === 'ruby') return 'email';
-  if (route === 'adrian' || route === 'anchor' || route === 'gateway') return 'tasks';
-  return 'other';
 }
 
 function relativeTime(input: Date) {
@@ -307,18 +286,6 @@ async function generateRubyDraft(emailId: string, subject: string, preview: stri
     draft: rubyDraft,
   });
   pendingRubyDrafts.delete(emailId);
-}
-
-function upsertAction(action: Omit<PredictiveActionState, 'id'>) {
-  const existing = dedupeStore.get(action.dedupeKey);
-  if (existing) return actionStore.get(existing)!;
-  const item: PredictiveActionState = {
-    id: `act_${crypto.randomUUID()}`,
-    ...action,
-  };
-  actionStore.set(item.id, item);
-  dedupeStore.set(item.dedupeKey, item.id);
-  return item;
 }
 
 export async function getV2TasksFeed(): Promise<V2TasksFeed> {
@@ -802,6 +769,7 @@ export async function getV2Activity(page = 1, pageSize = 25): Promise<V2Activity
 }
 
 export async function getV2TodayFeed(): Promise<V2TodayFeed> {
+  const tasksFeed = await getV2TasksFeed();
   const [tasksFeed] = await Promise.all([
     getV2TasksFeed(),
   ]);
@@ -992,59 +960,6 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
       isDraggable: false,
     },
   ];
-}
-
-function summarizePendingApprovals(): V2PendingApprovalSummary[] {
-  const items = [...actionStore.values()].filter((item) => !item.approvedAt);
-  const grouped = new Map<V2PendingApprovalSummary['category'], number>();
-  for (const item of items) {
-    grouped.set(item.category, (grouped.get(item.category) ?? 0) + 1);
-  }
-  return [...grouped.entries()].map(([category, count]) => ({
-    category,
-    count,
-    description:
-      category === 'email'
-        ? `${count} email drafts from Ruby`
-        : category === 'finance'
-          ? `${count} financial transactions`
-          : `${count} pending actions`,
-  }));
-}
-
-function computeHealth(tasks: V2TasksFeed, bots: V2BotsFeed, emailConnected: boolean): SystemHealthSnapshot {
-  const queuePressure = tasks.counters.tracked === 0 ? 100 : Math.max(45, 100 - Math.round((tasks.counters.blocked / tasks.counters.tracked) * 100));
-  const botPerf = bots.bots.length === 0
-    ? 100
-    : Math.max(55, Math.round(
-      (bots.bots.reduce((acc, bot) => acc + bot.throughputMetrics.completed, 0) /
-        Math.max(1, bots.bots.reduce((acc, bot) => acc + bot.throughputMetrics.completed + bot.throughputMetrics.queued + bot.throughputMetrics.blocked, 0))) * 100
-    ));
-
-  return {
-    primarySystems: 100,
-    botPerformance: botPerf,
-    emailProcessing: emailConnected ? 98 : 60,
-    dataSync: queuePressure,
-  };
-}
-
-export function approvePredictiveAction(actionId: string) {
-  const action = actionStore.get(actionId);
-  if (!action) {
-    return { ok: false, status: 404, message: 'Action not found' };
-  }
-
-  if (action.approvedAt) {
-    return { ok: true, status: 200, idempotent: true, action };
-  }
-
-  action.approvedAt = new Date().toISOString();
-  actionStore.set(actionId, action);
-  publishV2Event('dashboard', 'approval.updated', { actionId, status: 'approved' });
-  publishV2Event('bots', 'task.routed', { botName: action.bot, title: action.title });
-
-  return { ok: true, status: 200, idempotent: false, action };
 }
 
 export async function mutateTaskFromAction(taskId: string, action: 'start' | 'defer' | 'complete' | 'unblock' | 'vision_board') {

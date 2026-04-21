@@ -9,7 +9,7 @@ import {
   ListChecks, MessageSquare,
   Send, Sparkles, Rocket,
 } from 'lucide-react';
-import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { TrophyModal } from '@/components/today/trophy-modal';
 import { NowLine } from '@/components/today/now-line';
 import { TakeActionModal } from '@/components/today/take-action-modal';
@@ -22,17 +22,21 @@ import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2T
 import type { CalendarEvent } from '@/lib/services/calendar';
 import { TaskCard } from '@/components/tasks/task-card';
 
+type CalendarTimelineItem = {
+  _calEvent: true;
+  id: string;
+  title: string;
+  startDate: string;
+  startTime: string;
+  endTime: string | null;
+  status: 'done' | 'current' | 'upcoming';
+  meetingUrl?: string | null;
+  location?: string | null;
+};
+
 type MergedItem =
   | (V2DashboardTimelineItem & { _calEvent?: false })
-  | (Partial<CalendarEvent> & {
-      _calEvent: true;
-      id: string;
-      title: string;
-      startDate: string;
-      startTime: string;
-      endTime: string | null;
-      status: 'done' | 'current' | 'upcoming';
-    });
+  | CalendarTimelineItem;
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -126,23 +130,23 @@ export default function TodayPage() {
     for (const ev of calEvents) {
       if (!taskTitles.has(ev.title.toLowerCase())) {
         combined.push({
-          _calEvent: true,
+          _calEvent: true as const,
           id: ev.id,
           title: ev.title,
           startTime: ev.startTime,
           endTime: ev.endTime,
           startDate: ev.startDate,
-          meetingUrl: ev.meetingUrl,
-          location: ev.location,
+          meetingUrl: ev.meetingUrl ?? null,
+          location: ev.location ?? null,
           status: ev.status,
-        });
+        } satisfies CalendarTimelineItem);
       }
     }
 
     // Sort by startDate if available, otherwise keep original order
     combined.sort((a, b) => {
-      const aDate = a._calEvent ? a.startDate : (a as V2DashboardTimelineItem).startDate;
-      const bDate = b._calEvent ? b.startDate : (b as V2DashboardTimelineItem).startDate;
+      const aDate = a.startDate;
+      const bDate = b.startDate;
       if (!aDate && !bDate) return 0;
       if (!aDate) return 1;
       if (!bDate) return -1;
@@ -157,8 +161,7 @@ export default function TodayPage() {
     const now = Date.now();
     for (let i = 0; i < mergedTimeline.length; i++) {
       const item = mergedTimeline[i];
-      const startDate = item._calEvent ? item.startDate : (item as V2DashboardTimelineItem).startDate;
-      if (startDate && new Date(startDate).getTime() > now) return i;
+      if (item.startDate && new Date(item.startDate).getTime() > now) return i;
     }
     return mergedTimeline.length;
   }, [mergedTimeline]);
@@ -178,7 +181,7 @@ export default function TodayPage() {
   // ── Done → Trophy ──
   const handleComplete = useCallback(async (taskId?: string) => {
     if (!taskId) return;
-    const title = mergedTimeline.find((t) => !t._calEvent && (t as V2DashboardTimelineItem).taskId === taskId)?.title ?? taskId;
+    const title = mergedTimeline.find((t) => !t._calEvent && t.taskId === taskId)?.title ?? taskId;
     setCompletedIds((prev) => new Set([...prev, taskId]));
     setCompletedTitles((prev) => [...prev, title]);
     try {
@@ -208,7 +211,7 @@ export default function TodayPage() {
 
   // ── Undo Done (from Trophy) ──
   const handleUndoDone = useCallback(async (taskId: string) => {
-    const title = mergedTimeline.find((t) => !t._calEvent && (t as V2DashboardTimelineItem).taskId === taskId)?.title ?? taskId;
+    const title = mergedTimeline.find((t) => !t._calEvent && t.taskId === taskId)?.title ?? taskId;
     setCompletedIds((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
     setCompletedTitles((prev) => {
       const idx = prev.lastIndexOf(title);
@@ -296,10 +299,8 @@ export default function TodayPage() {
       const payload = await assignRes.json().catch(() => ({} as AssignTaskResponse));
       await mutate();
       await mutateTasks();
-      if (telegramRes.ok) {
-        setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
-      } else {
-        setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot} (Telegram notify failed)`);
+      setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
+      if (!telegramRes.ok) {
         logTodayClientFailure('assignment_telegram', new Error(`Telegram notify failed (${telegramRes.status})`), { taskId, botName: normalizedBot });
       }
     } catch (error) {
@@ -332,6 +333,7 @@ export default function TodayPage() {
         onComplete={handleComplete}
         onGateway={(title) => { handleGateway(title); setActionModalItem(null); }}
         onDispatch={(item) => { handleDispatch(item); }}
+        showRouteApproval={false}
         onAddToVisionBoard={async (taskId) => {
           const res = await fetch(`/api/v2/tasks/${taskId}`, {
             method: 'PATCH',
