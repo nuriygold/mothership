@@ -62,10 +62,6 @@ export type V2TodayFeed = {
     affirmation: string;
   };
   timeline: V2DashboardTimelineItem[];
-  topPriorities: V2DashboardPriorityItem[];
-  liveBotActivity: V2DashboardBotActivity[];
-  systemHealth: SystemHealthSnapshot | null;
-  pendingApprovals: V2PendingApprovalSummary[];
 };
 
 export type V2TaskItem = {
