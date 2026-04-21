@@ -42,7 +42,7 @@ export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddI
       .then(r => r.json())
       .then((data: V2TasksFeed) => {
         const all = [...(data.active ?? []), ...(data.today ?? []), ...(data.backlog ?? [])];
-        setPoolTasks(all.filter(t => t.visionBoardLinked));
+        setPoolTasks(all);
       })
       .catch(() => setPoolTasks([]))
       .finally(() => setPoolTasksLoading(false));

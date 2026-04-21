@@ -98,7 +98,7 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
       .then((data: V2TasksFeed) => {
         const all = [...(data.active ?? []), ...(data.today ?? []), ...(data.backlog ?? [])];
         const alreadyLinked = new Set(item.linkedTasks.map(t => t.id));
-        setPoolTasks(all.filter(t => t.visionBoardLinked && !alreadyLinked.has(t.taskId)));
+        setPoolTasks(all.filter(t => !alreadyLinked.has(t.taskId)));
       })
       .catch(() => setPoolTasks([]))
       .finally(() => setPoolTasksLoading(false));
