@@ -802,62 +802,11 @@ export async function getV2Activity(page = 1, pageSize = 25): Promise<V2Activity
 }
 
 export async function getV2TodayFeed(): Promise<V2TodayFeed> {
-  const [tasksFeed, botsFeed, emailFeed] = await Promise.all([
+  const [tasksFeed] = await Promise.all([
     getV2TasksFeed(),
-    getV2BotsFeed(),
-    getEmailSummary(),
   ]);
 
-  // Sort tasks: overdue first (past dueAt), then by dueAt ascending, then undated
-  const allPendingTasks = [...tasksFeed.active, ...tasksFeed.today].filter((t, i, arr) => t.status !== 'Done' && arr.findIndex((x) => x.taskId === t.taskId) === i);
-  const sortedTasks = [...allPendingTasks].sort((a, b) => {
-    const now = Date.now();
-    const aTime = a.metadata.dueAtISO ? new Date(a.metadata.dueAtISO).getTime() : null;
-    const bTime = b.metadata.dueAtISO ? new Date(b.metadata.dueAtISO).getTime() : null;
-    const aOverdue = aTime !== null && aTime < now;
-    const bOverdue = bTime !== null && bTime < now;
-    if (aOverdue && !bOverdue) return -1;
-    if (!aOverdue && bOverdue) return 1;
-    if (aTime !== null && bTime !== null) return aTime - bTime;
-    if (aTime !== null) return -1;
-    if (bTime !== null) return 1;
-    return 0;
-  });
-
-  const topPriorities: V2DashboardPriorityItem[] = sortedTasks
-    .slice(0, 10)
-    .map((item) => {
-      const action = upsertAction({
-        dedupeKey: `task:${item.taskId}`,
-        title: item.title,
-        source: `From ${item.metadata.department}`,
-        bot: item.metadata.assignedBot,
-        category: categoryFromRoute(routeForTask({ title: item.title, description: item.metadata.department })),
-      });
-      return {
-        id: action.id,
-        taskId: item.taskId,
-        title: item.title,
-        source: `From ${item.metadata.department}`,
-        actionWebhook: `/api/v2/actions/${action.id}/approve`,
-        assignedBot: item.metadata.assignedBot,
-        dueAt: item.metadata.dueAtISO ?? null,
-        taskStatus: item.status,
-      };
-    });
-
-  const pendingApprovals = summarizePendingApprovals();
   const timeline = await buildTimeline(tasksFeed);
-
-  const liveBotActivity = botsFeed.bots.slice(0, 4).map((bot) => ({
-    botName: bot.identity.name,
-    currentTask: bot.liveState.currentTask,
-    status: (bot.liveState.status === 'working'
-      ? 'active'
-      : bot.liveState.status === 'idle'
-        ? 'pending'
-        : 'done') as 'active' | 'done' | 'pending',
-  }));
 
   return {
     userContext: {
@@ -866,10 +815,6 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
       affirmation: getDailyAffirmation(),
     },
     timeline,
-    topPriorities,
-    liveBotActivity,
-    systemHealth: null,
-    pendingApprovals,
   };
 }
 
