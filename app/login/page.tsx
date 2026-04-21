@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Lock, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { MothershipLogo } from '@/components/ui/mothership-logo';
 
-export default function LoginPage() {
+function LoginForm() {
   const [passphrase, setPassphrase] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const params = useSearchParams();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +28,8 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        router.push('/today');
+        const from = params.get('from') ?? '/today';
+        router.push(from as Parameters<typeof router.push>[0]);
         router.refresh();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -41,7 +44,7 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen flex flex-col items-center justify-center p-4"
       style={{ background: 'var(--background)' }}
     >
       <div
@@ -49,20 +52,25 @@ export default function LoginPage() {
         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
       >
         {/* Logo / title */}
-        <div className="flex flex-col items-center gap-3">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ background: 'rgba(0,217,255,0.1)', border: '1px solid rgba(0,217,255,0.2)' }}
-          >
-            <Lock className="w-7 h-7" style={{ color: 'var(--color-cyan)' }} />
-          </div>
+        <div className="flex flex-col items-center gap-4">
+          <MothershipLogo size={52} />
           <div className="text-center">
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+            <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--foreground)' }}>
               Mothership
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-              Enter your passphrase to sync memory across devices
+            <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+              Restricted access — enter passphrase to continue
             </p>
+          </div>
+        </div>
+
+        {/* Lock icon row */}
+        <div className="flex justify-center">
+          <div
+            className="w-10 h-10 rounded-2xl flex items-center justify-center"
+            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}
+          >
+            <Lock className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
           </div>
         </div>
 
@@ -78,7 +86,7 @@ export default function LoginPage() {
               className="w-full rounded-2xl px-4 py-3 pr-12 text-sm outline-none"
               style={{
                 background: 'var(--muted)',
-                border: '1px solid var(--border)',
+                border: error ? '1px solid #ef4444' : '1px solid var(--border)',
                 color: 'var(--foreground)',
               }}
             />
@@ -105,14 +113,35 @@ export default function LoginPage() {
             className="rounded-2xl py-3 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Verifying…' : 'Unlock'}
           </button>
         </form>
 
-        <p className="text-center text-xs" style={{ color: 'var(--muted-foreground)' }}>
-          Sets a secure cookie — valid for 1 year per browser
-        </p>
+        {/* Demo link */}
+        <div className="flex flex-col items-center gap-2 pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-xs pt-3" style={{ color: 'var(--muted-foreground)' }}>
+            Not the operator?
+          </p>
+          <a
+            href="/demo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+            style={{ color: 'var(--color-cyan)' }}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            View platform demo
+          </a>
+        </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

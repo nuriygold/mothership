@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { LogOut } from 'lucide-react';
 
 interface ServiceStatus {
   name: string;
@@ -158,6 +160,7 @@ function buildServices(data: Record<string, { ok: boolean; reason?: string }> | 
 export function Header() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [now, setNow] = useState('');
+  const router = useRouter();
 
   useEffect(() => {
     const saved = (localStorage.getItem('mothership-theme') as 'light' | 'dark') || 'light';
@@ -214,7 +217,7 @@ export function Header() {
         ))}
       </div>
 
-      {/* Right: date/time + theme toggle */}
+      {/* Right: date/time + theme toggle + sign out */}
       <div className="flex items-center gap-3 flex-shrink-0">
         <span className="hidden sm:inline text-[11px]" style={{ color: 'var(--sidebar-foreground)', opacity: 0.65 }}>
           {now}
@@ -230,6 +233,22 @@ export function Header() {
           }}
         >
           {theme === 'light' ? 'Dark' : 'Light'}
+        </button>
+        <button
+          type="button"
+          title="Sign out"
+          onClick={async () => {
+            await fetch('/api/v2/auth/logout', { method: 'POST' });
+            router.push('/login' as Parameters<typeof router.push>[0]);
+          }}
+          className="rounded-full border p-2 transition-opacity hover:opacity-80"
+          style={{
+            borderColor: 'var(--sidebar-border)',
+            color: 'var(--sidebar-foreground)',
+            opacity: 0.55,
+          }}
+        >
+          <LogOut className="w-3.5 h-3.5" />
         </button>
       </div>
     </header>
