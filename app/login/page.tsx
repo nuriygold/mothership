@@ -123,7 +123,7 @@ function LoginForm() {
             Not the operator?
           </p>
           <a
-            href="/demo"
+            href="/demo.html"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
