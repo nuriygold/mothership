@@ -6,7 +6,7 @@ const OWNER_COOKIE = 'mothership-owner-id';
 // Paths that never require auth
 const PUBLIC_PREFIXES = [
   '/login',
-  '/demo',
+  '/demo.html',
   '/api/v2/auth/',
   '/_next/',
   '/favicon',
