@@ -876,65 +876,6 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     }
   }
 
-  // 3. Detect focus blocks (gaps > 30 min between calendar events, or after a single event through end of day)
-  if (calEvents.length >= 1) {
-    const tzLabel2 = process.env.APP_TIMEZONE || 'America/New_York';
-    const localDateStr2 = now.toLocaleDateString('en-CA', { timeZone: tzLabel2 });
-    const endOfDay = new Date(`${localDateStr2}T23:59:59`);
-
-    const sorted = [...calEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-
-    // Check gaps between consecutive events
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const endCurrent = sorted[i].endDate ?? sorted[i].startDate;
-      const startNext = sorted[i + 1].startDate;
-      const gapMs = new Date(startNext).getTime() - new Date(endCurrent).getTime();
-      const gapMin = gapMs / 60000;
-      if (gapMin >= 30) {
-        const focusStart = new Date(endCurrent);
-        const gapHours = Math.floor(gapMin / 60);
-        const gapRemMin = Math.round(gapMin % 60);
-        const durationLabel = gapHours > 0
-          ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
-          : `${gapRemMin}m`;
-        items.push({
-          time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel2 }),
-          title: `Focus Block — ${durationLabel} available`,
-          iconType: 'focus',
-          status: now > new Date(startNext) ? 'done' : now >= focusStart ? 'current' : 'upcoming',
-          type: 'focus-block',
-          startDate: focusStart.toISOString(),
-          endDate: startNext,
-          isDraggable: false,
-        });
-      }
-    }
-
-    // Check gap after the last event through end of day
-    const lastEvent = sorted[sorted.length - 1];
-    const lastEnd = lastEvent.endDate ?? lastEvent.startDate;
-    const gapAfterMs = endOfDay.getTime() - new Date(lastEnd).getTime();
-    const gapAfterMin = gapAfterMs / 60000;
-    if (gapAfterMin >= 30) {
-      const focusStart = new Date(lastEnd);
-      const gapHours = Math.floor(gapAfterMin / 60);
-      const gapRemMin = Math.round(gapAfterMin % 60);
-      const durationLabel = gapHours > 0
-        ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
-        : `${gapRemMin}m`;
-      items.push({
-        time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel2 }),
-        title: `Focus Block — ${durationLabel} available`,
-        iconType: 'focus',
-        status: now > endOfDay ? 'done' : now >= focusStart ? 'current' : 'upcoming',
-        type: 'focus-block',
-        startDate: focusStart.toISOString(),
-        endDate: endOfDay.toISOString(),
-        isDraggable: false,
-      });
-    }
-  }
-
   // Sort everything by startDate
   items.sort((a, b) => {
     const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;

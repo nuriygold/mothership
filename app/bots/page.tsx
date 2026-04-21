@@ -49,6 +49,14 @@ const BOT_DISPATCH_URL: Record<string, string> = {
   '6 God':          '/api/v2/anchor/dispatch',
 };
 
+const BOT_EMOJI: Record<string, string> = {
+  'Drake':          '🦅',
+  'Drizzy':         '💌',
+  'Champagne Papi': '🥂',
+  'Aubrey Graham':  '📜',
+  '6 God':          '⚡',
+};
+
 function BotCardSkeleton() {
   return (
     <div
@@ -193,7 +201,7 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
           </div>
           <div>
             <h3 className="text-lg font-semibold leading-tight" style={{ color: CARD_FG }}>
-              {bot.identity.name}
+              {BOT_EMOJI[bot.identity.name] ?? ''}{BOT_EMOJI[bot.identity.name] ? ' ' : ''}{bot.identity.name}
             </h3>
             <p className="text-xs" style={{ color: scheme.text }}>{bot.identity.role}</p>
           </div>
