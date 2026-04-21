@@ -36,7 +36,7 @@ type EmailRecommendation = {
 };
 
 const BUCKET_META: Record<EmailBucket, { label: string; icon: any; color: string; description: string; action: string }> = {
-  ON_FIRE:        { label: 'On Fire',        icon: Flame,        color: '#ef4444', description: 'Urgent — needs you today',                    action: 'Handle Now' },
+  ON_FIRE:        { label: 'On Fire',        icon: Flame,        color: '#ef4444', description: 'Urgent — needs you today',                    action: '' },
   BUSINESS:       { label: 'Business',       icon: Briefcase,    color: '#38bdf8', description: 'Work, clients, professional',                 action: 'Reply / Task' },
   FINANCIAL:      { label: 'Financial',      icon: DollarSign,   color: '#10b981', description: 'Bills, invoices, banking',                   action: 'Review' },
   MY_PEOPLE:      { label: 'My People',      icon: Users,        color: '#a78bfa', description: 'Friends, family, real humans',               action: 'Done' },
@@ -96,11 +96,12 @@ export default function EmailPage() {
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
   const fetchedIds = useRef<Set<string>>(new Set());
+  const dismissedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (emails.length === 0) return;
 
-    const emailsToFetch = emails.filter(e => !fetchedIds.current.has(e.id));
+    const emailsToFetch = emails.filter(e => !fetchedIds.current.has(e.id) && !dismissedIds.current.has(e.id));
     if (emailsToFetch.length === 0) return;
 
     emailsToFetch.forEach(e => fetchedIds.current.add(e.id));
@@ -172,6 +173,7 @@ export default function EmailPage() {
       setFeedbackMode(null);
     }
 
+    dismissedIds.current.add(emailId);
     setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
     setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
     if (selectedEmail === emailId) setSelectedEmail(null);
@@ -184,8 +186,9 @@ export default function EmailPage() {
   }
 
   function dismissEmail(emailId: string) {
-    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    dismissedIds.current.add(emailId);
     fetchedIds.current.delete(emailId);
+    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
     if (selectedEmail === emailId) setSelectedEmail(null);
   }
 
@@ -568,14 +571,16 @@ export default function EmailPage() {
                 </div>
 
                 <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => handleApproveAll(bucket)}
-                    className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1"
-                    style={{ background: meta.color, color: '#fff' }}
-                  >
-                    <CheckCircle className="w-3 h-3" />
-                    {meta.action}
-                  </button>
+                  {meta.action && (
+                    <button
+                      onClick={() => handleApproveAll(bucket)}
+                      className="rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1"
+                      style={{ background: meta.color, color: '#fff' }}
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      {meta.action}
+                    </button>
+                  )}
                   <button
                     onClick={() => { emails.filter(e => recommendations.get(e.id)?.bucket === bucket).forEach(e => handleArchive(e.id)); setSelectedBucket(null); }}
                     className="rounded-full px-3 py-1.5 text-xs"
@@ -635,14 +640,16 @@ export default function EmailPage() {
           <h1 className="text-xl font-semibold">{meta.label}</h1>
           <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{bucketEmails.length} email{bucketEmails.length !== 1 ? 's' : ''}</p>
         </div>
-        <button
-          onClick={() => handleApproveAll(selectedBucket)}
-          className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
-          style={{ background: meta.color, color: '#fff' }}
-        >
-          <CheckCircle className="w-3 h-3" />
-          {meta.action} All
-        </button>
+        {meta.action && (
+          <button
+            onClick={() => handleApproveAll(selectedBucket)}
+            className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+            style={{ background: meta.color, color: '#fff' }}
+          >
+            <CheckCircle className="w-3 h-3" />
+            {meta.action} All
+          </button>
+        )}
         <button
           onClick={() => { bucketEmails.forEach(e => handleArchive(e.id)); setSelectedBucket(null); }}
           className="rounded-full px-4 py-2 text-xs"
@@ -710,14 +717,16 @@ export default function EmailPage() {
                   )}
                 </div>
                 <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => handleApprove(email.id)}
-                    disabled={isProcessing}
-                    className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                    style={{ background: meta.color, color: '#fff' }}
-                  >
-                    {isProcessing ? '…' : meta.action}
-                  </button>
+                  {meta.action && (
+                    <button
+                      onClick={() => handleApprove(email.id)}
+                      disabled={isProcessing}
+                      className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                      style={{ background: meta.color, color: '#fff' }}
+                    >
+                      {isProcessing ? '…' : meta.action}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleArchive(email.id)}
                     disabled={isProcessing}
@@ -900,7 +909,7 @@ export default function EmailPage() {
                         <Calendar className="w-3 h-3" />
                         {processing.has(detailEmail.id) ? 'Adding to Calendar…' : 'RSVP + Add to Calendar'}
                       </button>
-                    ) : (
+                    ) : meta.action ? (
                       <button
                         onClick={() => handleApprove(detailEmail.id)}
                         disabled={processing.has(detailEmail.id)}
@@ -910,7 +919,7 @@ export default function EmailPage() {
                         <CheckCircle className="w-3 h-3" />
                         {processing.has(detailEmail.id) ? 'Processing…' : meta.action}
                       </button>
-                    )}
+                    ) : null}
                     <button
                       onClick={() => handleArchive(detailEmail.id)}
                       className="rounded-full px-4 py-2 text-xs flex items-center gap-1"
