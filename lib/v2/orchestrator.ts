@@ -770,10 +770,6 @@ export async function getV2Activity(page = 1, pageSize = 25): Promise<V2Activity
 
 export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   const tasksFeed = await getV2TasksFeed();
-  const [tasksFeed] = await Promise.all([
-    getV2TasksFeed(),
-  ]);
-
   const timeline = await buildTimeline(tasksFeed);
 
   return {
