@@ -34,11 +34,29 @@ export function DailyBriefing({ tasksData, campaigns }: DailyBriefingProps) {
   const plannedCampaigns = campaigns?.filter((c) => c.status && PLANNED_STATUSES.has(c.status)).length ?? 0;
 
   return (
-    <div className="flex flex-col gap-1.5" style={{ marginTop: '2px' }}>
+    <div
+      className="rounded-2xl px-4 py-3 flex flex-col gap-2"
+      style={{
+        background: 'rgba(0,217,255,0.06)',
+        borderLeft: '3px solid var(--color-cyan)',
+        border: '1px solid rgba(0,217,255,0.18)',
+        borderLeftWidth: '3px',
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-cyan)' }}>
+          📋 Today&apos;s Briefing
+        </span>
+        <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+          {formatDate()}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         {/* Tasks */}
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--ice2)' }} />
-          <span className="text-sm" style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--ice-text)' }}>
+          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />
+          <span className="text-sm" style={{ color: 'var(--foreground)' }}>
             {tasksData ? (
               <>
                 <span className="font-medium">{activeTaskCount}</span> task{activeTaskCount !== 1 ? 's' : ''} active
@@ -47,15 +65,15 @@ export function DailyBriefing({ tasksData, campaigns }: DailyBriefingProps) {
                 )}
               </>
             ) : (
-              <span style={{ color: 'var(--ice-text3)' }}>Loading tasks…</span>
+              <span style={{ color: 'var(--muted-foreground)' }}>Loading tasks…</span>
             )}
           </span>
         </div>
 
         {/* Email */}
         <div className="flex items-center gap-2">
-          <Mail className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--ice2)' }} />
-          <span className="text-sm" style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--ice-text)' }}>
+          <Mail className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />
+          <span className="text-sm" style={{ color: 'var(--foreground)' }}>
             <Link href="/email" className="underline decoration-dotted hover:opacity-80 transition-opacity">
               Check inbox
             </Link>
@@ -65,8 +83,8 @@ export function DailyBriefing({ tasksData, campaigns }: DailyBriefingProps) {
 
         {/* Campaigns */}
         <div className="flex items-center gap-2">
-          <Send className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--ice2)' }} />
-          <span className="text-sm" style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--ice-text)' }}>
+          <Send className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />
+          <span className="text-sm" style={{ color: 'var(--foreground)' }}>
             {campaigns ? (
               <>
                 Campaigns:{' '}
@@ -82,6 +100,7 @@ export function DailyBriefing({ tasksData, campaigns }: DailyBriefingProps) {
             )}
           </span>
         </div>
+      </div>
     </div>
   );
 }
