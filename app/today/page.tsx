@@ -98,7 +98,7 @@ export default function TodayPage() {
     }
     connect();
     return () => stream?.close();
-  }, [mutate]);
+  }, [mutate, mutateTasks]);
 
   // Toast auto-hide
   useEffect(() => {
@@ -207,7 +207,7 @@ export default function TodayPage() {
       setToastMsg(`Couldn't complete "${title}"`);
       logTodayClientFailure('task_complete', error, { taskId });
     }
-  }, [mutate, mergedTimeline]);
+  }, [mutate, mutateTasks, mergedTimeline]);
 
   // ── Undo Done (from Trophy) ──
   const handleUndoDone = useCallback(async (taskId: string) => {
@@ -233,7 +233,7 @@ export default function TodayPage() {
       setToastMsg(`Couldn't defer "${title}"`);
       logTodayClientFailure('task_defer', error, { taskId });
     }
-  }, [mergedTimeline, mutate]);
+  }, [mergedTimeline, mutate, mutateTasks]);
 
   // ── Gateway → Navigate to Ruby ──
   const handleGateway = useCallback((title: string) => {
@@ -308,7 +308,6 @@ export default function TodayPage() {
       logTodayClientFailure('task_assign', error, { taskId, botName: normalizedBot, ownerLogin });
     }
   }, [mutate, mutateTasks]);
-
 
   // ── Take Action ──
   const handleTakeAction = useCallback((item: V2DashboardPriorityItem) => {
