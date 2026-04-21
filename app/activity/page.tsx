@@ -1,388 +1,292 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
 import type { V2ActivityFeed, V2ActivityItem } from '@/lib/v2/types';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PAGE_SIZE = 25;
-
-type FilterCategory = 'All' | 'Tasks' | 'Email' | 'Bots' | 'Campaigns' | 'Finance';
-
-const FILTER_PILLS: FilterCategory[] = ['All', 'Tasks', 'Email', 'Bots', 'Campaigns', 'Finance'];
-
-// ─── Category helpers ─────────────────────────────────────────────────────────
-
-type CategoryMeta = {
-  label: FilterCategory;
-  dot: string;      // inline bg color for the dot
-  bg: string;       // badge background
-  text: string;     // badge text color
-};
-
-function categorise(evt: V2ActivityItem): CategoryMeta {
-  const et = (evt.eventType ?? '').toLowerCase();
-  const src = (evt.sourceIntegration ?? '').toLowerCase();
-  const actor = (evt.actor ?? '').toLowerCase();
-
-  // Finance
-  if (et.includes('payment') || et.includes('invoice') || et.includes('finance') || et.includes('transaction')) {
-    return { label: 'Finance', dot: '#22c55e', bg: 'var(--color-mint)', text: 'var(--color-mint-text)' };
-  }
-  // Campaign
-  if (et.includes('campaign') || et.includes('dispatch')) {
-    return { label: 'Campaigns', dot: '#a78bfa', bg: 'var(--color-lavender)', text: 'var(--color-lavender-text)' };
-  }
-  // Email
-  if (et.includes('email') || src.includes('gmail') || src.includes('zoho') || src.includes('mail')) {
-    return { label: 'Email', dot: '#f472b6', bg: 'var(--color-pink)', text: 'var(--color-pink-text)' };
-  }
-  // Task
-  if (et.includes('task') || et.includes('issue') || et.includes('pr') || et.includes('pull')) {
-    return { label: 'Tasks', dot: '#00D9FF', bg: 'var(--color-sky)', text: 'var(--color-sky-text)' };
-  }
-  // Bot (actor is not "system" and not empty)
-  if (actor && actor !== 'system') {
-    return { label: 'Bots', dot: '#34d399', bg: 'var(--color-mint)', text: 'var(--color-mint-text)' };
-  }
-  // Default / System
-  return { label: 'All', dot: '#94a3b8', bg: 'var(--muted)', text: 'var(--muted-foreground)' };
-}
-
-function matchesCategory(evt: V2ActivityItem, filter: FilterCategory): boolean {
-  if (filter === 'All') return true;
-  return categorise(evt).label === filter;
-}
-
-// ─── Relative time ────────────────────────────────────────────────────────────
-
-function relativeTime(isoTimestamp: string): string {
-  const diff = Date.now() - new Date(isoTimestamp).getTime();
-  const sec  = Math.floor(diff / 1000);
-  if (sec < 60)  return `${sec}s ago`;
-  const min  = Math.floor(sec / 60);
-  if (min < 60)  return `${min}m ago`;
-  const hr   = Math.floor(min / 60);
-  if (hr  < 24)  return `${hr}h ago`;
-  const day  = Math.floor(hr  / 24);
-  if (day === 1) return 'Yesterday';
-  if (day <   7) return `${day}d ago`;
-  return new Date(isoTimestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-// ─── Fetcher ──────────────────────────────────────────────────────────────────
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-function buildUrl(page: number) {
-  return `/api/v2/activity/log?page=${page}&pageSize=${PAGE_SIZE}`;
+// ─── Category logic ────────────────────────────────────────────────────────────
+
+type Category = 'All' | 'Tasks' | 'Email' | 'Bots' | 'Campaigns' | 'Finance';
+
+const CATEGORIES: Category[] = ['All', 'Tasks', 'Email', 'Bots', 'Campaigns', 'Finance'];
+
+function categorise(evt: V2ActivityItem): Exclude<Category, 'All'> {
+  const hay = `${evt.eventType} ${evt.description} ${evt.sourceIntegration}`.toLowerCase();
+  if (/payment|invoice|bill|charge|receipt|transaction|expense|payable|revenue|subscription/.test(hay)) return 'Finance';
+  if (/campaign|dispatch|execution|lane/.test(hay)) return 'Campaigns';
+  if (/email|gmail|zoho|mail|inbox|draft|reply/.test(hay)) return 'Email';
+  if (/task|issue|pr|pull.?request|ticket|linear/.test(hay)) return 'Tasks';
+  if (evt.actor && evt.actor !== 'System' && evt.actor !== '') return 'Bots';
+  return 'Tasks';
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+const DOT_COLOR: Record<Exclude<Category, 'All'>, string> = {
+  Finance:   '#22c55e',
+  Campaigns: '#a855f7',
+  Email:     '#ec4899',
+  Tasks:     '#00D9FF',
+  Bots:      '#10b981',
+};
 
-function LoadingSkeleton() {
+const BADGE_STYLE: Record<Exclude<Category, 'All'>, { bg: string; color: string }> = {
+  Finance:   { bg: 'rgba(34,197,94,0.12)',  color: '#86efac' },
+  Campaigns: { bg: 'rgba(168,85,247,0.12)', color: '#d8b4fe' },
+  Email:     { bg: 'rgba(236,72,153,0.12)', color: '#f9a8d4' },
+  Tasks:     { bg: 'rgba(0,217,255,0.12)',  color: '#67e8f9' },
+  Bots:      { bg: 'rgba(16,185,129,0.12)', color: '#6ee7b7' },
+};
+
+// ─── Relative time ─────────────────────────────────────────────────────────────
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ─── Pill badge ────────────────────────────────────────────────────────────────
+
+function Pill({ text, style }: { text: string; style: { bg: string; color: string } }) {
+  if (!text) return null;
   return (
-    <div className="space-y-2">
+    <span
+      className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium leading-none"
+      style={{ background: style.bg, color: style.color }}
+    >
+      {text}
+    </span>
+  );
+}
+
+// ─── Event card ────────────────────────────────────────────────────────────────
+
+function EventCard({ evt }: { evt: V2ActivityItem }) {
+  const cat = categorise(evt);
+  const dot = DOT_COLOR[cat];
+  const badge = BADGE_STYLE[cat];
+
+  return (
+    <div
+      className="flex items-start gap-3 rounded-2xl px-4 py-3 transition-opacity hover:opacity-90"
+      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+    >
+      {/* Colored dot */}
+      <div className="mt-1.5 flex-shrink-0">
+        <span
+          className="block w-2 h-2 rounded-full"
+          style={{ background: dot, boxShadow: `0 0 6px ${dot}80` }}
+        />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm leading-snug" style={{ color: 'var(--foreground)' }}>
+          {evt.description}
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+          <Pill text={cat} style={badge} />
+          {evt.actor && evt.actor !== 'System' && (
+            <Pill text={evt.actor} style={{ bg: 'rgba(255,255,255,0.06)', color: 'var(--muted-foreground)' }} />
+          )}
+          {evt.eventType && (
+            <Pill text={evt.eventType} style={{ bg: 'rgba(255,255,255,0.06)', color: 'var(--muted-foreground)' }} />
+          )}
+          {evt.sourceIntegration && (
+            <Pill text={evt.sourceIntegration} style={{ bg: 'rgba(255,255,255,0.06)', color: 'var(--muted-foreground)' }} />
+          )}
+        </div>
+      </div>
+
+      {/* Timestamp */}
+      <span className="flex-shrink-0 text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+        {relativeTime(evt.timestamp)}
+      </span>
+    </div>
+  );
+}
+
+// ─── Skeleton ──────────────────────────────────────────────────────────────────
+
+function Skeleton() {
+  return (
+    <div className="flex flex-col gap-2">
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="rounded-xl animate-pulse"
-          style={{ height: '60px', background: 'var(--muted)' }}
-        />
+          className="flex items-start gap-3 rounded-2xl px-4 py-3 animate-pulse"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="mt-1.5 w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--muted)' }} />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 rounded-full w-3/4" style={{ background: 'var(--muted)' }} />
+            <div className="h-2.5 rounded-full w-1/3" style={{ background: 'var(--muted)' }} />
+          </div>
+          <div className="h-2.5 w-10 rounded-full flex-shrink-0" style={{ background: 'var(--muted)' }} />
+        </div>
       ))}
     </div>
   );
 }
 
-function EmptyState({ filter, search }: { filter: FilterCategory; search: string }) {
-  return (
-    <div
-      className="flex flex-col items-center justify-center py-20 gap-3 rounded-2xl"
-      style={{ background: 'var(--muted)' }}
-    >
-      {/* Simple inbox icon via SVG */}
-      <svg
-        width="40"
-        height="40"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="var(--muted-foreground)"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M22 12h-6l-2 3H10l-2-3H2" />
-        <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
-      </svg>
-      <p className="text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>
-        No events found
-      </p>
-      <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-        {search
-          ? `No results for "${search}"${filter !== 'All' ? ` in ${filter}` : ''}`
-          : filter !== 'All'
-          ? `No ${filter.toLowerCase()} events yet`
-          : 'No activity has been recorded yet'}
-      </p>
-    </div>
-  );
-}
-
-function EventCard({ evt }: { evt: V2ActivityItem }) {
-  const cat = categorise(evt);
-  const isSystem = !evt.actor || evt.actor.toLowerCase() === 'system';
-
-  return (
-    <div
-      className="flex items-start gap-3 rounded-xl px-4 py-3 transition-colors"
-      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-    >
-      {/* Colored dot */}
-      <div className="flex-shrink-0 mt-1.5">
-        <div
-          className="rounded-full"
-          style={{ width: '8px', height: '8px', background: cat.dot, boxShadow: `0 0 4px ${cat.dot}80` }}
-        />
-      </div>
-
-      {/* Center: description + badges */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>
-          {evt.description}
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-          {/* Actor badge */}
-          <span
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-            style={{ background: cat.bg, color: cat.text }}
-          >
-            {isSystem ? 'System' : evt.actor}
-          </span>
-
-          {/* Event type tag */}
-          {evt.eventType && (
-            <span
-              className="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
-              style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
-            >
-              {evt.eventType}
-            </span>
-          )}
-
-          {/* Source integration tag */}
-          {evt.sourceIntegration && evt.sourceIntegration !== 'Internal' && (
-            <span
-              className="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
-              style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
-            >
-              {evt.sourceIntegration}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Right: relative time */}
-      <div className="flex-shrink-0 text-right">
-        <span className="text-xs whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>
-          {relativeTime(evt.timestamp)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ActivityPage() {
-  const [page, setPage]           = useState(1);
-  const [filter, setFilter]       = useState<FilterCategory>('All');
-  const [search, setSearch]       = useState('');
-  // Accumulate pages of events so "Load more" appends rather than replaces
+  const [page, setPage] = useState(1);
   const [allEvents, setAllEvents] = useState<V2ActivityItem[]>([]);
+  const [activeFilter, setActiveFilter] = useState<Category>('All');
+  const [search, setSearch] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const { data, isLoading, mutate } = useSWR<V2ActivityFeed>(
-    buildUrl(page),
+  const url = `/api/v2/activity/log?page=1&pageSize=50&_r=${refreshKey}`;
+  const { data, isLoading, mutate } = useSWR<V2ActivityFeed>(url, fetcher, {
+    refreshInterval: 30000,
+    onSuccess: (fresh) => {
+      if (page === 1) setAllEvents(fresh.events);
+    },
+  });
+
+  // Load more
+  const { data: moreData, isLoading: loadingMore } = useSWR<V2ActivityFeed>(
+    page > 1 ? `/api/v2/activity/log?page=${page}&pageSize=50` : null,
     fetcher,
     {
-      refreshInterval: 30_000,
-      onSuccess: (incoming) => {
-        if (page === 1) {
-          setAllEvents(incoming.events ?? []);
-        } else {
-          setAllEvents((prev) => {
-            const existingIds = new Set(prev.map((e) => e.id));
-            const newEvts = (incoming.events ?? []).filter((e) => !existingIds.has(e.id));
-            return [...prev, ...newEvts];
-          });
-        }
+      onSuccess: (fresh) => {
+        setAllEvents((prev) => {
+          const ids = new Set(prev.map((e) => e.id));
+          return [...prev, ...fresh.events.filter((e) => !ids.has(e.id))];
+        });
       },
-    },
+    }
   );
 
-  const handleRefresh = useCallback(() => {
+  const hasMore = page === 1 ? (data?.hasMore ?? false) : (moreData?.hasMore ?? false);
+
+  const filtered = useMemo(() => {
+    let evts = allEvents.length > 0 ? allEvents : (data?.events ?? []);
+    if (activeFilter !== 'All') {
+      evts = evts.filter((e) => categorise(e) === activeFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      evts = evts.filter((e) =>
+        e.description.toLowerCase().includes(q) ||
+        e.actor.toLowerCase().includes(q) ||
+        e.eventType.toLowerCase().includes(q) ||
+        e.sourceIntegration.toLowerCase().includes(q)
+      );
+    }
+    return evts;
+  }, [allEvents, data, activeFilter, search]);
+
+  function handleRefresh() {
     setPage(1);
     setAllEvents([]);
+    setRefreshKey((k) => k + 1);
     void mutate();
-  }, [mutate]);
-
-  const handleLoadMore = useCallback(() => {
-    setPage((p) => p + 1);
-  }, []);
-
-  // ── Client-side filter + search ───────────────────────────────────────────────
-  const q = search.trim().toLowerCase();
-  const filtered = useMemo(
-    () =>
-      allEvents.filter(
-        (evt) =>
-          matchesCategory(evt, filter) &&
-          (!q ||
-            evt.description?.toLowerCase().includes(q) ||
-            evt.actor?.toLowerCase().includes(q) ||
-            evt.eventType?.toLowerCase().includes(q) ||
-            evt.sourceIntegration?.toLowerCase().includes(q)),
-      ),
-    [allEvents, filter, q],
-  );
-
-  const hasMore = data?.hasMore ?? false;
-  const showEmpty = !isLoading && filtered.length === 0;
+  }
 
   return (
     <div className="flex flex-col gap-5">
-      {/* ── Header ─────────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
-            Activity
-          </h1>
+          <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Activity</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-            System-wide event log
+            System-wide event log · everything Mothership has done
           </p>
         </div>
-
-        {/* Refresh button */}
-        <Button
-          variant="outline"
-          size="sm"
+        <button
           onClick={handleRefresh}
           disabled={isLoading}
-          className="flex items-center gap-1.5"
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm transition-opacity hover:opacity-70 disabled:opacity-40"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }}
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ opacity: isLoading ? 0.5 : 1 }}
-          >
-            <path d="M23 4v6h-6" />
-            <path d="M1 20v-6h6" />
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-          </svg>
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
-        </Button>
+        </button>
       </div>
 
-      {/* ── Filters + search bar ────────────────────────────────────────────────── */}
-      <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        {/* Filter pills */}
-        <div className="flex flex-wrap gap-1.5 flex-1">
-          {FILTER_PILLS.map((pill) => {
-            const active = filter === pill;
-            return (
-              <button
-                key={pill}
-                onClick={() => setFilter(pill)}
-                className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
-                style={{
-                  background: active ? 'var(--primary)' : 'var(--muted)',
-                  color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {pill}
-              </button>
-            );
-          })}
-        </div>
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="Search events…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full rounded-2xl px-4 py-2.5 text-sm outline-none"
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          color: 'var(--foreground)',
+        }}
+      />
 
-        {/* Search */}
-        <div className="relative flex-shrink-0 sm:w-56">
-          <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--muted-foreground)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search events…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2"
-            style={{
-              background: 'var(--input-background)',
-              border: '1px solid var(--border)',
-              color: 'var(--foreground)',
-            }}
-          />
-        </div>
-      </Card>
-
-      {/* ── Event list ──────────────────────────────────────────────────────────── */}
-      <div className="space-y-2">
-        {isLoading && allEvents.length === 0 ? (
-          <LoadingSkeleton />
-        ) : showEmpty ? (
-          <EmptyState filter={filter} search={search} />
-        ) : (
-          <>
-            {filtered.map((evt) => (
-              <EventCard key={evt.id} evt={evt} />
-            ))}
-
-            {/* Load more */}
-            {hasMore && (
-              <div className="flex justify-center pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadMore}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Loading…' : 'Load more'}
-                </Button>
-              </div>
-            )}
-
-            {/* Count summary */}
-            {filtered.length > 0 && (
-              <p className="text-center text-xs pt-1" style={{ color: 'var(--muted-foreground)' }}>
-                Showing {filtered.length} event{filtered.length !== 1 ? 's' : ''}
-                {filter !== 'All' ? ` · ${filter}` : ''}
-                {q ? ` · "${search}"` : ''}
-              </p>
-            )}
-          </>
-        )}
+      {/* Filter pills */}
+      <div className="flex flex-wrap gap-2">
+        {CATEGORIES.map((cat) => {
+          const active = cat === activeFilter;
+          return (
+            <button
+              key={cat}
+              onClick={() => setActiveFilter(cat)}
+              className="rounded-full px-3 py-1 text-xs font-medium transition-all"
+              style={{
+                background: active ? 'var(--color-cyan)' : 'var(--card)',
+                color: active ? '#0A0E1A' : 'var(--muted-foreground)',
+                border: active ? '1px solid var(--color-cyan)' : '1px solid var(--border)',
+              }}
+            >
+              {cat}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Event list */}
+      {isLoading && allEvents.length === 0 ? (
+        <Skeleton />
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <span className="text-4xl opacity-30">📭</span>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            {search || activeFilter !== 'All' ? 'No events match your filters.' : 'No events yet.'}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filtered.map((evt) => <EventCard key={evt.id} evt={evt} />)}
+        </div>
+      )}
+
+      {/* Footer: count + load more */}
+      {filtered.length > 0 && (
+        <div className="flex items-center justify-between pt-1">
+          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+            {filtered.length} event{filtered.length !== 1 ? 's' : ''}
+            {activeFilter !== 'All' && ` · ${activeFilter}`}
+            {search && ` · "${search}"`}
+          </p>
+          {hasMore && !search && activeFilter === 'All' && (
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={loadingMore}
+              className="text-xs font-medium transition-opacity hover:opacity-70 disabled:opacity-40"
+              style={{ color: 'var(--color-cyan)' }}
+            >
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
