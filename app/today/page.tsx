@@ -9,7 +9,7 @@ import {
   ListChecks, MessageSquare,
   Send, Sparkles, Rocket,
 } from 'lucide-react';
-import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { TrophyModal } from '@/components/today/trophy-modal';
 import { NowLine } from '@/components/today/now-line';
 import { TakeActionModal } from '@/components/today/take-action-modal';
@@ -299,17 +299,15 @@ export default function TodayPage() {
       const payload = await assignRes.json().catch(() => ({} as AssignTaskResponse));
       await mutate();
       await mutateTasks();
-      if (telegramRes.ok) {
-        setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
-      } else {
-        setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot} (Telegram notify failed)`);
+      setToastMsg(`"${taskTitle}" assigned to ${payload.assigned ?? normalizedBot}`);
+      if (!telegramRes.ok) {
         logTodayClientFailure('assignment_telegram', new Error(`Telegram notify failed (${telegramRes.status})`), { taskId, botName: normalizedBot });
       }
     } catch (error) {
       setToastMsg(`Couldn't assign "${taskTitle}" to ${normalizedBot}`);
       logTodayClientFailure('task_assign', error, { taskId, botName: normalizedBot, ownerLogin });
     }
-  }, [mutate]);
+  }, [mutate, mutateTasks]);
 
 
   // ── Take Action ──
