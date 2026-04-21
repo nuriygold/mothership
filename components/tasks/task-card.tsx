@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, GitBranch, AlertTriangle, Layers, Zap, GripVertical } from 'lucide-react';
+import { Clock, GitBranch, AlertTriangle, Layers, Zap, GripVertical, CheckSquare, Square } from 'lucide-react';
 import type { V2TaskItem } from '@/lib/v2/types';
 
 const STATUS_BADGE: Record<string, { bg: string; color: string; label: string }> = {
@@ -39,9 +39,13 @@ interface TaskCardProps {
   onTakeAction: (task: V2TaskItem) => void;
   /** Opens the detail modal when the card body is clicked */
   onCardClick?: (task: V2TaskItem) => void;
+  /** When true, a checkbox appears and card clicks toggle selection */
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (taskId: string) => void;
 }
 
-export function TaskCard({ task, visionBoardLinked, onTakeAction, onCardClick }: TaskCardProps) {
+export function TaskCard({ task, visionBoardLinked, onTakeAction, onCardClick, selectMode, selected, onToggleSelect }: TaskCardProps) {
   const badge      = STATUS_BADGE[task.status] ?? STATUS_BADGE.Queued;
   const botStyle   = BOT_COLORS[task.metadata.assignedBot] ?? { bg: 'var(--muted)', color: 'var(--muted-foreground)' };
   const leftBorder = LEFT_BORDER[task.status] ?? 'var(--border)';
@@ -52,22 +56,42 @@ export function TaskCard({ task, visionBoardLinked, onTakeAction, onCardClick }:
     ? task.taskId.slice(0, 7).toUpperCase()
     : task.taskId.toUpperCase();
 
+  const handleCardClick = () => {
+    if (selectMode) {
+      onToggleSelect?.(task.taskId);
+    } else {
+      onCardClick?.(task);
+    }
+  };
+
   return (
     <div
       data-task-id={task.taskId}
       data-draggable="true"
       className="group rounded-2xl p-3.5 flex flex-col gap-2.5 transition-shadow hover:shadow-md"
       style={{
-        background:  'var(--card)',
-        border:      '1px solid var(--border)',
+        background:  selected ? 'rgba(0,217,255,0.08)' : 'var(--card)',
+        border:      selected ? '1px solid rgba(0,217,255,0.5)' : '1px solid var(--border)',
         borderLeft:  `3px solid ${leftBorder}`,
-        boxShadow:   '0 1px 4px rgba(0,0,0,0.04)',
+        boxShadow:   selected ? '0 0 0 2px rgba(0,217,255,0.15)' : '0 1px 4px rgba(0,0,0,0.04)',
         cursor:      'pointer',
       }}
-      onClick={() => onCardClick?.(task)}
+      onClick={handleCardClick}
     >
       {/* Row 1: ID + status + vision board badge */}
       <div className="flex items-center gap-2 flex-wrap">
+        {selectMode && (
+          <span
+            className="flex-shrink-0"
+            style={{ color: selected ? 'var(--color-cyan)' : 'var(--muted-foreground)' }}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect?.(task.taskId); }}
+          >
+            {selected
+              ? <CheckSquare className="w-4 h-4" />
+              : <Square className="w-4 h-4" />
+            }
+          </span>
+        )}
         <span
           className="rounded px-1.5 py-0.5 text-[10px] font-mono font-medium flex-shrink-0"
           style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
@@ -140,20 +164,22 @@ export function TaskCard({ task, visionBoardLinked, onTakeAction, onCardClick }:
         </span>
       </div>
 
-      {/* Row 4: Take Action button */}
-      <div className="pt-0.5 border-t" style={{ borderColor: 'var(--border)' }}>
-        <button
-          onClick={(e) => { e.stopPropagation(); onTakeAction(task); }}
-          className="w-full flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
-          style={{
-            background: 'var(--color-cyan)',
-            color: '#0A0E1A',
-          }}
-        >
-          <Zap className="w-3 h-3" />
-          Take Action
-        </button>
-      </div>
+      {/* Row 4: Take Action button — hidden in select mode */}
+      {!selectMode && (
+        <div className="pt-0.5 border-t" style={{ borderColor: 'var(--border)' }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onTakeAction(task); }}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
+            style={{
+              background: 'var(--color-cyan)',
+              color: '#0A0E1A',
+            }}
+          >
+            <Zap className="w-3 h-3" />
+            Take Action
+          </button>
+        </div>
+      )}
     </div>
   );
 }
