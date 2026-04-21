@@ -260,8 +260,6 @@ export default function EmailPage() {
       if (json?.unsubscribeUrl) window.open(json.unsubscribeUrl, '_blank');
     } catch { /* ignore */ }
     setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
-    setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
-    if (selectedEmail === emailId) setSelectedEmail(null);
   }
 
   async function handleAddToShoppingList(emailId: string) {
