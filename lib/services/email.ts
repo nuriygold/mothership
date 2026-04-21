@@ -545,6 +545,21 @@ export async function fetchZohoFullBody(uid: string): Promise<EmailFullBody> {
   }
 }
 
+export async function archiveGmailMessage(messageId: string): Promise<{ ok: boolean; error?: string }> {
+  const gmail = getGmailOAuth();
+  if (!gmail) return { ok: false, error: 'Gmail OAuth credentials missing.' };
+  try {
+    await gmail.users.messages.modify({
+      userId: 'me',
+      id: messageId,
+      requestBody: { removeLabelIds: ['INBOX'] },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function deleteGmailMessage(messageId: string): Promise<{ ok: boolean; error?: string }> {
   const gmail = getGmailOAuth();
   if (!gmail) return { ok: false, error: 'Gmail OAuth credentials missing.' };
