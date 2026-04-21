@@ -2,9 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Route = any;
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -127,7 +124,7 @@ export function CommandPalette() {
   const handleSelect = useCallback(
     (item: CommandItem) => {
       handleClose();
-      router.push(item.href as Route);
+      router.push(item.href as Parameters<ReturnType<typeof useRouter>['push']>[0]);
     },
     [handleClose, router]
   );
