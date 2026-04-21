@@ -291,30 +291,6 @@ export default function EmailPage() {
     setProcessing(prev => { const n = new Set(prev); n.delete(emailId); return n; });
   }
 
-  async function handleDeleteAll(bucket: EmailBucket) {
-    const targets = emails.filter(e => recommendations.get(e.id)?.bucket === bucket);
-    targets.forEach(e => dismissEmail(e.id));
-    setSelectedBucket(null);
-    await Promise.all(
-      targets
-        .filter(e => e.sourceIntegration === 'Gmail')
-        .map(e => fetch(`/api/v2/email/${e.id}/delete`, { method: 'POST' }).catch(() => {}))
-    );
-  }
-
-  async function handleUnsubscribeAll(bucket: EmailBucket) {
-    const targets = emails.filter(e => recommendations.get(e.id)?.bucket === bucket);
-    await Promise.all(
-      targets.map(async e => {
-        try {
-          const res = await fetch(`/api/v2/email/${e.id}/unsubscribe`, { method: 'POST' });
-          const json = res.ok ? await res.json() : null;
-          if (json?.unsubscribeUrl) window.open(json.unsubscribeUrl, '_blank');
-        } catch { /* ignore */ }
-      })
-    );
-  }
-
   async function handleAddToShoppingList(emailId: string) {
     setProcessing(prev => new Set(prev).add(emailId));
     try {
