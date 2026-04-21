@@ -314,11 +314,13 @@ export default function EmailPage() {
     if (!search.trim()) return null;
     const q = search.toLowerCase();
     return emails.filter(e =>
-      e.sender.toLowerCase().includes(q) ||
-      e.subject.toLowerCase().includes(q) ||
-      (e.snippet || e.preview || '').toLowerCase().includes(q)
+      recommendations.has(e.id) && (
+        e.sender.toLowerCase().includes(q) ||
+        e.subject.toLowerCase().includes(q) ||
+        (e.snippet || e.preview || '').toLowerCase().includes(q)
+      )
     );
-  }, [emails, search]);
+  }, [emails, search, recommendations]);
 
   useEffect(() => { setSelectedSearchIds(new Set()); }, [search]);
 
