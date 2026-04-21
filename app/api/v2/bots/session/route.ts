@@ -2,13 +2,13 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'node:crypto';
+import { OWNER_COOKIE, DEVICE_COOKIE } from '@/lib/services/owner';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const VALID_BOTS = new Set(['adrian', 'ruby', 'emerald', 'adobe', 'anchor']);
-const COOKIE = 'mothership-device-id';
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -19,14 +19,19 @@ export async function GET(req: Request) {
   }
 
   const jar = cookies();
-  let deviceId = jar.get(COOKIE)?.value ?? '';
 
-  const isNew = !deviceId;
-  if (isNew) deviceId = randomUUID();
+  // Owner session (cross-browser) takes priority over device session
+  const ownerId = jar.get(OWNER_COOKIE)?.value?.trim();
+  const identityPrefix = ownerId ? `owner:${ownerId}` : null;
 
-  const sessionTitle = `device:${deviceId}:bot:${bot}`;
+  let deviceId = jar.get(DEVICE_COOKIE)?.value ?? '';
+  const isNewDevice = !deviceId && !ownerId;
+  if (!deviceId) deviceId = randomUUID();
 
-  // Find or create a ChatSession for this device+bot pair
+  const sessionTitle = identityPrefix
+    ? `${identityPrefix}:bot:${bot}`
+    : `device:${deviceId}:bot:${bot}`;
+
   let session = await prisma.chatSession.findFirst({
     where: { title: sessionTitle },
     select: { id: true },
@@ -39,10 +44,13 @@ export async function GET(req: Request) {
     });
   }
 
-  const res = NextResponse.json({ sessionId: session.id, deviceId });
+  const res = NextResponse.json({
+    sessionId: session.id,
+    identity: ownerId ? 'owner' : 'device',
+  });
 
-  if (isNew) {
-    res.cookies.set(COOKIE, deviceId, {
+  if (isNewDevice) {
+    res.cookies.set(DEVICE_COOKIE, deviceId, {
       httpOnly: true,
       sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE,
