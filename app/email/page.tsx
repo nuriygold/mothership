@@ -6,7 +6,7 @@ import {
   Flame, Briefcase, DollarSign, Users, PartyPopper,
   ShoppingBag, Code2, BookOpen, Plane,
   CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft, ExternalLink, Calendar, Search,
-  ListPlus, Trash2, Eye, UserX, Sparkles,
+  ListPlus, Trash2, Eye, UserX, Sparkles, Square, CheckSquare,
 } from 'lucide-react';
 import type { V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
 
@@ -92,6 +92,7 @@ export default function EmailPage() {
   const [sendingReply, setSendingReply] = useState<Set<string>>(new Set());
   const [replyError, setReplyError] = useState<Map<string, string>>(new Map());
   const [replySent, setReplySent] = useState<Set<string>>(new Set());
+  const [selectedSearchIds, setSelectedSearchIds] = useState<Set<string>>(new Set());
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
   const fetchedIds = useRef<Set<string>>(new Set());
@@ -293,6 +294,8 @@ export default function EmailPage() {
     );
   }, [emails, search]);
 
+  useEffect(() => { setSelectedSearchIds(new Set()); }, [search]);
+
   const buckets = useMemo(() => {
     const grouped = new Map<EmailBucket, V2EmailItem[]>();
     emails.forEach(email => {
@@ -346,7 +349,88 @@ export default function EmailPage() {
         {/* Search results */}
         {searchResults && (
           <div className="space-y-2">
-            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</p>
+            {/* Header row: count + select-all + bulk actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+                {selectedSearchIds.size > 0 && ` · ${selectedSearchIds.size} selected`}
+              </p>
+              {searchResults.length > 0 && (
+                <button
+                  onClick={() => {
+                    const allIds = new Set(searchResults.map(e => e.id));
+                    const allSelected = searchResults.every(e => selectedSearchIds.has(e.id));
+                    setSelectedSearchIds(allSelected ? new Set() : allIds);
+                  }}
+                  className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--muted-foreground)' }}
+                >
+                  {searchResults.every(e => selectedSearchIds.has(e.id))
+                    ? <CheckSquare className="w-3.5 h-3.5" />
+                    : <Square className="w-3.5 h-3.5" />}
+                  {searchResults.every(e => selectedSearchIds.has(e.id)) ? 'Deselect All' : 'Select All'}
+                </button>
+              )}
+              {selectedSearchIds.size > 0 && (
+                <>
+                  <button
+                    onClick={async () => {
+                      const ids = Array.from(selectedSearchIds);
+                      ids.forEach(id => dismissEmail(id));
+                      setSelectedSearchIds(new Set());
+                      await Promise.all(ids.map(id => {
+                        const e = emails.find(em => em.id === id);
+                        return e?.sourceIntegration === 'Gmail'
+                          ? fetch(`/api/v2/email/${id}/archive`, { method: 'POST' }).catch(() => {})
+                          : Promise.resolve();
+                      }));
+                    }}
+                    className="rounded-full px-2.5 py-1 text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <XCircle className="w-3 h-3" />
+                    Archive
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const ids = Array.from(selectedSearchIds);
+                      ids.forEach(id => dismissEmail(id));
+                      setSelectedSearchIds(new Set());
+                      await Promise.all(ids.map(id => {
+                        const e = emails.find(em => em.id === id);
+                        return e?.sourceIntegration === 'Gmail'
+                          ? fetch(`/api/v2/email/${id}/delete`, { method: 'POST' }).catch(() => {})
+                          : Promise.resolve();
+                      }));
+                    }}
+                    className="rounded-full px-2.5 py-1 text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid #ef444460', color: '#ef4444' }}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Delete
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const ids = Array.from(selectedSearchIds);
+                      setSelectedSearchIds(new Set());
+                      await Promise.all(ids.map(async id => {
+                        try {
+                          const res = await fetch(`/api/v2/email/${id}/unsubscribe`, { method: 'POST' });
+                          const json = res.ok ? await res.json() : null;
+                          if (json?.unsubscribeUrl) window.open(json.unsubscribeUrl, '_blank');
+                        } catch { /* ignore */ }
+                      }));
+                    }}
+                    className="rounded-full px-2.5 py-1 text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <UserX className="w-3 h-3" />
+                    Unsub
+                  </button>
+                </>
+              )}
+            </div>
+
             {searchResults.length === 0 && (
               <div className="rounded-2xl p-6 text-center" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
                 <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No emails match &ldquo;{search}&rdquo;</p>
@@ -356,8 +440,20 @@ export default function EmailPage() {
               const rec = recommendations.get(email.id);
               const bucket = rec?.bucket;
               const meta = bucket ? BUCKET_META[bucket] : null;
+              const isChecked = selectedSearchIds.has(email.id);
               return (
-                <div key={email.id} className="rounded-2xl p-3 flex items-start gap-3" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                <div key={email.id} className="rounded-2xl p-3 flex items-start gap-3" style={{ border: `1px solid ${isChecked ? 'var(--color-cyan)' : 'var(--border)'}`, background: 'var(--card)' }}>
+                  <button
+                    onClick={() => setSelectedSearchIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(email.id)) next.delete(email.id); else next.add(email.id);
+                      return next;
+                    })}
+                    className="flex-shrink-0 mt-0.5 transition-opacity hover:opacity-70"
+                    style={{ color: isChecked ? 'var(--color-cyan)' : 'var(--muted-foreground)' }}
+                  >
+                    {isChecked ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                  </button>
                   {meta && (
                     <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${meta.color}20` }}>
                       <meta.icon className="w-3 h-3" style={{ color: meta.color }} />
