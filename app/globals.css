@@ -1,8 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
+  /* Sandra's Rose / ICEMAN font families */
+  --font-rajdhani: 'Rajdhani', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-body: 'Space Grotesk', sans-serif;
+
+  /* ICEMAN palette */
+  --ice-bg:     #e8f6ff;
+  --ice-bg2:    #d0ecfa;
+  --ice-bg3:    #b8e0f5;
+  --ice-bg4:    #a0d4ee;
+  --ice-border: #7ab8d8;
+  --ice-border2:#50a0c8;
+  --ice-text:   #04141e;
+  --ice-text2:  #085070;
+  --ice-text3:  #2a7898;
+  --ice:        #40c8f0;
+  --ice2:       #0470a0;
+  --ice3:       #024878;
+  --ice-gold:   #b8902a;
+  --ice-brown:  #7a4418;
+  --ice-sand:   #e0cfa8;
   --radius: 1rem;
 
   /* Main content backgrounds — LIGHT/PASTEL dominant */
@@ -217,6 +240,12 @@ a {
       min-height: calc(100dvh - 44px);
     }
   }
+}
+
+/* Status Ticker scroll animation */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
 }
 
 /* Safe area insets for notched iPhones */
