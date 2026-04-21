@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ExternalLink, Unlink, Zap, ChevronRight, ImageIcon, RefreshCw, Plus, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { V2VisionItem, V2VisionPillar, V2VisionEmeraldSuggestion, VisionItemStatus, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
@@ -44,14 +44,6 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [savingTask, setSavingTask] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  // Clean up SSE on unmount
-  useEffect(() => {
-    return () => {
-      eventSourceRef.current?.close();
-    };
-  }, []);
 
   async function handleStatusChange(newStatus: VisionItemStatus) {
     await fetch(`/api/v2/vision/items/${item.id}`, {
@@ -144,53 +136,19 @@ export function ItemDetailDrawer({ item, pillar, onClose, onUpdated }: ItemDetai
     if (suggestionState === 'thinking') return;
     setSuggestionState('thinking');
     setSuggestions([]);
-
     try {
       const res = await fetch(`/api/v2/vision/items/${item.id}/suggestions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(25000),
       });
-      const { streamId } = await res.json();
-
-      // Subscribe to the SSE stream for this vision item
-      const es = new EventSource(`/api/v2/stream/vision/${item.id}`);
-      eventSourceRef.current = es;
-
-      let settled = false;
-
-      es.addEventListener('emerald.suggestions', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          settled = true;
-          setSuggestions(data.suggestions ?? []);
-          setSuggestionState('done');
-          es.close();
-        } catch {
-          settled = true;
-          setSuggestionState('error');
-          es.close();
-        }
-      });
-
-      es.addEventListener('emerald.error', () => {
-        settled = true;
+      const json = res.ok ? await res.json() : null;
+      if (json?.suggestions?.length) {
+        setSuggestions(json.suggestions);
+        setSuggestionState('done');
+      } else {
         setSuggestionState('error');
-        es.close();
-      });
-
-      es.onerror = () => {
-        settled = true;
-        setSuggestionState('error');
-        es.close();
-      };
-
-      // Timeout after 30s
-      setTimeout(() => {
-        if (!settled) {
-          setSuggestionState('error');
-          es.close();
-        }
-      }, 30000);
+      }
     } catch {
       setSuggestionState('error');
     }

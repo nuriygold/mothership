@@ -42,11 +42,11 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 
 // Per-bot dedicated dispatch endpoints (each has session support + correct context injection)
 const BOT_DISPATCH_URL: Record<string, string> = {
-  'Adrian':         '/api/v2/adrian/dispatch',
-  'Ruby':           '/api/v2/ruby/dispatch',
-  'Emerald':        '/api/v2/emerald/dispatch',
-  'Adobe Pettaway': '/api/v2/adobe/dispatch',
-  'Anchor':         '/api/v2/anchor/dispatch',
+  'Drake':          '/api/v2/adrian/dispatch',
+  'Drizzy':         '/api/v2/ruby/dispatch',
+  'Champagne Papi': '/api/v2/emerald/dispatch',
+  'Aubrey Graham':  '/api/v2/adobe/dispatch',
+  '6 God':          '/api/v2/anchor/dispatch',
 };
 
 function BotCardSkeleton() {

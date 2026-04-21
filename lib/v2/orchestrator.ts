@@ -12,7 +12,6 @@ import { prisma } from '@/lib/prisma';
 import { getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
 import type {
   BotRouteKey,
-  SystemHealthSnapshot,
   V2ActivityFeed,
   V2BotProfile,
   V2BotsFeed,
@@ -27,7 +26,6 @@ import type {
   V2HealthScore,
   V2IncomeSource,
   V2NetWorthPoint,
-  V2PendingApprovalSummary,
   V2Subscription,
   V2TaskItem,
   V2TasksFeed,
@@ -40,18 +38,6 @@ import type {
   V2VisionPillar,
 } from '@/lib/v2/types';
 
-type PredictiveActionState = {
-  id: string;
-  dedupeKey: string;
-  title: string;
-  source: string;
-  bot: string;
-  category: 'email' | 'finance' | 'tasks' | 'other';
-  approvedAt?: string;
-};
-
-const actionStore = new Map<string, PredictiveActionState>();
-const dedupeStore = new Map<string, string>();
 const pendingRubyDrafts = new Set<string>();
 const rubyDraftStore = new Map<string, V2EmailDraft>();
 const sentDrafts = new Set<string>();
@@ -68,52 +54,52 @@ const BOT_PROFILES: Array<{
 }> = [
   {
     key: 'adrian',
-    name: 'Adrian',
+    name: 'Drake',
     role: 'Automation & System Operations',
     colorKey: 'mint',
     iconKey: 'trending-up',
-    workingStyle: 'Executes commands, scripts, and infrastructure operations end-to-end',
-    personality: 'Reliable, action-first executor — runs the machine',
+    workingStyle: 'Executes commands, shifts mode by task — calm, surgical, or full-send depending on what the moment demands',
+    personality: 'Full-spectrum operator — he chooses the mode, then owns it completely',
     strengths: ['Automation & orchestration', 'Infrastructure & deployment', 'System health monitoring'],
   },
   {
     key: 'ruby',
-    name: 'Ruby',
+    name: 'Drizzy',
     role: 'Personal Communication & Life Management',
     colorKey: 'pink',
     iconKey: 'mail',
-    workingStyle: 'Tone-aware, fast iteration on messages and social coordination',
-    personality: 'Warm, direct, and relationship-aware — talks to people',
+    workingStyle: 'Tone-aware navigation of relationships, messages, and life logistics — keeps everything flowing',
+    personality: 'Warm, disarming, and relationship-first — talks to people, not at them',
     strengths: ['Personal messaging', 'Social & life coordination', 'Relationship interactions'],
   },
   {
     key: 'emerald',
-    name: 'Emerald',
+    name: 'Champagne Papi',
     role: 'Analysis, Verification & Financial Intelligence',
     colorKey: 'sky',
     iconKey: 'search',
-    workingStyle: 'Traces problems layer by layer — data, schema, API, frontend — before reaching conclusions',
-    personality: 'Precise, auditable, decision-ready — understands what is happening and why',
+    workingStyle: 'Reads the numbers for leverage — data, risk, and positioning before anyone else sees it',
+    personality: 'Calculated and expensive — sees through the surface to what the money is actually saying',
     strengths: ['Financial intelligence & cash flow analysis', 'System verification & QA', 'Strategic diagnostics & pattern detection'],
   },
   {
     key: 'adobe',
-    name: 'Adobe Pettaway',
+    name: 'Aubrey Graham',
     role: 'Document Intelligence',
     colorKey: 'lemon',
     iconKey: 'file-text',
-    workingStyle: 'Extraction and schema validation',
-    personality: 'Precise and literal',
+    workingStyle: "Quiet, precise extraction — reads what's there, reports what's true",
+    personality: 'No persona, no performance — just what the document actually says',
     strengths: ['Document parsing', 'Entity extraction', 'Validation checks'],
   },
   {
     key: 'anchor',
-    name: 'Anchor',
+    name: '6 God',
     role: 'Execution Coordination & Human Follow-through',
     colorKey: 'lavender',
     iconKey: 'anchor',
-    workingStyle: 'Grounds execution plans, clarifies ownership, and stabilizes re-entry when momentum drops',
-    personality: 'Warm, firm, and execution-first — reduces friction without dramatizing stalls',
+    workingStyle: 'No softness, no overthinking — collapses indecision and forces movement on stalled execution',
+    personality: 'Dominant and pressure-first — she runs this, no discussion',
     strengths: ['Priority sequencing', 'Ownership and accountability coordination', 'Re-entry planning and completion support'],
   },
 ];
@@ -121,11 +107,11 @@ const BOT_PROFILES: Array<{
 function routeForTask(task: any): BotRouteKey {
   // Explicit assignee takes priority over keyword inference
   const assignee = String(task.assignee ?? '').toLowerCase().trim();
-  if (assignee === 'adrian' || assignee === 'main') return 'adrian';
-  if (assignee === 'ruby') return 'ruby';
-  if (assignee === 'emerald') return 'emerald';
-  if (assignee === 'adobe' || assignee === 'adobe pettaway') return 'adobe';
-  if (assignee === 'anchor' || assignee === 'ballast') return 'anchor';
+  if (assignee === 'adrian' || assignee === 'main' || assignee === 'drake') return 'adrian';
+  if (assignee === 'ruby' || assignee === 'drizzy') return 'ruby';
+  if (assignee === 'emerald' || assignee === 'champagne papi') return 'emerald';
+  if (assignee === 'adobe' || assignee === 'adobe pettaway' || assignee === 'aubrey graham') return 'adobe';
+  if (assignee === 'anchor' || assignee === 'ballast' || assignee === '6 god') return 'anchor';
 
   // Fall back to keyword inference from title + description
   const title = String(task.title ?? '').toLowerCase();
@@ -161,13 +147,6 @@ function mapTaskPriority(priority: TaskPriority): V2TaskItem['metadata']['priori
   if (priority === TaskPriority.HIGH) return 'high';
   if (priority === TaskPriority.LOW) return 'low';
   return 'medium';
-}
-
-function categoryFromRoute(route: BotRouteKey): PredictiveActionState['category'] {
-  if (route === 'emerald') return 'finance';
-  if (route === 'ruby') return 'email';
-  if (route === 'adrian' || route === 'anchor' || route === 'gateway') return 'tasks';
-  return 'other';
 }
 
 function relativeTime(input: Date) {
@@ -307,18 +286,6 @@ async function generateRubyDraft(emailId: string, subject: string, preview: stri
     draft: rubyDraft,
   });
   pendingRubyDrafts.delete(emailId);
-}
-
-function upsertAction(action: Omit<PredictiveActionState, 'id'>) {
-  const existing = dedupeStore.get(action.dedupeKey);
-  if (existing) return actionStore.get(existing)!;
-  const item: PredictiveActionState = {
-    id: `act_${crypto.randomUUID()}`,
-    ...action,
-  };
-  actionStore.set(item.id, item);
-  dedupeStore.set(item.dedupeKey, item.id);
-  return item;
 }
 
 export async function getV2TasksFeed(): Promise<V2TasksFeed> {
@@ -802,62 +769,8 @@ export async function getV2Activity(page = 1, pageSize = 25): Promise<V2Activity
 }
 
 export async function getV2TodayFeed(): Promise<V2TodayFeed> {
-  const [tasksFeed, botsFeed, emailFeed] = await Promise.all([
-    getV2TasksFeed(),
-    getV2BotsFeed(),
-    getEmailSummary(),
-  ]);
-
-  // Sort tasks: overdue first (past dueAt), then by dueAt ascending, then undated
-  const allPendingTasks = [...tasksFeed.active, ...tasksFeed.today].filter((t, i, arr) => t.status !== 'Done' && arr.findIndex((x) => x.taskId === t.taskId) === i);
-  const sortedTasks = [...allPendingTasks].sort((a, b) => {
-    const now = Date.now();
-    const aTime = a.metadata.dueAtISO ? new Date(a.metadata.dueAtISO).getTime() : null;
-    const bTime = b.metadata.dueAtISO ? new Date(b.metadata.dueAtISO).getTime() : null;
-    const aOverdue = aTime !== null && aTime < now;
-    const bOverdue = bTime !== null && bTime < now;
-    if (aOverdue && !bOverdue) return -1;
-    if (!aOverdue && bOverdue) return 1;
-    if (aTime !== null && bTime !== null) return aTime - bTime;
-    if (aTime !== null) return -1;
-    if (bTime !== null) return 1;
-    return 0;
-  });
-
-  const topPriorities: V2DashboardPriorityItem[] = sortedTasks
-    .slice(0, 10)
-    .map((item) => {
-      const action = upsertAction({
-        dedupeKey: `task:${item.taskId}`,
-        title: item.title,
-        source: `From ${item.metadata.department}`,
-        bot: item.metadata.assignedBot,
-        category: categoryFromRoute(routeForTask({ title: item.title, description: item.metadata.department })),
-      });
-      return {
-        id: action.id,
-        taskId: item.taskId,
-        title: item.title,
-        source: `From ${item.metadata.department}`,
-        actionWebhook: `/api/v2/actions/${action.id}/approve`,
-        assignedBot: item.metadata.assignedBot,
-        dueAt: item.metadata.dueAtISO ?? null,
-        taskStatus: item.status,
-      };
-    });
-
-  const pendingApprovals = summarizePendingApprovals();
+  const tasksFeed = await getV2TasksFeed();
   const timeline = await buildTimeline(tasksFeed);
-
-  const liveBotActivity = botsFeed.bots.slice(0, 4).map((bot) => ({
-    botName: bot.identity.name,
-    currentTask: bot.liveState.currentTask,
-    status: (bot.liveState.status === 'working'
-      ? 'active'
-      : bot.liveState.status === 'idle'
-        ? 'pending'
-        : 'done') as 'active' | 'done' | 'pending',
-  }));
 
   return {
     userContext: {
@@ -866,10 +779,6 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
       affirmation: getDailyAffirmation(),
     },
     timeline,
-    topPriorities,
-    liveBotActivity,
-    systemHealth: null,
-    pendingApprovals,
   };
 }
 
@@ -1049,59 +958,6 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
   ];
 }
 
-function summarizePendingApprovals(): V2PendingApprovalSummary[] {
-  const items = [...actionStore.values()].filter((item) => !item.approvedAt);
-  const grouped = new Map<V2PendingApprovalSummary['category'], number>();
-  for (const item of items) {
-    grouped.set(item.category, (grouped.get(item.category) ?? 0) + 1);
-  }
-  return [...grouped.entries()].map(([category, count]) => ({
-    category,
-    count,
-    description:
-      category === 'email'
-        ? `${count} email drafts from Ruby`
-        : category === 'finance'
-          ? `${count} financial transactions`
-          : `${count} pending actions`,
-  }));
-}
-
-function computeHealth(tasks: V2TasksFeed, bots: V2BotsFeed, emailConnected: boolean): SystemHealthSnapshot {
-  const queuePressure = tasks.counters.tracked === 0 ? 100 : Math.max(45, 100 - Math.round((tasks.counters.blocked / tasks.counters.tracked) * 100));
-  const botPerf = bots.bots.length === 0
-    ? 100
-    : Math.max(55, Math.round(
-      (bots.bots.reduce((acc, bot) => acc + bot.throughputMetrics.completed, 0) /
-        Math.max(1, bots.bots.reduce((acc, bot) => acc + bot.throughputMetrics.completed + bot.throughputMetrics.queued + bot.throughputMetrics.blocked, 0))) * 100
-    ));
-
-  return {
-    primarySystems: 100,
-    botPerformance: botPerf,
-    emailProcessing: emailConnected ? 98 : 60,
-    dataSync: queuePressure,
-  };
-}
-
-export function approvePredictiveAction(actionId: string) {
-  const action = actionStore.get(actionId);
-  if (!action) {
-    return { ok: false, status: 404, message: 'Action not found' };
-  }
-
-  if (action.approvedAt) {
-    return { ok: true, status: 200, idempotent: true, action };
-  }
-
-  action.approvedAt = new Date().toISOString();
-  actionStore.set(actionId, action);
-  publishV2Event('dashboard', 'approval.updated', { actionId, status: 'approved' });
-  publishV2Event('bots', 'task.routed', { botName: action.bot, title: action.title });
-
-  return { ok: true, status: 200, idempotent: false, action };
-}
-
 export async function mutateTaskFromAction(taskId: string, action: 'start' | 'defer' | 'complete' | 'unblock' | 'vision_board') {
   if (action === 'vision_board') {
     if (isTaskPoolRepositorySource()) {
@@ -1223,7 +1079,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
         })
       : Promise.resolve([]),
     allTaskIds.length
-      ? prisma.task.findMany({ where: { id: { in: allTaskIds } } })
+      ? listTasks().then(all => (all as any[]).filter(t => allTaskIds.includes(String(t.id))))
       : Promise.resolve([]),
   ]);
 

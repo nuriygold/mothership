@@ -234,9 +234,12 @@ export default function VisionPage() {
           item={selectedItem}
           pillar={selectedItemPillar}
           onClose={handleCloseDrawer}
-          onUpdated={() => {
-            mutate();
-            handleCloseDrawer();
+          onUpdated={async () => {
+            const fresh = await mutate();
+            if (fresh && selectedItem) {
+              const updated = fresh.pillars?.flatMap((p: V2VisionPillar) => p.items)?.find((i: V2VisionItem) => i.id === selectedItem.id);
+              if (updated) setSelectedItem(updated);
+            }
           }}
         />
       )}

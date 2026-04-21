@@ -71,7 +71,9 @@ async function postCommand(payload: { input: string; sourceChannel: string; requ
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return res.json();
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { message?: string })?.message ?? 'Failed to post command');
+  return body;
 }
 
 async function sendTelegram(payload: { text: string; botKey?: string }) {
@@ -175,7 +177,7 @@ async function updateDispatchCampaignState(payload: { campaignId: string; action
 
 async function fetchDispatchProgress(campaignId: string) {
   const res = await fetch(`/api/dispatch/campaigns/${campaignId}/progress`, { cache: 'no-store' });
-  const body = await res.json();
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.message ?? 'Failed to load progress');
   return body;
 }
@@ -197,7 +199,7 @@ async function runDispatchCampaign(payload: {
 
 async function fetchBotRecommendation(campaignId: string) {
   const res = await fetch(`/api/dispatch/campaigns/${campaignId}/recommend`, { cache: 'no-store' });
-  const body = await res.json();
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.message ?? 'Failed to get recommendation');
   return body as { recommended: string; botName: string; breakdown: Record<string, number>; taskCount: number };
 }
