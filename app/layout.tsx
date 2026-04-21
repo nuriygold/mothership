@@ -3,12 +3,16 @@ import './globals.css';
 import { Sidebar } from '@/components/ui/sidebar';
 import { MobileNav } from '@/components/ui/mobile-nav';
 import { Header } from '@/components/ui/header';
+import { CommandPalette } from '@/components/ui/command-palette';
 import Providers from '@/components/lib/providers';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 export const metadata: Metadata = {
   title: 'Mothership',
   description: 'Operator command center for workflows, runs, and approvals.',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Mothership' },
+  other: { 'mobile-web-app-capable': 'yes' },
 };
 
 export const viewport: Viewport = {
@@ -36,6 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen" style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
         <Providers>
+          {/* Global command palette — triggered by Cmd+K / Ctrl+K */}
+          <CommandPalette />
+
           {/* Full-width thin status bar at top */}
           <Header />
 
