@@ -88,6 +88,10 @@ export default function EmailPage() {
   const [emailBodies, setEmailBodies] = useState<Map<string, EmailBody>>(new Map());
   const [bodyLoading, setBodyLoading] = useState<Set<string>>(new Set());
   const [expandedBodies, setExpandedBodies] = useState<Set<string>>(new Set());
+  const [replyDrafts, setReplyDrafts] = useState<Map<string, string>>(new Map());
+  const [sendingReply, setSendingReply] = useState<Set<string>>(new Set());
+  const [replyError, setReplyError] = useState<Map<string, string>>(new Map());
+  const [replySent, setReplySent] = useState<Set<string>>(new Set());
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
   const fetchedIds = useRef<Set<string>>(new Set());
@@ -206,6 +210,35 @@ export default function EmailPage() {
     dismissEmail(emailId);
     if (email?.sourceIntegration === 'Gmail') {
       await fetch(`/api/v2/email/${emailId}/delete`, { method: 'POST' }).catch(() => {});
+    }
+  }
+
+  async function handleSendReply(emailId: string) {
+    const text = replyDrafts.get(emailId)?.trim();
+    if (!text) return;
+    setSendingReply(prev => new Set(prev).add(emailId));
+    setReplyError(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+    try {
+      const res = await fetch(`/api/v2/email/${emailId}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bodyText: text }),
+      });
+      if (res.ok) {
+        setReplySent(prev => new Set(prev).add(emailId));
+        setTimeout(() => {
+          setRecommendations(prev => { const n = new Map(prev); n.delete(emailId); return n; });
+          fetchedIds.current.delete(emailId);
+          setSelectedEmail(null);
+        }, 1500);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setReplyError(prev => new Map(prev).set(emailId, json.error ?? 'Failed to send reply'));
+      }
+    } catch {
+      setReplyError(prev => new Map(prev).set(emailId, 'Network error — reply not sent'));
+    } finally {
+      setSendingReply(prev => { const n = new Set(prev); n.delete(emailId); return n; });
     }
   }
 
@@ -670,8 +703,30 @@ export default function EmailPage() {
                   </p>
 
                   {detailRec.details?.draftReply && (isMyPeople || selectedBucket === 'BUSINESS') && (
-                    <div className="text-xs p-3 rounded" style={{ background: 'var(--background)', fontStyle: 'italic' }}>
-                      &ldquo;{detailRec.details.draftReply}&rdquo;
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Draft reply — edit before sending</p>
+                      <textarea
+                        value={replyDrafts.has(detailEmail.id) ? replyDrafts.get(detailEmail.id) : detailRec.details.draftReply}
+                        onChange={e => setReplyDrafts(prev => new Map(prev).set(detailEmail.id, e.target.value))}
+                        rows={4}
+                        className="w-full text-xs p-3 rounded-lg resize-none outline-none"
+                        style={{ background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--foreground)' }}
+                      />
+                      {replyError.get(detailEmail.id) && (
+                        <p className="text-xs" style={{ color: '#ef4444' }}>{replyError.get(detailEmail.id)}</p>
+                      )}
+                      {replySent.has(detailEmail.id) ? (
+                        <p className="text-xs font-medium" style={{ color: '#10b981' }}>Reply sent ✓</p>
+                      ) : (
+                        <button
+                          onClick={() => handleSendReply(detailEmail.id)}
+                          disabled={sendingReply.has(detailEmail.id) || !(replyDrafts.get(detailEmail.id) ?? detailRec.details.draftReply)?.trim()}
+                          className="rounded-full px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                          style={{ background: meta.color, color: '#fff' }}
+                        >
+                          {sendingReply.has(detailEmail.id) ? 'Sending…' : 'Send Reply'}
+                        </button>
+                      )}
                     </div>
                   )}
 
