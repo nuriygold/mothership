@@ -10,7 +10,7 @@ const OPENAI_BASE: Record<string, string> = {
   together: 'https://api.together.xyz/v1',
 };
 
-const AZURE_API_VERSION = '2024-08-01-preview';
+const AZURE_API_VERSION = '2025-04-01-preview';
 
 function errSSE(msg: string): Response {
   const encoder = new TextEncoder();
@@ -134,19 +134,23 @@ export async function POST(req: Request) {
   const system: string = String(body?.system ?? '');
   const azureEndpoint: string = String(body?.azureEndpoint ?? '').replace(/\/$/, '');
 
-  if (!apiKey) return errSSE('API key required');
   if (!model) return errSSE('Model required');
   if (!messages.length) return errSSE('No messages');
 
   if (provider === 'azure') {
-    if (!azureEndpoint) return errSSE('Azure endpoint required');
-    const url = `${azureEndpoint}/openai/deployments/${encodeURIComponent(model)}/chat/completions?api-version=${AZURE_API_VERSION}`;
+    const endpoint = (process.env.AZURE_OPENAI_ENDPOINT ?? azureEndpoint).replace(/\/$/, '');
+    const key = process.env.AZURE_OPENAI_API_KEY ?? apiKey;
+    const deployment = process.env.AZURE_OPENAI_MODEL ?? model;
+    if (!endpoint) return errSSE('Azure endpoint required');
+    if (!key) return errSSE('Azure API key required');
+    if (!deployment) return errSSE('Azure deployment name required');
+    const url = `${endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${AZURE_API_VERSION}`;
     const allMessages = system ? [{ role: 'system' as const, content: system }, ...messages] : messages;
     let upstream: Response;
     try {
       upstream = await fetch(url, {
         method: 'POST',
-        headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
+        headers: { 'api-key': key, 'Content-Type': 'application/json' },
         body: JSON.stringify({ stream: true, messages: allMessages }),
         signal: AbortSignal.timeout(60_000),
       });
@@ -159,6 +163,8 @@ export async function POST(req: Request) {
     }
     return pipeOpenAICompat(upstream);
   }
+
+  if (!apiKey) return errSSE('API key required');
 
   if (provider === 'anthropic') {
     let upstream: Response;

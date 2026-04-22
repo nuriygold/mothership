@@ -3,7 +3,7 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
   },
-  transpilePackages: ['@xterm/xterm', '@xterm/addon-fit'],
+  transpilePackages: [],
 };
 
 module.exports = nextConfig;

@@ -63,8 +63,8 @@ type Config = {
 };
 
 const DEFAULTS: Config = {
-  provider: 'anthropic',
-  model: 'claude-sonnet-4-6',
+  provider: 'azure',
+  model: 'gpt-5.3-codex',
   keys: {},
   terminalUrl: 'ws://localhost:3001',
   azureEndpoint: '',
