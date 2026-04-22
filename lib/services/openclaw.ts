@@ -30,20 +30,21 @@ function normalizeAgentId(value?: string | null) {
 
 export function agentForKey(key?: string) {
   const requested = normalizeAgentId(key);
+  const emeraldFallback = process.env.OPENCLAW_AGENT_EMERALD || 'emerald';
   if (requested === 'main') {
-    return normalizeAgentId(process.env.OPENCLAW_AGENT_ADRIAN || process.env.OPENCLAW_DEFAULT_AGENT || 'main');
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_ADRIAN || process.env.OPENCLAW_DEFAULT_AGENT || emeraldFallback);
   }
   if (requested === 'ruby') {
-    return normalizeAgentId(process.env.OPENCLAW_AGENT_RUBY || 'ruby');
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_RUBY || emeraldFallback);
   }
   if (requested === 'emerald') {
-    return normalizeAgentId(process.env.OPENCLAW_AGENT_EMERALD || 'emerald');
+    return normalizeAgentId(emeraldFallback);
   }
   if (requested === 'adobe') {
-    return normalizeAgentId(process.env.OPENCLAW_AGENT_ADOBE || 'adobe');
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_ADOBE || emeraldFallback);
   }
   if (requested === 'anchor') {
-    return normalizeAgentId(process.env.OPENCLAW_AGENT_ANCHOR || 'anchor');
+    return normalizeAgentId(process.env.OPENCLAW_AGENT_ANCHOR || emeraldFallback);
   }
   return requested;
 }

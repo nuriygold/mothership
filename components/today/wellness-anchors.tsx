@@ -131,9 +131,8 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
   const celebrateTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    const local = loadWellness();
-    const localSavedAt = loadLocalSavedAt();
-    setW(local);
+    // Show local state immediately while Supabase loads
+    setW(loadWellness());
 
     const ydate = yesterdayDate();
     const tdate = todayDate();
@@ -142,21 +141,14 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       fetchFromSupabase(tdate),
       fetchFromSupabase(ydate),
     ]).then(([remote, remoteYesterday]) => {
-      // Today — Supabase wins only if its data is newer than our last local save.
-      // This prevents the Supabase fetch from overwriting edits the user made
-      // before the fetch completed, while still keeping cross-device data fresh.
+      // Supabase is always the source of truth for cross-device consistency.
+      // Local state is only a display cache until this fetch completes.
       if (remote) {
-        // Compare as timestamps, not strings — Supabase returns "+00:00" suffix
-        // while Date.toISOString() returns "Z", so string comparison is unreliable.
-        const supabaseNewer = !localSavedAt ||
-          new Date(remote.updatedAt).getTime() > new Date(localSavedAt).getTime();
-        if (supabaseNewer) {
-          setW(remote.state);
-          saveWellness(remote.state);
-        }
+        setW(remote.state);
+        saveWellness(remote.state);
       }
 
-      // Yesterday — read-only; use Supabase, fall back to localStorage snapshot.
+      // Yesterday — read-only; Supabase wins, fall back to localStorage.
       const ylocal = (() => {
         try {
           const s = localStorage.getItem(`wellness-${ydate}`);

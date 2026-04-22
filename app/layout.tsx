@@ -1,14 +1,16 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { Sidebar } from '@/components/ui/sidebar';
-import { MobileNav } from '@/components/ui/mobile-nav';
-import { Header } from '@/components/ui/header';
+import { AppShell } from '@/components/ui/app-shell';
+import { CommandPalette } from '@/components/ui/command-palette';
 import Providers from '@/components/lib/providers';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 export const metadata: Metadata = {
   title: 'Mothership',
   description: 'Operator command center for workflows, runs, and approvals.',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Mothership' },
+  other: { 'mobile-web-app-capable': 'yes' },
 };
 
 export const viewport: Viewport = {
@@ -19,6 +21,7 @@ export const viewport: Viewport = {
 
 const navItems = [
   { label: 'Today', href: '/today' },
+  { label: 'Iceman', href: '/iceman' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
@@ -27,28 +30,25 @@ const navItems = [
   { label: 'Ruby', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
+  { label: 'Projects', href: '/projects' },
+  { label: 'Trophy', href: '/trophy' },
   { label: 'Marco', href: '/marco' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet" />
+      </head>
       <body className="min-h-screen" style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
         <Providers>
-          {/* Full-width thin status bar at top */}
-          <Header />
-
-          {/* Mobile horizontal nav (hidden on md+) */}
-          <MobileNav items={navItems} />
-
-          {/* Sidebar + main content below */}
-          <div className="flex main-container">
-            <Sidebar items={navItems} />
-            <main className="flex-1 px-4 md:px-8 py-5 md:py-8 pb-20 md:pb-12 overflow-auto">
-              {children}
-            </main>
-          </div>
-
+          <CommandPalette />
+          <AppShell items={navItems}>
+            {children}
+          </AppShell>
           <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
         </Providers>
       </body>

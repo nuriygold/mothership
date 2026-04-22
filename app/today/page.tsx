@@ -4,23 +4,49 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  Calendar, Star, CheckCircle2, Zap, Video,
+  Calendar, CheckCircle2, Zap, Video,
   Trophy, Plus,
   ListChecks, MessageSquare,
   Send, Sparkles, Rocket,
 } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/card';
 import { TrophyModal } from '@/components/today/trophy-modal';
-import { NowLine } from '@/components/today/now-line';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
 import { JarvisCard } from '@/components/voice/jarvis-card';
 import { NewTaskModal } from '@/components/today/new-task-modal';
+import { DailyBriefing } from '@/components/today/daily-briefing';
+import { FinanceAlerts } from '@/components/today/finance-alerts';
+import { StatusTicker } from '@/components/today/status-ticker';
+import { ThreeDayGrid } from '@/components/today/three-day-grid';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
-import { TaskCard } from '@/components/tasks/task-card';
+
+type CalendarTimelineItem = {
+  _calEvent: true;
+  id: string;
+  title: string;
+  startDate: string;
+  startTime: string;
+  endTime: string | null;
+  status: 'done' | 'current' | 'upcoming';
+  meetingUrl?: string | null;
+  location?: string | null;
+};
+
+type CalendarTimelineItem = {
+  _calEvent: true;
+  id: string;
+  title: string;
+  startDate: string;
+  startTime: string;
+  endTime: string | null;
+  status: 'done' | 'current' | 'upcoming';
+  meetingUrl?: string | null;
+  location?: string | null;
+};
 
 type CalendarTimelineItem = {
   _calEvent: true;
@@ -50,8 +76,6 @@ function logTodayClientFailure(action: string, error: unknown, metadata?: Record
   }));
 }
 
-
-
 /** Convert a V2TaskItem into the shape TakeActionModal expects. */
 function toActionItem(task: V2TaskItem): V2DashboardPriorityItem {
   return {
@@ -65,10 +89,76 @@ function toActionItem(task: V2TaskItem): V2DashboardPriorityItem {
   };
 }
 
+// ── SSE Live Feed Box ──────────────────────────────────────────────────────────
+function SseLiveBox({ streamStatus }: { streamStatus: 'live' | 'fallback' }) {
+  const [logs, setLogs] = useState<Array<{ msg: string; ts: string }>>([]);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Fake a few log entries to show the styled box even without real events
+  useEffect(() => {
+    setLogs([
+      { msg: 'CONNECTED  dashboard stream', ts: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) },
+      { msg: `STATUS     ${streamStatus === 'live' ? 'live' : 'polling fallback'}`, ts: '' },
+    ]);
+  }, [streamStatus]);
+
+  // Auto-scroll
+  useEffect(() => {
+    if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight;
+  }, [logs]);
+
+  return (
+    <div style={{
+      background: '#04141e',
+      borderRadius: '12px',
+      border: '1px solid #0d3050',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      {/* Header bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #0d3050' }}>
+        {/* Live pulse dot */}
+        <span style={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: streamStatus === 'live' ? '#40c8f0' : '#FFB800',
+          boxShadow: streamStatus === 'live' ? '0 0 6px rgba(64,200,240,0.8)' : 'none',
+          animation: streamStatus === 'live' ? 'pulseRing 2s ease-in-out infinite' : 'none',
+          display: 'inline-block',
+          flexShrink: 0,
+        }} />
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#40c8f0', letterSpacing: '0.1em', fontWeight: 500 }}>
+          SSE / STREAM
+        </span>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '9px', color: streamStatus === 'live' ? '#40c8f0' : '#FFB800', opacity: 0.8 }}>
+          {streamStatus === 'live' ? 'LIVE' : 'FALLBACK'}
+        </span>
+      </div>
+      {/* Log body */}
+      <div
+        ref={boxRef}
+        style={{ padding: '10px 12px', overflowY: 'auto', maxHeight: '140px', display: 'flex', flexDirection: 'column', gap: '4px' }}
+      >
+        {logs.map((l, i) => (
+          <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            {l.ts && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: '#0470a0', flexShrink: 0 }}>{l.ts}</span>
+            )}
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#7ab8d8', wordBreak: 'break-all' }}>{l.msg}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
   const { data: tasksData, mutate: mutateTasks } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
+  const { data: campaignsData } = useSWR<CampaignListItem[]>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
@@ -98,7 +188,7 @@ export default function TodayPage() {
     }
     connect();
     return () => stream?.close();
-  }, [mutate]);
+  }, [mutate, mutateTasks]);
 
   // Toast auto-hide
   useEffect(() => {
@@ -207,7 +297,7 @@ export default function TodayPage() {
       setToastMsg(`Couldn't complete "${title}"`);
       logTodayClientFailure('task_complete', error, { taskId });
     }
-  }, [mutate, mergedTimeline]);
+  }, [mutate, mutateTasks, mergedTimeline]);
 
   // ── Undo Done (from Trophy) ──
   const handleUndoDone = useCallback(async (taskId: string) => {
@@ -233,14 +323,13 @@ export default function TodayPage() {
       setToastMsg(`Couldn't defer "${title}"`);
       logTodayClientFailure('task_defer', error, { taskId });
     }
-  }, [mergedTimeline, mutate]);
+  }, [mergedTimeline, mutate, mutateTasks]);
 
   // ── Gateway → Navigate to Ruby ──
   const handleGateway = useCallback((title: string) => {
     const params = new URLSearchParams({ q: title });
     window.location.href = `/ruby?${params.toString()}`;
   }, []);
-
 
   // ── Dispatch This → Navigate to /dispatch with task pre-filled ──
   const handleDispatch = useCallback((item: V2DashboardPriorityItem) => {
@@ -309,11 +398,12 @@ export default function TodayPage() {
     }
   }, [mutate, mutateTasks]);
 
-
   // ── Take Action ──
   const handleTakeAction = useCallback((item: V2DashboardPriorityItem) => {
     setActionModalItem(item);
   }, []);
+
+  const calEvents = calData?.events ?? [];
 
   return (
     <>
@@ -359,288 +449,171 @@ export default function TodayPage() {
 
     {/* Toast notification */}
     {toastMsg && (
-      <div className="fixed top-4 right-4 z-50 rounded-2xl px-4 py-3 text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2"
-        style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)', border: '1px solid rgba(0,0,0,0.06)' }}>
+      <div
+        className="fixed top-4 right-4 z-50 rounded-xl px-4 py-3 text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          background: 'rgba(255,255,255,0.95)',
+          color: 'var(--ice-text2)',
+          border: '1px solid var(--ice-border)',
+          boxShadow: '0 4px 20px rgba(64,200,240,0.15)',
+        }}
+      >
         {toastMsg}
       </div>
     )}
 
-    <div className="space-y-4 md:space-y-6">
-      {/* Greeting + Affirmation */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>{greeting}</h1>
-        <p className="text-sm italic mt-1" style={{ color: 'var(--muted-foreground)' }}>
+    {/* ── Status Ticker — full-width above page content ── */}
+    <div className="relative -mx-4 md:-mx-8 -mt-5 md:-mt-8 mb-5">
+      <StatusTicker />
+    </div>
+
+    <div className="space-y-4 md:space-y-5" style={{ background: 'var(--ice-bg)', minHeight: '100%', borderRadius: '0' }}>
+
+      {/* ── Greeting ── */}
+      <div style={{ paddingBottom: '2px' }}>
+        <h1
+          style={{
+            fontFamily: 'var(--font-rajdhani)',
+            fontWeight: 700,
+            fontSize: '32px',
+            color: 'var(--ice-text)',
+            letterSpacing: '1px',
+            lineHeight: 1.1,
+          }}
+        >
+          {greeting}
+        </h1>
+        <p
+          style={{
+            fontFamily: 'var(--font-script)',
+            fontWeight: 600,
+            fontSize: '28px',
+            color: 'var(--ice2)',
+            marginTop: '6px',
+            lineHeight: 1.3,
+          }}
+        >
           {affirmation || 'You move with intention and grace.'}
         </p>
       </div>
 
+      {/* ── Daily Briefing ── (restyled via inline override on the wrapper) */}
+      <div style={{
+        background: 'rgba(255,255,255,0.70)',
+        border: '1px solid #b8d8e8',
+        borderRadius: '12px',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        boxShadow: '0 2px 16px rgba(64,168,200,0.08)',
+        padding: '12px 16px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ice-text3)', fontWeight: 500 }}>
+            TODAY&apos;S BRIEFING
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ice-text3)', opacity: 0.7 }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
+        {/* Render the actual briefing content */}
+        <DailyBriefing tasksData={tasksData} campaigns={campaignsData} />
+      </div>
+
+      {/* ── Finance Alerts ── */}
+      <FinanceAlerts />
+
       {/* ── Daily Anchors ── */}
       <WellnessAnchors onAllComplete={handleAnchorAllComplete} />
 
-      <div className="grid gap-4 max-sm:mx-3 md:grid-cols-2">
-        {/* ── Left: Today's Timeline ── */}
-        <Card>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
-                <CardTitle>Today&apos;s Timeline</CardTitle>
-              </div>
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{ background: streamStatus === 'live' ? 'var(--color-mint)' : 'var(--muted)', color: streamStatus === 'live' ? 'var(--color-mint-text)' : 'var(--muted-foreground)' }}>
-                {streamStatus === 'live' ? 'Live' : 'Polling'}
-              </span>
-            </div>
+      {/* ── 3-Day Calendar Grid ── */}
+      <ThreeDayGrid events={calEvents} />
 
-            <div className="mt-3 space-y-2">
-              {!data ? (
-                // Loading skeleton
-                <div className="space-y-2">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: 'var(--muted)' }} />
-                  ))}
-                </div>
-              ) : mergedTimeline.length === 0 ? (
-                <div className="rounded-xl border-2 border-dashed p-6 text-center" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No events yet — check back when calendar syncs</p>
-                </div>
-              ) : (
-                <>
-                  {mergedTimeline.map((entry, idx) => {
-                    const prevEntry = idx > 0 ? mergedTimeline[idx - 1] : null;
-                    const prevTime = prevEntry
-                      ? (prevEntry._calEvent ? (prevEntry as { startTime: string }).startTime : (prevEntry as V2DashboardTimelineItem).time)
-                      : null;
-                    const thisTime = entry._calEvent
-                      ? (entry as { startTime: string }).startTime
-                      : (entry as V2DashboardTimelineItem).time;
-                    const showTime = thisTime !== prevTime;
+      {/* ── SSE Stream ── */}
+      <SseLiveBox streamStatus={streamStatus} />
 
-                    if (entry._calEvent) {
-                      // ── Calendar event row ──
-                      const calEntry = entry as { _calEvent: true; id: string; title: string; startTime: string; endTime: string | null; startDate: string; meetingUrl: string | null; location: string | null; status: 'done' | 'current' | 'upcoming' };
-                      const isCurrent = calEntry.status === 'current';
-                      const isDone = calEntry.status === 'done';
-                      return (
-                        <div key={`cal-${calEntry.id}`}>
-                          {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
-                          <div className="rounded-xl p-3 transition-all group"
-                            style={{
-                              border: isCurrent ? '1.5px solid var(--color-sky-text)' : '1px solid var(--border)',
-                              background: isCurrent ? 'var(--color-sky)' : 'var(--input-background)',
-                              opacity: isDone ? 0.5 : 1,
-                            }}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-sm font-semibold w-16 flex-shrink-0" style={{ color: 'var(--color-sky-text)', opacity: showTime ? 1 : 0 }}>
-                                  {calEntry.startTime}
-                                </span>
-                                <div className="min-w-0">
-                                  <span className="text-sm block truncate" style={{ color: 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none' }}>
-                                    {calEntry.title}
-                                  </span>
-                                  {calEntry.endTime && (
-                                    <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
-                                      {calEntry.startTime} – {calEntry.endTime}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
-                                  Cal
-                                </span>
-                                {isCurrent && (
-                                  <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>Now</span>
-                                )}
-                                {calEntry.meetingUrl && !isDone && (
-                                  <a href={calEntry.meetingUrl} target="_blank" rel="noopener noreferrer"
-                                    className="rounded-lg p-1.5 transition-opacity hover:opacity-80"
-                                    style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
-                                    <Video className="w-3.5 h-3.5" />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // ── Task / focus-block row ──
-                    const taskEntry = entry as V2DashboardTimelineItem;
-                    const isCurrent = taskEntry.status === 'current';
-                    const isDone = taskEntry.status === 'done';
-                    const isFocus = taskEntry.type === 'focus-block';
-                    const isTask = taskEntry.type === 'task';
-                    const normalizedTaskBot = taskEntry.assignedBot ? normalizeBotName(taskEntry.assignedBot) : '';
-                    const botColors = normalizedTaskBot ? BOT_COLORS[normalizedTaskBot] : null;
-
-                    return (
-                      <div key={`${taskEntry.time}-${taskEntry.title}-${idx}`}>
-                        {idx === nowIndex && <div ref={nowRef}><NowLine /></div>}
-                        <div className="rounded-xl p-3 transition-all group"
-                          style={{
-                            border: isCurrent ? '1.5px solid var(--color-cyan)' : isFocus ? '1.5px dashed var(--color-purple)' : '1px solid var(--border)',
-                            background: isCurrent ? 'rgba(0,217,255,0.06)' : isFocus ? 'rgba(123,104,238,0.04)' : 'var(--input-background)',
-                            opacity: isDone ? 0.5 : 1,
-                          }}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="text-sm font-semibold w-16 flex-shrink-0"
-                                style={{ color: isFocus ? 'var(--color-purple)' : 'var(--color-cyan)', opacity: showTime ? 1 : 0 }}>
-                                {taskEntry.time}
-                              </span>
-                              <div className="min-w-0">
-                                <span className="text-sm block truncate"
-                                  style={{ color: isFocus ? 'var(--color-purple)' : 'var(--foreground)', textDecoration: isDone ? 'line-through' : 'none', fontStyle: isFocus ? 'italic' : 'normal' }}>
-                                  {taskEntry.title}
-                                </span>
-                                {taskEntry.endTime && <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{taskEntry.time} – {taskEntry.endTime}</span>}
-                              </div>
-                            </div>
-                            {!isDone && isCurrent && <Zap className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />}
-                          </div>
-
-                          {/* Action buttons row */}
-                          {!isDone && (
-                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                              {isTask && (
-                                <button onClick={() => handleComplete(taskEntry.taskId)}
-                                  className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity"
-                                  style={{ background: 'var(--color-mint)', color: 'var(--color-mint-text)' }}>
-                                  <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Done</span>
-                                </button>
-                              )}
-                              <button onClick={() => handleGateway(taskEntry.title)}
-                                className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 transition-opacity opacity-0 group-hover:opacity-100"
-                                style={{ background: 'var(--color-sky)', color: 'var(--color-sky-text)' }}>
-                                <span className="flex items-center gap-1"><Send className="w-3 h-3" /> Ask Ruby</span>
-                              </button>
-                              {taskEntry.assignedBot && botColors && (
-                                <button onClick={() => handleBotTelegram(normalizedTaskBot, taskEntry.title)}
-                                  className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80 transition-opacity cursor-pointer"
-                                  style={{ background: botColors.bg, color: botColors.text }}
-                                  title={`Message ${normalizedTaskBot} on Telegram`}>
-                                  {normalizedTaskBot}
-                                </button>
-                              )}
-                              {taskEntry.meetingUrl && (
-                                <a href={taskEntry.meetingUrl} target="_blank" rel="noopener noreferrer"
-                                  className="rounded-lg px-2.5 py-1 text-[11px] font-medium hover:opacity-80 flex items-center gap-1"
-                                  style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
-                                  <Video className="w-3 h-3" /> Join
-                                </a>
-                              )}
-                              {isTask && taskEntry.taskId && (
-                                <AssignToDropdown currentBot={normalizedTaskBot || taskEntry.assignedBot} taskTitle={taskEntry.title}
-                                  onAssign={(bot) => handleAssign(taskEntry.taskId!, taskEntry.title, bot)} />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* NowLine at end when all entries are in the past */}
-                  {nowIndex >= mergedTimeline.length && mergedTimeline.length > 0 && (
-                    <div ref={nowRef}><NowLine /></div>
-                  )}
-                </>
-              )}
-
-            </div>
-          </Card>
-
-        {/* ── Right: Active Tasks ── */}
-        <Card>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Star className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
-              <CardTitle>Active Tasks</CardTitle>
-            </div>
-            {tasksData && (
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-                {tasksData.active.length}
-              </span>
-            )}
-          </div>
-          <div className="mt-3 space-y-2">
-            {!tasksData ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: 'var(--muted)' }} />
-                ))}
-              </div>
-            ) : tasksData.active.length === 0 ? (
-              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No active tasks right now.</p>
-            ) : (
-              tasksData.active.map((task) => (
-                <TaskCard
-                  key={task.taskId}
-                  task={task}
-                  onTakeAction={(t) => handleTakeAction(toActionItem(t))}
-                />
-              ))
-            )}
-          </div>
-        </Card>
-      </div>
 
       {/* ── Quick Actions ── */}
-      <Card className="max-sm:mx-3">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4" style={{ color: 'var(--color-cyan)' }} />
-          <CardTitle>Quick Actions</CardTitle>
+      <div style={{
+        background: 'rgba(255,255,255,0.70)',
+        border: '1px solid #b8d8e8',
+        borderRadius: '12px',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        boxShadow: '0 2px 16px rgba(64,168,200,0.08)',
+        padding: '14px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+          <Zap className="w-4 h-4" style={{ color: 'var(--ice)' }} />
+          <span style={{ fontFamily: 'var(--font-rajdhani)', fontWeight: 700, fontSize: '14px', letterSpacing: '0.06em', color: 'var(--ice-text)', textTransform: 'uppercase' }}>
+            Quick Actions
+          </span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <button
+            type="button"
             onClick={() => setShowNewTaskModal(true)}
             className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}
+            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
           >
-            <Plus className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>New Task</span>
+            <Plus className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>New Task</span>
           </button>
-          <Link href="/activity" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
-            <ListChecks className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Approve Queue</span>
+          <Link
+            href="/activity"
+            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+          >
+            <ListChecks className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Activity</span>
           </Link>
-          <Link href="/ruby" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
-            <Sparkles className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Ask Ruby</span>
+          <Link
+            href="/ruby"
+            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+          >
+            <Sparkles className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ask Ruby</span>
           </Link>
-          <Link href="/dispatch" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
-            <Rocket className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Dispatch</span>
+          <Link
+            href="/dispatch"
+            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+          >
+            <Rocket className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dispatch</span>
           </Link>
-          <Link href="/email" className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
-            <MessageSquare className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Draft Reply</span>
+          <Link
+            href="/email"
+            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+          >
+            <MessageSquare className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email</span>
           </Link>
-          <button onClick={() => setShowTrophy(true)}
+          <button
+            type="button"
+            onClick={() => setShowTrophy(true)}
             className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95 relative"
-            style={{ background: 'rgba(0,217,255,0.08)', border: '1px solid rgba(0,217,255,0.18)' }}>
+            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+          >
             {completedTitles.length > 0 && (
-              <span className="absolute top-2 right-2 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold"
-                style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}>
+              <span
+                className="absolute top-2 right-2 rounded-full w-4 h-4 flex items-center justify-center"
+                style={{ background: 'var(--ice)', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 700 }}
+              >
                 {completedTitles.length}
               </span>
             )}
-            <Trophy className="w-5 h-5" style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-xs font-semibold text-center leading-tight" style={{ color: 'var(--foreground)' }}>Trophy</span>
+            <Trophy className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophy</span>
           </button>
         </div>
-      </Card>
+      </div>
 
       {/* ── Voice (Jarvis) ── */}
-      <div className="max-sm:mx-3">
+      <div>
         <JarvisCard />
       </div>
 
@@ -651,4 +624,10 @@ export default function TodayPage() {
 type AssignTaskResponse = {
   assigned?: string;
   ownerId?: string | null;
+};
+
+type CampaignListItem = {
+  id: string;
+  title: string;
+  status: string | null;
 };

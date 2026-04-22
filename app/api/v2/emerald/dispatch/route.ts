@@ -139,12 +139,6 @@ export async function POST(req: Request) {
     prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }).catch(() => {});
   }
 
-  const input = [
-    { role: 'system', content: buildSystemPrompt(finance) },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: text },
-  ];
-
   let upstreamRes: Response;
   try {
     upstreamRes = await fetch(`${gateway}/v1/responses`, {
@@ -155,7 +149,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input }),
+      body: JSON.stringify({ stream: true, model, input: text }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {

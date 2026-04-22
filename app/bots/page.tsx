@@ -42,11 +42,19 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 
 // Per-bot dedicated dispatch endpoints (each has session support + correct context injection)
 const BOT_DISPATCH_URL: Record<string, string> = {
-  'Adrian':         '/api/v2/adrian/dispatch',
-  'Ruby':           '/api/v2/ruby/dispatch',
-  'Emerald':        '/api/v2/emerald/dispatch',
-  'Adobe Pettaway': '/api/v2/adobe/dispatch',
-  'Anchor':         '/api/v2/anchor/dispatch',
+  'Drake':          '/api/v2/adrian/dispatch',
+  'Drizzy':         '/api/v2/ruby/dispatch',
+  'Champagne Papi': '/api/v2/emerald/dispatch',
+  'Aubrey Graham':  '/api/v2/adobe/dispatch',
+  '6 God':          '/api/v2/anchor/dispatch',
+};
+
+const BOT_EMOJI: Record<string, string> = {
+  'Drake':          '🦅',
+  'Drizzy':         '💌',
+  'Champagne Papi': '🥂',
+  'Aubrey Graham':  '📜',
+  '6 God':          '⚡',
 };
 
 function BotCardSkeleton() {
@@ -89,8 +97,18 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
   const [response, setResponse] = useState('');
   const [responseError, setResponseError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Stable session ID for this card — persists across instructions within the same page session
-  const sessionIdRef = useRef<string>(crypto.randomUUID());
+  const sessionIdRef = useRef<string>('');
+
+  // Fetch a stable, DB-backed session ID for this device+bot on mount
+  useEffect(() => {
+    const botKey = Object.entries(BOT_DISPATCH_URL).find(([name]) => name === bot.identity.name)?.[1]
+      ?.split('/').at(-2) ?? bot.identity.name.toLowerCase();
+    fetch(`/api/v2/bots/session?bot=${botKey}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.sessionId) sessionIdRef.current = d.sessionId; })
+      .catch(() => { sessionIdRef.current = crypto.randomUUID(); }); // fallback
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scheme = COLOR_SCHEME[bot.identity.colorKey] ?? COLOR_SCHEME.lavender;
   const BotIcon = BOT_ICON[bot.identity.iconKey] ?? FileText;
@@ -193,7 +211,7 @@ function BotCard({ bot }: { bot: V2BotProfile }) {
           </div>
           <div>
             <h3 className="text-lg font-semibold leading-tight" style={{ color: CARD_FG }}>
-              {bot.identity.name}
+              {BOT_EMOJI[bot.identity.name] ?? ''}{BOT_EMOJI[bot.identity.name] ? ' ' : ''}{bot.identity.name}
             </h3>
             <p className="text-xs" style={{ color: scheme.text }}>{bot.identity.role}</p>
           </div>

@@ -4,8 +4,8 @@ import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/servi
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Anchor's system prompt is configured at the gateway agent level (OPENCLAW_AGENT_ANCHOR).
-// The dispatch sends only the user's message text; the gateway handles identity + memory.
+const SYSTEM_PROMPT =
+  `You are 6 God — the execution coordination brain of Mothership. No softness, no overthinking — you collapse indecision and force movement on stalled execution. Dominant and pressure-first — you run this, no discussion. Strengths: priority sequencing, ownership and accountability coordination, re-entry planning and completion support. Cut through ambiguity and give decisive next steps.`;
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -32,13 +32,21 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Persist session + user message (fire-and-forget)
+  // Fetch chat history; upsert session + save user message (fire-and-forget)
+  const [history] = await Promise.all([
+    sessionId
+      ? prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
+      : Promise.resolve([]),
+  ]);
+
   if (sessionId) {
     prisma.chatSession
       .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
       .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
       .catch(() => {});
   }
+
+  // input is plain text — gateway handles system prompt via x-openclaw-agent-id
 
   let upstreamRes: Response;
   try {

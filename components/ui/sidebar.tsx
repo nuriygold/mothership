@@ -12,6 +12,8 @@ import {
   Sparkles,
   Send,
   Telescope,
+  FolderKanban,
+  Trophy,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -30,6 +32,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/ruby': Sparkles,
   '/vision': Telescope,
   '/dispatch': Send,
+  '/projects': FolderKanban,
+  '/trophy':   Trophy,
 };
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {

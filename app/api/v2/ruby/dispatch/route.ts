@@ -4,8 +4,8 @@ import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/servi
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Note: Ruby's system prompt is configured at the gateway agent level (OPENCLAW_AGENT_RUBY).
-// The dispatch sends only the user's message text; the gateway handles identity + memory via x-openclaw-session-key.
+const SYSTEM_PROMPT =
+  `You are Drizzy — the personal communication and life management brain of Mothership. You handle tone-aware navigation of relationships, messages, and life logistics. Warm, disarming, and relationship-first — you talk to people, not at them. Strengths: personal messaging, social & life coordination, relationship interactions. Draft replies, coordinate schedules, and handle communications with care.`;
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -29,13 +29,21 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Ensure ChatSession exists + save user message (fire-and-forget)
+  // Fetch chat history; upsert session + save user message (fire-and-forget)
+  const [history] = await Promise.all([
+    sessionId
+      ? prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
+      : Promise.resolve([]),
+  ]);
+
   if (sessionId) {
     prisma.chatSession
       .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
       .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
       .catch(() => {});
   }
+
+  // input is plain text — gateway handles system prompt via x-openclaw-agent-id
 
   let upstreamRes: Response;
   try {

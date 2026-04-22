@@ -54,52 +54,52 @@ const BOT_PROFILES: Array<{
 }> = [
   {
     key: 'adrian',
-    name: 'Adrian',
+    name: 'Drake',
     role: 'Automation & System Operations',
     colorKey: 'mint',
     iconKey: 'trending-up',
-    workingStyle: 'Executes commands, scripts, and infrastructure operations end-to-end',
-    personality: 'Reliable, action-first executor — runs the machine',
+    workingStyle: 'Executes commands, shifts mode by task — calm, surgical, or full-send depending on what the moment demands',
+    personality: 'Full-spectrum operator — he chooses the mode, then owns it completely',
     strengths: ['Automation & orchestration', 'Infrastructure & deployment', 'System health monitoring'],
   },
   {
     key: 'ruby',
-    name: 'Ruby',
+    name: 'Drizzy',
     role: 'Personal Communication & Life Management',
     colorKey: 'pink',
     iconKey: 'mail',
-    workingStyle: 'Tone-aware, fast iteration on messages and social coordination',
-    personality: 'Warm, direct, and relationship-aware — talks to people',
+    workingStyle: 'Tone-aware navigation of relationships, messages, and life logistics — keeps everything flowing',
+    personality: 'Warm, disarming, and relationship-first — talks to people, not at them',
     strengths: ['Personal messaging', 'Social & life coordination', 'Relationship interactions'],
   },
   {
     key: 'emerald',
-    name: 'Emerald',
+    name: 'Champagne Papi',
     role: 'Analysis, Verification & Financial Intelligence',
     colorKey: 'sky',
     iconKey: 'search',
-    workingStyle: 'Traces problems layer by layer — data, schema, API, frontend — before reaching conclusions',
-    personality: 'Precise, auditable, decision-ready — understands what is happening and why',
+    workingStyle: 'Reads the numbers for leverage — data, risk, and positioning before anyone else sees it',
+    personality: 'Calculated and expensive — sees through the surface to what the money is actually saying',
     strengths: ['Financial intelligence & cash flow analysis', 'System verification & QA', 'Strategic diagnostics & pattern detection'],
   },
   {
     key: 'adobe',
-    name: 'Adobe Pettaway',
+    name: 'Aubrey Graham',
     role: 'Document Intelligence',
     colorKey: 'lemon',
     iconKey: 'file-text',
-    workingStyle: 'Extraction and schema validation',
-    personality: 'Precise and literal',
+    workingStyle: "Quiet, precise extraction — reads what's there, reports what's true",
+    personality: 'No persona, no performance — just what the document actually says',
     strengths: ['Document parsing', 'Entity extraction', 'Validation checks'],
   },
   {
     key: 'anchor',
-    name: 'Anchor',
+    name: '6 God',
     role: 'Execution Coordination & Human Follow-through',
     colorKey: 'lavender',
     iconKey: 'anchor',
-    workingStyle: 'Grounds execution plans, clarifies ownership, and stabilizes re-entry when momentum drops',
-    personality: 'Warm, firm, and execution-first — reduces friction without dramatizing stalls',
+    workingStyle: 'No softness, no overthinking — collapses indecision and forces movement on stalled execution',
+    personality: 'Dominant and pressure-first — she runs this, no discussion',
     strengths: ['Priority sequencing', 'Ownership and accountability coordination', 'Re-entry planning and completion support'],
   },
 ];
@@ -107,11 +107,11 @@ const BOT_PROFILES: Array<{
 function routeForTask(task: any): BotRouteKey {
   // Explicit assignee takes priority over keyword inference
   const assignee = String(task.assignee ?? '').toLowerCase().trim();
-  if (assignee === 'adrian' || assignee === 'main') return 'adrian';
-  if (assignee === 'ruby') return 'ruby';
-  if (assignee === 'emerald') return 'emerald';
-  if (assignee === 'adobe' || assignee === 'adobe pettaway') return 'adobe';
-  if (assignee === 'anchor' || assignee === 'ballast') return 'anchor';
+  if (assignee === 'adrian' || assignee === 'main' || assignee === 'drake') return 'adrian';
+  if (assignee === 'ruby' || assignee === 'drizzy') return 'ruby';
+  if (assignee === 'emerald' || assignee === 'champagne papi') return 'emerald';
+  if (assignee === 'adobe' || assignee === 'adobe pettaway' || assignee === 'aubrey graham') return 'adobe';
+  if (assignee === 'anchor' || assignee === 'ballast' || assignee === '6 god') return 'anchor';
 
   // Fall back to keyword inference from title + description
   const title = String(task.title ?? '').toLowerCase();
@@ -876,65 +876,6 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     }
   }
 
-  // 3. Detect focus blocks (gaps > 30 min between calendar events, or after a single event through end of day)
-  if (calEvents.length >= 1) {
-    const tzLabel2 = process.env.APP_TIMEZONE || 'America/New_York';
-    const localDateStr2 = now.toLocaleDateString('en-CA', { timeZone: tzLabel2 });
-    const endOfDay = new Date(`${localDateStr2}T23:59:59`);
-
-    const sorted = [...calEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-
-    // Check gaps between consecutive events
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const endCurrent = sorted[i].endDate ?? sorted[i].startDate;
-      const startNext = sorted[i + 1].startDate;
-      const gapMs = new Date(startNext).getTime() - new Date(endCurrent).getTime();
-      const gapMin = gapMs / 60000;
-      if (gapMin >= 30) {
-        const focusStart = new Date(endCurrent);
-        const gapHours = Math.floor(gapMin / 60);
-        const gapRemMin = Math.round(gapMin % 60);
-        const durationLabel = gapHours > 0
-          ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
-          : `${gapRemMin}m`;
-        items.push({
-          time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel2 }),
-          title: `Focus Block — ${durationLabel} available`,
-          iconType: 'focus',
-          status: now > new Date(startNext) ? 'done' : now >= focusStart ? 'current' : 'upcoming',
-          type: 'focus-block',
-          startDate: focusStart.toISOString(),
-          endDate: startNext,
-          isDraggable: false,
-        });
-      }
-    }
-
-    // Check gap after the last event through end of day
-    const lastEvent = sorted[sorted.length - 1];
-    const lastEnd = lastEvent.endDate ?? lastEvent.startDate;
-    const gapAfterMs = endOfDay.getTime() - new Date(lastEnd).getTime();
-    const gapAfterMin = gapAfterMs / 60000;
-    if (gapAfterMin >= 30) {
-      const focusStart = new Date(lastEnd);
-      const gapHours = Math.floor(gapAfterMin / 60);
-      const gapRemMin = Math.round(gapAfterMin % 60);
-      const durationLabel = gapHours > 0
-        ? `${gapHours}h${gapRemMin > 0 ? ` ${gapRemMin}m` : ''}`
-        : `${gapRemMin}m`;
-      items.push({
-        time: focusStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tzLabel2 }),
-        title: `Focus Block — ${durationLabel} available`,
-        iconType: 'focus',
-        status: now > endOfDay ? 'done' : now >= focusStart ? 'current' : 'upcoming',
-        type: 'focus-block',
-        startDate: focusStart.toISOString(),
-        endDate: endOfDay.toISOString(),
-        isDraggable: false,
-      });
-    }
-  }
-
   // Sort everything by startDate
   items.sort((a, b) => {
     const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
@@ -971,7 +912,7 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
   } else if (action === 'defer') {
     await updateTask({ id: taskId, status: TaskStatus.TODO });
   } else if (action === 'complete') {
-    await updateTask({ id: taskId, status: TaskStatus.DONE });
+    await prisma.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE, completedAt: new Date() } });
   } else if (action === 'unblock') {
     await updateTask({ id: taskId, status: TaskStatus.IN_PROGRESS });
   }
