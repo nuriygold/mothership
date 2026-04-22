@@ -5,28 +5,52 @@ import { useState } from "react"
 export default function Iceman() {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function send() {
-    if (!input.trim()) return
+    if (!input.trim() || loading) return
 
-    setMessages(m => [...m, { role: "🧊 you", text: input }])
+    setError(null)
+    setLoading(true)
 
-    const res = await fetch("https://mother.nuriy.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer 8bcb9a096d688cd87406486da0c68e1a51708425975870bc",
-        "x-openclaw-agent-id": "iceman"
-      },
-      body: JSON.stringify({ model: "openclaw", input })
-    })
+    const userText = input
+    setMessages(m => [...m, { role: "🧊 you", text: userText }])
 
-    const data = await res.json()
-    setMessages(m => [
-      ...m,
-      { role: "🤖 iceman", text: data.output_text || "No reply from agent." }
-    ])
-    setInput("")
+    try {
+      const res = await fetch("https://mother.nuriy.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer 8bcb9a096d688cd87406486da0c68e1a51708425975870bc",
+          "x-openclaw-agent-id": "iceman"
+        },
+        body: JSON.stringify({ model: "openclaw", input: userText })
+      })
+
+      if (!res.ok) {
+        throw new Error("Request failed: " + res.status)
+      }
+
+      const data = await res.json()
+
+      let reply = "No reply from agent."
+
+      if (data?.output_text) {
+        reply = data.output_text
+      } else if (data?.output?.[0]?.content?.[0]?.text) {
+        reply = data.output[0].content[0].text
+      } else if (data?.error) {
+        reply = "API error: " + JSON.stringify(data.error)
+      }
+
+      setMessages(m => [...m, { role: "🤖 iceman", text: reply }])
+    } catch (err: any) {
+      setError(err.message || "Request failed")
+    } finally {
+      setLoading(false)
+      setInput("")
+    }
   }
 
   return (
@@ -70,6 +94,11 @@ export default function Iceman() {
           overflowY: "auto",
           boxShadow: "0 2px 18px 0 #100f1e70"
         }}>
+          {error && (
+            <div style={{ color: "#ff6b6b", marginBottom: 10 }}>
+              Error: {error}
+            </div>
+          )}
           {messages.length === 0 ? (
             <div style={{ opacity: 0.7 }}>
               Type a message below &amp; hit send to talk to Iceman.
@@ -106,6 +135,7 @@ export default function Iceman() {
           />
           <button
             onClick={send}
+            disabled={loading}
             style={{
               background: "#38b8da",
               color: "white",
@@ -113,10 +143,11 @@ export default function Iceman() {
               border: "none",
               borderRadius: "4px",
               padding: "10px 18px",
-              cursor: "pointer"
+              cursor: "pointer",
+              opacity: loading ? 0.6 : 1
             }}
           >
-            Send
+            {loading ? "Thinking…" : "Send"}
           </button>
         </div>
       </div>

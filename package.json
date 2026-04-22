@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "mcp": "node mcp/server.js",
     "postinstall": "prisma generate",
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "migrate:deploy": "prisma migrate deploy",
@@ -23,6 +24,7 @@
     "smoke:dispatch": "node scripts/smoke-dispatch.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
     "@prisma/client": "^5.22.0",
     "@radix-ui/react-scroll-area": "1.0.5",
     "@radix-ui/react-separator": "1.0.3",
