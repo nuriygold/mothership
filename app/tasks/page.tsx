@@ -285,7 +285,7 @@ export default function TasksPage() {
             Task Pool 🏝️
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-            Turks & Caicos operations · water's always clear
+            Turks &amp; Caicos operations · water&apos;s always clear
           </p>
         </div>
         <SlashCommandSheet commands={TASK_COMMANDS} label="tasks" />
