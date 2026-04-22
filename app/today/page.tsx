@@ -9,6 +9,7 @@ import {
   ListChecks, MessageSquare,
   Send, Sparkles, Rocket,
 } from 'lucide-react';
+import { Card, CardTitle } from '@/components/ui/card';
 import { TrophyModal } from '@/components/today/trophy-modal';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
@@ -22,6 +23,18 @@ import { ThreeDayGrid } from '@/components/today/three-day-grid';
 import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
+
+type CalendarTimelineItem = {
+  _calEvent: true;
+  id: string;
+  title: string;
+  startDate: string;
+  startTime: string;
+  endTime: string | null;
+  status: 'done' | 'current' | 'upcoming';
+  meetingUrl?: string | null;
+  location?: string | null;
+};
 
 type CalendarTimelineItem = {
   _calEvent: true;
