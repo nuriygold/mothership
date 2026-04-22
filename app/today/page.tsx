@@ -446,8 +446,8 @@ export default function TodayPage() {
 
     <div className="space-y-4 md:space-y-5" style={{ background: 'var(--ice-bg)', minHeight: '100%', borderRadius: '0' }}>
 
-      {/* ── Greeting ── */}
-      <div style={{ paddingBottom: '2px' }}>
+      {/* ── Greeting + Affirmation ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, paddingBottom: '2px', flexWrap: 'wrap' }}>
         <h1
           style={{
             fontFamily: 'var(--font-rajdhani)',
@@ -456,6 +456,7 @@ export default function TodayPage() {
             color: 'var(--ice-text)',
             letterSpacing: '1px',
             lineHeight: 1.1,
+            margin: 0,
           }}
         >
           {greeting}
@@ -464,10 +465,12 @@ export default function TodayPage() {
           style={{
             fontFamily: 'var(--font-script)',
             fontWeight: 600,
-            fontSize: '28px',
+            fontSize: '22px',
             color: 'var(--ice2)',
-            marginTop: '6px',
             lineHeight: 1.3,
+            margin: 0,
+            textAlign: 'right',
+            maxWidth: '55%',
           }}
         >
           {affirmation || 'You move with intention and grace.'}
