@@ -31,11 +31,11 @@ type TrophyData = {
   commands: TrophyCommand[];
 };
 
-const PRIORITY_BADGE: Record<string, { label: string; bg: string; color: string }> = {
-  CRITICAL: { label: 'Critical', bg: 'rgba(239,68,68,0.12)',  color: '#fca5a5' },
-  HIGH:     { label: 'High',     bg: 'rgba(245,158,11,0.12)', color: '#fcd34d' },
-  MEDIUM:   { label: 'Medium',   bg: 'rgba(0,217,255,0.12)',  color: '#67e8f9' },
-  LOW:      { label: 'Low',      bg: 'rgba(156,163,175,0.12)',color: '#9ca3af' },
+const PRIORITY_BADGE: Record<string, { label: string; bg: string; color: string; bar: string }> = {
+  CRITICAL: { label: 'Critical', bg: '#d0f0ff', color: '#0470a0', bar: '#0470a0' },
+  HIGH:     { label: 'High',     bg: '#c8ecfa', color: '#035080', bar: '#50a0c8' },
+  MEDIUM:   { label: 'Medium',   bg: '#e0f4fc', color: '#2a7898', bar: '#90c0d8' },
+  LOW:      { label: 'Low',      bg: '#f0f8ff', color: '#4a8898', bar: '#b8d8e8' },
 };
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -69,9 +69,9 @@ function Skeleton() {
     <div className="space-y-6">
       {[0, 1, 2].map((i) => (
         <div key={i} className="space-y-2">
-          <div className="h-3 w-24 rounded-full animate-pulse" style={{ background: 'var(--muted)' }} />
+          <div className="h-3 w-24 rounded-full animate-pulse" style={{ background: 'var(--bg3)' }} />
           {[0, 1].map((j) => (
-            <div key={j} className="h-14 rounded-2xl animate-pulse" style={{ background: 'var(--card)', border: '1px solid var(--border)' }} />
+            <div key={j} className="h-14 rounded-xl animate-pulse" style={{ background: 'var(--bg2)', border: '1px solid var(--border-c)' }} />
           ))}
         </div>
       ))}
@@ -90,7 +90,7 @@ export default function TrophyPage() {
 
   const sortedDays = useMemo(() => {
     if (!data?.byDay) return [];
-    return Object.keys(data.byDay).sort((a, b) => b.localeCompare(a)); // newest first
+    return Object.keys(data.byDay).sort((a, b) => b.localeCompare(a));
   }, [data]);
 
   const weekLabel = data ? fmtWeekLabel(data.weekStart, data.weekEnd, weekOffset) : '…';
@@ -104,20 +104,22 @@ export default function TrophyPage() {
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(217,119,6,0.15)' }}
+              style={{ background: '#d0f0ff', border: '1px solid #90d8f0' }}
             >
-              <Trophy className="w-5 h-5" style={{ color: '#B45309' }} />
+              <Trophy className="w-5 h-5" style={{ color: '#0470a0' }} />
             </div>
-            <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>Trophy Collection</h1>
+            <h1 style={{ fontFamily: 'var(--font-rajdhani)', fontSize: '22px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text)' }}>
+              Trophy Collection
+            </h1>
           </div>
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+          <p className="text-xs" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
             Your wins, week by week
           </p>
         </div>
         <Link
           href="/today"
-          className="text-xs font-medium px-3 py-2 rounded-xl transition-opacity hover:opacity-70"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
+          className="text-xs font-medium px-3 py-2 rounded-lg transition-opacity hover:opacity-70"
+          style={{ background: 'var(--bg2)', border: '1px solid var(--border-c)', color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}
         >
           ← Today
         </Link>
@@ -125,22 +127,22 @@ export default function TrophyPage() {
 
       {/* Week navigator */}
       <div
-        className="flex items-center justify-between rounded-2xl px-4 py-3"
-        style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        className="flex items-center justify-between rounded-xl px-4 py-3"
+        style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #90c8e0' }}
       >
         <button
           onClick={() => setWeekOffset((w) => w - 1)}
-          className="w-8 h-8 rounded-xl flex items-center justify-center transition-opacity hover:opacity-70"
-          style={{ background: 'var(--muted)' }}
+          className="w-8 h-8 rounded-lg flex items-center justify-center transition-opacity hover:opacity-70"
+          style={{ background: 'var(--bg3)', border: '1px solid var(--border-c)' }}
           aria-label="Previous week"
         >
-          <ChevronLeft className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
+          <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text2)' }} />
         </button>
 
         <div className="text-center">
-          <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{weekLabel}</p>
+          <p className="text-sm font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-rajdhani)', letterSpacing: '0.5px' }}>{weekLabel}</p>
           {!isLoading && (
-            <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
               {total === 0 ? 'No wins recorded' : `${total} win${total !== 1 ? 's' : ''}`}
             </p>
           )}
@@ -149,29 +151,29 @@ export default function TrophyPage() {
         <button
           onClick={() => setWeekOffset((w) => Math.min(0, w + 1))}
           disabled={weekOffset >= 0}
-          className="w-8 h-8 rounded-xl flex items-center justify-center transition-opacity hover:opacity-70 disabled:opacity-30"
-          style={{ background: 'var(--muted)' }}
+          className="w-8 h-8 rounded-lg flex items-center justify-center transition-opacity hover:opacity-70 disabled:opacity-30"
+          style={{ background: 'var(--bg3)', border: '1px solid var(--border-c)' }}
           aria-label="Next week"
         >
-          <ChevronRight className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
+          <ChevronRight className="w-4 h-4" style={{ color: 'var(--text2)' }} />
         </button>
       </div>
 
-      {/* Streak badge — show only for current week */}
+      {/* Win streak banner */}
       {weekOffset === 0 && !isLoading && total > 0 && (
         <div
-          className="flex items-center gap-3 rounded-2xl px-4 py-3"
+          className="flex items-center gap-3 rounded-xl px-4 py-3"
           style={{
-            background: 'linear-gradient(135deg, rgba(217,119,6,0.12) 0%, rgba(245,158,11,0.08) 100%)',
-            border: '1px solid rgba(217,119,6,0.3)',
+            background: 'linear-gradient(135deg, #d0f0ff 0%, #c8ecfa 100%)',
+            border: '1px solid #90d8f0',
           }}
         >
           <span className="text-2xl">🔥</span>
           <div>
-            <p className="text-sm font-semibold" style={{ color: '#B45309' }}>
+            <p className="text-sm font-semibold" style={{ color: '#0470a0', fontFamily: 'var(--font-rajdhani)', letterSpacing: '0.5px' }}>
               {total} win{total !== 1 ? 's' : ''} this week
             </p>
-            <p className="text-xs" style={{ color: 'rgba(180,83,9,0.7)' }}>Keep the momentum going</p>
+            <p className="text-xs" style={{ color: '#2a7898', fontFamily: 'var(--font-mono)' }}>Keep the momentum going</p>
           </div>
         </div>
       )}
@@ -181,55 +183,54 @@ export default function TrophyPage() {
         <Skeleton />
       ) : total === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Award className="w-12 h-12 opacity-20" />
-          <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+          <Award className="w-12 h-12" style={{ color: 'var(--border-c)' }} />
+          <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
             {weekOffset === 0 ? 'No wins yet this week' : 'No wins recorded for this week'}
           </p>
-          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          <p className="text-xs" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
             Complete tasks on the Today or Tasks page to see them here
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* Tasks grouped by day */}
           {sortedDays.map((day) => {
             const dayTasks = data!.byDay[day];
             return (
               <div key={day}>
                 <div className="flex items-center gap-2 mb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                     {fmtDayHeader(day)}
                   </p>
                   <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                    style={{ background: 'rgba(0,217,255,0.1)', color: 'var(--color-cyan)' }}
+                    className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                    style={{ background: '#d0f0ff', color: '#0470a0', border: '1px solid #90d8f0', fontFamily: 'var(--font-mono)' }}
                   >
                     {dayTasks.length}
                   </span>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {dayTasks.map((task) => {
-                    const badge = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE.MEDIUM;
+                <div className="flex flex-col gap-0" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #90c8e0', borderRadius: '12px', overflow: 'hidden' }}>
+                  {dayTasks.map((task, i) => {
+                    const badge = PRIORITY_BADGE[task.priority.toUpperCase()] ?? PRIORITY_BADGE.MEDIUM;
                     return (
                       <div
                         key={task.id}
-                        className="flex items-center gap-3 rounded-2xl px-4 py-3"
+                        className="flex items-center gap-3 px-4 py-3"
                         style={{
-                          background: 'linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(16,185,129,0.04) 100%)',
-                          border: '1px solid rgba(34,197,94,0.2)',
+                          borderBottom: i < dayTasks.length - 1 ? '1px solid var(--bg3)' : 'none',
                         }}
                       >
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#22c55e' }} />
-                        <p className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--foreground)' }}>
+                        <div style={{ width: 3, borderRadius: 2, alignSelf: 'stretch', minHeight: 32, background: badge.bar, flexShrink: 0 }} />
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#0470a0' }} />
+                        <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--text)' }}>
                           {task.title}
                         </p>
                         <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
-                          style={{ background: badge.bg, color: badge.color }}
+                          className="rounded px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
+                          style={{ background: badge.bg, color: badge.color, fontFamily: 'var(--font-mono)' }}
                         >
                           {badge.label}
                         </span>
-                        <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', flexShrink: 0, color: 'var(--text3)' }}>
                           {fmtTime(task.completedAt)}
                         </span>
                       </div>
@@ -244,30 +245,27 @@ export default function TrophyPage() {
           {(data?.commands ?? []).length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                   Gateway Commands
                 </p>
                 <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                  style={{ background: 'rgba(0,217,255,0.1)', color: 'var(--color-cyan)' }}
+                  className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                  style={{ background: '#c8ecfa', color: '#035080', border: '1px solid #90c8e0', fontFamily: 'var(--font-mono)' }}
                 >
                   {data!.commands.length}
                 </span>
               </div>
-              <div className="flex flex-col gap-2">
-                {data!.commands.map((cmd) => (
+              <div className="flex flex-col gap-0" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #90c8e0', borderRadius: '12px', overflow: 'hidden' }}>
+                {data!.commands.map((cmd, i) => (
                   <div
                     key={cmd.id}
-                    className="flex items-center gap-3 rounded-2xl px-4 py-3"
-                    style={{
-                      background: 'rgba(0,217,255,0.06)',
-                      border: '1px solid rgba(0,217,255,0.15)',
-                    }}
+                    className="flex items-center gap-3 px-4 py-3"
+                    style={{ borderBottom: i < data!.commands.length - 1 ? '1px solid var(--bg3)' : 'none' }}
                   >
-                    <Sparkles className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-cyan)' }} />
-                    <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--foreground)' }}>{cmd.input}</p>
+                    <Sparkles className="w-4 h-4 flex-shrink-0" style={{ color: '#035080' }} />
+                    <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{cmd.input}</p>
                     {cmd.completedAt && (
-                      <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', flexShrink: 0, color: 'var(--text3)' }}>
                         {fmtTime(cmd.completedAt)}
                       </span>
                     )}

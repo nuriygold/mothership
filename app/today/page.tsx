@@ -85,30 +85,29 @@ function SseLiveBox({ streamStatus }: { streamStatus: 'live' | 'fallback' }) {
 
   return (
     <div style={{
-      background: '#04141e',
-      borderRadius: '12px',
-      border: '1px solid #0d3050',
+      background: 'rgba(255,255,255,0.6)',
+      borderRadius: '8px',
+      border: '1px solid #90c8e0',
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
     }}>
       {/* Header bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #0d3050' }}>
-        {/* Live pulse dot */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid #b8e0f5', background: 'var(--bg2)' }}>
         <span style={{
           width: 7,
           height: 7,
           borderRadius: '50%',
-          background: streamStatus === 'live' ? '#40c8f0' : '#FFB800',
-          boxShadow: streamStatus === 'live' ? '0 0 6px rgba(64,200,240,0.8)' : 'none',
+          background: streamStatus === 'live' ? '#40c8f0' : '#f0b030',
+          boxShadow: streamStatus === 'live' ? '0 0 6px #40c8f090' : 'none',
           animation: streamStatus === 'live' ? 'pulseRing 2s ease-in-out infinite' : 'none',
           display: 'inline-block',
           flexShrink: 0,
         }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#40c8f0', letterSpacing: '0.1em', fontWeight: 500 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
           SSE / STREAM
         </span>
-        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '9px', color: streamStatus === 'live' ? '#40c8f0' : '#FFB800', opacity: 0.8 }}>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '9px', color: streamStatus === 'live' ? '#0470a0' : '#f0b030' }}>
           {streamStatus === 'live' ? 'LIVE' : 'FALLBACK'}
         </span>
       </div>
@@ -120,9 +119,9 @@ function SseLiveBox({ streamStatus }: { streamStatus: 'live' | 'fallback' }) {
         {logs.map((l, i) => (
           <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
             {l.ts && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: '#0470a0', flexShrink: 0 }}>{l.ts}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--text3)', flexShrink: 0 }}>{l.ts}</span>
             )}
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#7ab8d8', wordBreak: 'break-all' }}>{l.msg}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text2)', wordBreak: 'break-all' }}>{l.msg}</span>
           </div>
         ))}
       </div>

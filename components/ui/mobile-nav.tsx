@@ -63,26 +63,26 @@ export function MobileNav({ items }: { items: SidebarItem[] }) {
           >
             <div
               className="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200"
-              style={{ background: active ? 'var(--color-cyan)' : 'transparent' }}
+              style={{ background: active ? 'var(--bg3)' : 'transparent' }}
             >
               <Icon
                 className="w-5 h-5"
                 style={{
-                  color: active ? '#0A0E1A' : 'var(--sidebar-foreground)',
+                  color: active ? '#0470a0' : 'var(--sidebar-foreground)',
                   opacity: active ? 1 : 0.55,
                 }}
               />
             </div>
             <span
               className="text-[10px] leading-tight"
-              style={{ color: 'var(--sidebar-foreground)', opacity: active ? 1 : 0.5 }}
+              style={{ color: active ? '#0470a0' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.5 }}
             >
               {shortLabel}
             </span>
             {active && (
               <div
                 className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-8 rounded-full"
-                style={{ background: 'var(--color-cyan)' }}
+                style={{ background: '#0470a0' }}
               />
             )}
           </Link>

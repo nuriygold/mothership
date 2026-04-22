@@ -63,26 +63,26 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
           >
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200"
-              style={{ background: active ? 'var(--color-cyan)' : 'transparent' }}
+              style={{ background: active ? 'var(--bg3)' : 'transparent' }}
             >
               <Icon
                 className="w-5 h-5"
                 style={{
-                  color: active ? '#0A0E1A' : 'var(--sidebar-foreground)',
+                  color: active ? '#0470a0' : 'var(--sidebar-foreground)',
                   opacity: active ? 1 : 0.55,
                 }}
               />
             </div>
             <span
               className="text-[10px] leading-tight"
-              style={{ color: 'var(--sidebar-foreground)', opacity: active ? 1 : 0.5 }}
+              style={{ color: active ? '#0470a0' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.5 }}
             >
               {shortLabel}
             </span>
             {active && (
               <div
                 className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-8 rounded-full"
-                style={{ background: 'var(--color-cyan)' }}
+                style={{ background: '#0470a0' }}
               />
             )}
           </Link>

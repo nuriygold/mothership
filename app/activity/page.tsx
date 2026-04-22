@@ -24,19 +24,19 @@ function categorise(evt: V2ActivityItem): Exclude<Category, 'All'> {
 }
 
 const DOT_COLOR: Record<Exclude<Category, 'All'>, string> = {
-  Finance:   '#22c55e',
-  Campaigns: '#a855f7',
-  Email:     '#ec4899',
-  Tasks:     '#00D9FF',
-  Bots:      '#10b981',
+  Finance:   '#0470a0',
+  Campaigns: '#024878',
+  Email:     '#035080',
+  Tasks:     '#40c8f0',
+  Bots:      '#0560a0',
 };
 
 const BADGE_STYLE: Record<Exclude<Category, 'All'>, { bg: string; color: string }> = {
-  Finance:   { bg: 'rgba(34,197,94,0.12)',  color: '#86efac' },
-  Campaigns: { bg: 'rgba(168,85,247,0.12)', color: '#d8b4fe' },
-  Email:     { bg: 'rgba(236,72,153,0.12)', color: '#f9a8d4' },
-  Tasks:     { bg: 'rgba(0,217,255,0.12)',  color: '#67e8f9' },
-  Bots:      { bg: 'rgba(16,185,129,0.12)', color: '#6ee7b7' },
+  Finance:   { bg: '#d0f0ff', color: '#0470a0' },
+  Campaigns: { bg: '#c8eafa', color: '#024878' },
+  Email:     { bg: '#c8ecfa', color: '#035080' },
+  Tasks:     { bg: '#e0f4fc', color: '#2a7898' },
+  Bots:      { bg: '#b8e4f8', color: '#0560a0' },
 };
 
 // ─── Relative time ─────────────────────────────────────────────────────────────
@@ -96,13 +96,13 @@ function EventCard({ evt }: { evt: V2ActivityItem }) {
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
           <Pill text={cat} style={badge} />
           {evt.actor && evt.actor !== 'System' && (
-            <Pill text={evt.actor} style={{ bg: 'rgba(255,255,255,0.06)', color: 'var(--muted-foreground)' }} />
+            <Pill text={evt.actor} style={{ bg: '#e0f4fc', color: '#2a7898' }} />
           )}
           {evt.eventType && (
-            <Pill text={evt.eventType} style={{ bg: 'rgba(255,255,255,0.06)', color: 'var(--muted-foreground)' }} />
+            <Pill text={evt.eventType} style={{ bg: '#e8f6ff', color: '#4a8898' }} />
           )}
           {evt.sourceIntegration && (
-            <Pill text={evt.sourceIntegration} style={{ bg: 'rgba(255,255,255,0.06)', color: 'var(--muted-foreground)' }} />
+            <Pill text={evt.sourceIntegration} style={{ bg: '#e8f6ff', color: '#4a8898' }} />
           )}
         </div>
       </div>
@@ -240,9 +240,9 @@ export default function ActivityPage() {
               onClick={() => setActiveFilter(cat)}
               className="rounded-full px-3 py-1 text-xs font-medium transition-all"
               style={{
-                background: active ? 'var(--color-cyan)' : 'var(--card)',
-                color: active ? '#0A0E1A' : 'var(--muted-foreground)',
-                border: active ? '1px solid var(--color-cyan)' : '1px solid var(--border)',
+                background: active ? '#0470a0' : 'var(--card)',
+                color: active ? '#ffffff' : 'var(--text2)',
+                border: active ? '1px solid #0470a0' : '1px solid var(--border)',
               }}
             >
               {cat}
@@ -280,7 +280,7 @@ export default function ActivityPage() {
               onClick={() => setPage((p) => p + 1)}
               disabled={loadingMore}
               className="text-xs font-medium transition-opacity hover:opacity-70 disabled:opacity-40"
-              style={{ color: 'var(--color-cyan)' }}
+              style={{ color: '#0470a0' }}
             >
               {loadingMore ? 'Loading…' : 'Load more'}
             </button>
