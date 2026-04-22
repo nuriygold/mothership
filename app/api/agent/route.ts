@@ -15,7 +15,8 @@ export async function POST(req: Request) {
 
   const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
-  const resolvedAgent = agentForKey('iceman');
+  const agentKey = body?.agent ? String(body.agent).trim() : 'iceman';
+  const resolvedAgent = agentForKey(agentKey);
   const model = modelForOpenClaw(resolvedAgent);
 
   const sseError = (msg: string) => {
