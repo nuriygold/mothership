@@ -3,16 +3,15 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  // Adjust model and fields to match actual Prisma schema
-  const balances = await prisma.plaidBalance.findMany({
+  const balances = await prisma.account.findMany({
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
-      accountId: true,
-      available: true,
-      current: true,
-      isoCurrencyCode: true,
-      institutionName: true,
+      name: true,
+      type: true,
+      currency: true,
+      balance: true,
+      liquid: true,
       updatedAt: true,
     },
   });
