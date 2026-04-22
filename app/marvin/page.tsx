@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
-type AgentKey = "iceman" | "ruby" | "dispatch"
+type AgentKey = "iceman" | "ruby" | "emerald" | "anchor"
 
 type StreamEntry = {
   id: string
@@ -11,24 +11,27 @@ type StreamEntry = {
   content: string
 }
 
-const AGENTS: AgentKey[] = ["iceman", "ruby", "dispatch"]
+const AGENTS: AgentKey[] = ["iceman", "ruby", "emerald", "anchor"]
 
 const SESSIONS: Record<AgentKey, string> = {
   iceman: "agent:iceman:marvin",
   ruby: "agent:ruby:marvin",
-  dispatch: "agent:dispatch:marvin",
+  emerald: "agent:emerald:marvin",
+  anchor: "agent:anchor:marvin",
 }
 
 const AGENT_LABEL: Record<AgentKey, string> = {
-  iceman: "Iceman",
-  ruby: "Ruby",
-  dispatch: "Dispatch",
+  iceman: "🧊 Iceman",
+  ruby: "🌹 Drizzy",
+  emerald: "🍾 Champagne Papi",
+  anchor: "🙏 6 God",
 }
 
 const AGENT_COLOR: Record<AgentKey, string> = {
   iceman: "#38b8da",
   ruby: "#f472b6",
-  dispatch: "#f59e0b",
+  emerald: "#34d399",
+  anchor: "#a78bfa",
 }
 
 function uid(prefix: string): string {
@@ -39,12 +42,12 @@ export default function MarvinPage() {
   const [input, setInput] = useState("")
   const [entries, setEntries] = useState<StreamEntry[]>([])
   const [activeAgents, setActiveAgents] = useState<AgentKey[]>([])
-  const [error, setError] = useState<string | null>(null)
   const [gateway, setGateway] = useState<"checking" | "up" | "down">("checking")
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const activeControllersRef = useRef<AbortController[]>([])
+  const currentTurnIdsRef = useRef<Partial<Record<AgentKey, string>>>({})
 
   const loading = activeAgents.length > 0
 
@@ -69,31 +72,22 @@ export default function MarvinPage() {
     }
   }, [])
 
-  const activeLabel = useMemo(() => {
-    if (activeAgents.length === 0) return ""
-    return `Streaming: ${activeAgents.map((a) => AGENT_LABEL[a]).join(" • ")}`
-  }, [activeAgents])
-
   function appendDelta(agent: AgentKey, delta: string) {
     if (!delta) return
 
     setEntries((prev) => {
-      const last = prev[prev.length - 1]
-      if (last && last.role === "assistant" && last.agent === agent) {
-        const next = [...prev]
-        next[next.length - 1] = { ...last, content: `${last.content}${delta}` }
-        return next
+      const existingId = currentTurnIdsRef.current[agent]
+      if (existingId) {
+        const idx = prev.findIndex((e) => e.id === existingId)
+        if (idx !== -1) {
+          const next = [...prev]
+          next[idx] = { ...next[idx], content: next[idx].content + delta }
+          return next
+        }
       }
-
-      return [
-        ...prev,
-        {
-          id: uid(`assistant:${agent}`),
-          role: "assistant",
-          agent,
-          content: delta,
-        },
-      ]
+      const id = uid(`assistant:${agent}`)
+      currentTurnIdsRef.current[agent] = id
+      return [...prev, { id, role: "assistant", agent, content: delta }]
     })
   }
 
@@ -161,12 +155,17 @@ export default function MarvinPage() {
     }
   }
 
+  function clear() {
+    if (loading) return
+    setEntries([])
+  }
+
   async function send() {
     const text = input.trim()
     if (!text || loading) return
 
     setInput("")
-    setError(null)
+    currentTurnIdsRef.current = {}
     setEntries((prev) => [...prev, { id: uid("user"), role: "user", content: text }])
 
     const controllers = AGENTS.map(() => new AbortController())
@@ -222,7 +221,7 @@ export default function MarvinPage() {
           {gateway === "checking" && "Checking gateway..."}
         </span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {AGENTS.map((agent) => (
             <span
               key={agent}
@@ -237,6 +236,22 @@ export default function MarvinPage() {
               {AGENT_LABEL[agent]}
             </span>
           ))}
+          {entries.length > 0 && !loading && (
+            <button
+              onClick={clear}
+              style={{
+                fontSize: 12,
+                border: "1px solid #2a3046",
+                color: "rgba(255,255,255,0.45)",
+                background: "transparent",
+                borderRadius: 999,
+                padding: "4px 10px",
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -294,23 +309,33 @@ export default function MarvinPage() {
         })}
 
         {loading && (
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{activeLabel}</div>
-        )}
-
-        {error && (
-          <div
-            style={{
-              padding: "10px 14px",
-              borderRadius: "8px",
-              background: "rgba(255,80,80,0.1)",
-              border: "1px solid rgba(255,80,80,0.3)",
-              color: "#ff6b6b",
-              fontSize: "13px",
-            }}
-          >
-            {error}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 4 }}>
+            {activeAgents.map((agent) => (
+              <span
+                key={agent}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11,
+                  color: AGENT_COLOR[agent],
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: AGENT_COLOR[agent],
+                    opacity: 0.8,
+                  }}
+                />
+                {AGENT_LABEL[agent]}
+              </span>
+            ))}
           </div>
         )}
+
       </div>
 
       <div
