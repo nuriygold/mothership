@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export default function Iceman() {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [gateway, setGateway] = useState<'checking'|'up'|'down'>('checking')
 
   function newSession() {
     const id = Math.random().toString(36).slice(2,8)
@@ -50,7 +51,19 @@ export default function Iceman() {
         reply = "API error: " + JSON.stringify(data.error)
       }
 
-      setMessages(m => [...m, { role: "🤖 iceman", text: reply }])
+      // streaming style typing effect
+      let current = ""
+      for (const ch of reply) {
+        current += ch
+        setMessages(m => {
+          const last = m[m.length-1]
+          if (last && last.role === "🤖 iceman" && last.text === current.slice(0,-1)) {
+            return [...m.slice(0,-1), { role: "🤖 iceman", text: current }]
+          }
+          return [...m, { role: "🤖 iceman", text: current }]
+        })
+        await new Promise(r => setTimeout(r, 8))
+      }
     } catch (err: any) {
       setError(err.message || "Request failed")
     } finally {
@@ -58,6 +71,21 @@ export default function Iceman() {
       setInput("")
     }
   }
+
+  useEffect(() => {
+    async function checkGateway() {
+      try {
+        const r = await fetch("https://mother.nuriy.com/v1/health")
+        if (r.ok) setGateway('up')
+        else setGateway('down')
+      } catch {
+        setGateway('down')
+      }
+    }
+    checkGateway()
+  }, [])
+
+  const robot = gateway === 'up' ? '🤖' : gateway === 'down' ? '⚠️' : '⏳'
 
   return (
     <div style={{
@@ -78,9 +106,14 @@ export default function Iceman() {
         background: "rgba(20,25,35,0.85)",
         backdropFilter: "blur(12px)"
       }}>
-        🧊 ICEMAN
+        {robot} 🧊 ICEMAN
         <span style={{ marginLeft: "10px", fontSize: "12px", opacity: 0.6 }}>
           Mothership Builder Interface
+        </span>
+        <span style={{marginLeft:"12px",fontSize:"12px",opacity:0.7}}>
+          {gateway==='up' && 'Gateway online'}
+          {gateway==='down' && 'Gateway offline'}
+          {gateway==='checking' && 'Checking gateway…'}
         </span>
         <button
           onClick={newSession}
