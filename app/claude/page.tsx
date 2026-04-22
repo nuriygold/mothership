@@ -471,19 +471,8 @@ export default function ClaudePage() {
           </select>
         )}
 
-        {/* Azure endpoint */}
-        {cfg.provider === 'azure' && (
-          <input
-            type="text"
-            value={cfg.azureEndpoint}
-            onChange={(e) => patchCfg({ azureEndpoint: e.target.value })}
-            placeholder="https://your-resource.openai.azure.com"
-            style={{ ...sel, width: 300, fontSize: 12, fontFamily: 'monospace' }}
-          />
-        )}
-
-        {/* API Key */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
+        {/* API Key — hidden for Azure (endpoint + key are in Vercel env vars) */}
+        {cfg.provider !== 'azure' && <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
           <input
             type={showKey ? 'text' : 'password'}
             value={currentKey}
@@ -513,7 +502,7 @@ export default function ClaudePage() {
           >
             {showKey ? '○' : '●'}
           </button>
-        </div>
+        </div>}
 
         {/* Terminal config (only visible in terminal mode) */}
         {mode === 'terminal' && (
@@ -545,11 +534,29 @@ export default function ClaudePage() {
       {mode === 'live' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '40px 24px', color: 'white' }}>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: 3, textTransform: 'uppercase', fontFamily: 'monospace' }}>
-            {liveStatus === 'idle' && (sessionId ? 'Ready' : 'Open a chat tab first')}
+            {liveStatus === 'idle' && (sessionId ? 'Ready' : 'No active session')}
             {liveStatus === 'recording' && '● Recording'}
             {liveStatus === 'thinking' && '⟳ Thinking'}
             {liveStatus === 'speaking' && '♪ Speaking'}
           </div>
+
+          {!sessionId && liveStatus === 'idle' && (
+            <button
+              onClick={() => handleSessionChange(`agent:claude:${crypto.randomUUID()}`)}
+              style={{
+                background: '#38b8da',
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                padding: '9px 20px',
+                fontSize: 13,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              + New Session
+            </button>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 520 }}>
             {liveTranscript && (
