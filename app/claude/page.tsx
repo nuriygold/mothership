@@ -44,6 +44,10 @@ const PROVIDERS = {
       { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo', label: 'Qwen 2.5 72B' },
     ],
   },
+  azure: {
+    name: 'Azure OpenAI',
+    models: [],
+  },
 } as const;
 
 type Provider = keyof typeof PROVIDERS;
@@ -55,6 +59,7 @@ type Config = {
   model: string;
   keys: Partial<Record<Provider, string>>;
   terminalUrl: string;
+  azureEndpoint: string;
 };
 
 const DEFAULTS: Config = {
@@ -62,6 +67,7 @@ const DEFAULTS: Config = {
   model: 'claude-sonnet-4-6',
   keys: {},
   terminalUrl: 'ws://localhost:3001',
+  azureEndpoint: '',
 };
 
 const CFG_KEY = 'claude-page-config';
@@ -124,7 +130,8 @@ export default function ClaudePage() {
   }
 
   function setProvider(p: Provider) {
-    const model = PROVIDERS[p].models[0].id;
+    const models = PROVIDERS[p].models as readonly { id: string }[];
+    const model = models.length > 0 ? models[0].id : '';
     patchCfg({ provider: p, model });
   }
 
@@ -178,7 +185,7 @@ export default function ClaudePage() {
       const res = await fetch('/api/claude/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: cfg.provider, model: cfg.model, apiKey, messages: withUser }),
+        body: JSON.stringify({ provider: cfg.provider, model: cfg.model, apiKey, messages: withUser, azureEndpoint: cfg.azureEndpoint }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -292,16 +299,37 @@ export default function ClaudePage() {
           ))}
         </select>
 
-        {/* Model */}
-        <select
-          value={cfg.model}
-          onChange={(e) => patchCfg({ model: e.target.value })}
-          style={sel}
-        >
-          {currentModels.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
+        {/* Model — text input for Azure (deployment name), dropdown for others */}
+        {cfg.provider === 'azure' ? (
+          <input
+            type="text"
+            value={cfg.model}
+            onChange={(e) => patchCfg({ model: e.target.value })}
+            placeholder="Deployment name"
+            style={{ ...sel, width: 180, fontSize: 12 }}
+          />
+        ) : (
+          <select
+            value={cfg.model}
+            onChange={(e) => patchCfg({ model: e.target.value })}
+            style={sel}
+          >
+            {(currentModels as readonly { id: string; label: string }[]).map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Azure endpoint */}
+        {cfg.provider === 'azure' && (
+          <input
+            type="text"
+            value={cfg.azureEndpoint}
+            onChange={(e) => patchCfg({ azureEndpoint: e.target.value })}
+            placeholder="https://your-resource.openai.azure.com"
+            style={{ ...sel, width: 300, fontSize: 12, fontFamily: 'monospace' }}
+          />
+        )}
 
         {/* API Key */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
