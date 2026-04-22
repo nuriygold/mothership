@@ -808,12 +808,40 @@ const AFFIRMATIONS = [
   'What you build today, your future self will thank you for.',
   'Discipline is choosing between what you want now and what you want most.',
   'The details matter. And you notice every single one.',
+  'Build the vision. Trust the process. Execute with precision.',
+  'You\'re not just moving fast — you\'re moving right.',
+  'Every decision you make today is an investment in something bigger.',
+  'Rest is part of the strategy. So is this moment.',
+  'One focused hour beats ten distracted ones.',
+  'You set the standard. The systems follow.',
+  'The compound effect is already working in your favor.',
+  'Clarity is a competitive advantage. You have it.',
+  'Today\'s discipline is tomorrow\'s freedom.',
+  'You built something from nothing. That\'s still true every morning.',
+  'The right people are watching. Keep going.',
+  'Momentum is a choice. You\'re making it right now.',
+  'You operate at a level most people never reach.',
+  'Excellence is the baseline. Everything above it is the goal.',
+  'The version of you that gets it done shows up today.',
+  'Your systems are your legacy. Tend to them.',
+  'Quiet focus is your loudest flex.',
+  'What you protect your time for reveals what matters most.',
+  'You\'re playing a long game. Stay in it.',
+  'Every rep counts. Even the ones no one sees.',
+  'The gap between where you are and where you\'re going closes today.',
+  'You run the operation. Don\'t let the operation run you.',
+  'Trust your preparation. You\'ve already done the work.',
+  'Ship something today. Even something small.',
+  'The best operators make the hard thing look calm.',
 ];
 
 function getDailyAffirmation(): string {
-  // Deterministic for the day so it doesn't change on every refresh
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-  return AFFIRMATIONS[dayOfYear % AFFIRMATIONS.length];
+  const now = new Date();
+  // Offset by day AND week so adjacent days never share an affirmation
+  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+  const week = Math.floor(dayOfYear / 7);
+  const idx = (dayOfYear * 7 + week * 3) % AFFIRMATIONS.length;
+  return AFFIRMATIONS[idx];
 }
 
 async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {
