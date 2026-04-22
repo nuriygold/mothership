@@ -413,13 +413,14 @@ function PlanRow({ plan }: { plan: V2FinancePlan }) {
 }
 
 function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
-  const { data } = useSWR<{ items: Array<{ id: string; institutionName: string; updatedAt: string | null }> }>(
+  const { data, mutate: mutateItems } = useSWR<{ items: Array<{ id: string; institutionName: string; updatedAt: string | null }> }>(
     '/api/plaid/items',
     (url: string) => fetch(url).then((r) => r.json()).catch(() => ({ items: [] })),
     { refreshInterval: 60_000 }
   );
   const [syncing, setSyncing] = useState(false);
-  const [linking, setLinking] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
 
   const items = data?.items ?? [];
 
@@ -433,21 +434,32 @@ function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
     }
   }, [onSyncDone]);
 
-  const handleLink = useCallback(async () => {
-    setLinking(true);
+  const handleSeed = useCallback(async () => {
+    setSeeding(true);
+    setSeedError(null);
     try {
-      const res = await fetch('/api/plaid/create-link-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      if (res.ok) {
-        const body = await res.json();
-        if (body.link_token) {
-          // Open Plaid Link via the token. In demo mode we just surface the token.
-          window.open(`https://cdn.plaid.com/link/v2/stable/link.html?token=${encodeURIComponent(body.link_token)}`, '_blank');
-        }
+      const res = await fetch('/api/plaid/sandbox-seed', { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSeedError(body?.error ?? 'Seed failed');
+        return;
       }
+      await mutateItems();
+      onSyncDone();
+    } catch (err) {
+      setSeedError(err instanceof Error ? err.message : 'Seed failed');
     } finally {
-      setLinking(false);
+      setSeeding(false);
     }
-  }, []);
+  }, [mutateItems, onSyncDone]);
+
+  const lastUpdated = (() => {
+    const stamps = items.map((i) => (i.updatedAt ? new Date(i.updatedAt).getTime() : 0)).filter(Boolean);
+    if (stamps.length === 0) return null;
+    return new Date(Math.max(...stamps)).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+  })();
 
   return (
     <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -455,26 +467,22 @@ function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
       <div style={{ fontSize: 12, color: 'var(--text2)' }}>
         {items.length === 0
           ? 'No accounts connected yet.'
-          : `${items.length} institution${items.length === 1 ? '' : 's'} connected · updated ${
-              (() => {
-                const stamps = items.map((i) => (i.updatedAt ? new Date(i.updatedAt).getTime() : 0)).filter(Boolean);
-                if (stamps.length === 0) return '—';
-                return new Date(Math.max(...stamps)).toLocaleString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                });
-              })()
-            }`}
+          : `${items.length} institution${items.length === 1 ? '' : 's'} connected${lastUpdated ? ` · updated ${lastUpdated}` : ''}`}
       </div>
+      {seedError && (
+        <div style={{ fontSize: 11, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{seedError}</div>
+      )}
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-        <button className="btn-sm" onClick={handleSync} disabled={syncing || items.length === 0}>
-          {syncing ? 'Syncing…' : 'Sync now'}
-        </button>
-        <button className="btn-sm primary" onClick={handleLink} disabled={linking}>
-          {linking ? 'Opening…' : items.length === 0 ? 'Connect Plaid' : 'Add account'}
-        </button>
+        {items.length > 0 && (
+          <button className="btn-sm" onClick={handleSync} disabled={syncing}>
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        )}
+        {items.length === 0 && (
+          <button className="btn-sm primary" onClick={handleSeed} disabled={seeding}>
+            {seeding ? 'Connecting…' : 'Connect sandbox'}
+          </button>
+        )}
       </div>
     </div>
   );
