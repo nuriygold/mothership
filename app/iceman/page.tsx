@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { ChatTabs } from "@/components/ui/chat-tabs"
 
 type Message = { role: 'user' | 'assistant'; content: string }
@@ -14,7 +16,7 @@ export default function Iceman() {
   const [gateway, setGateway] = useState<'checking' | 'up' | 'down'>('checking')
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -204,16 +206,20 @@ export default function Iceman() {
             }}
           >
             <div style={{
-              maxWidth: "80%",
+              maxWidth: "82%",
               padding: "10px 14px",
               borderRadius: m.role === 'user' ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-              background: m.role === 'user' ? "#38b8da" : "#1e2235",
-              fontSize: "15px",
-              lineHeight: 1.5,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
+              background: m.role === 'user' ? "#38b8da" : "#1a1f30",
+              fontSize: "14px",
+              lineHeight: 1.55,
             }}>
-              {m.content}
+              {m.role === 'user' ? (
+                <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.content}</span>
+              ) : (
+                <div className="md-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -258,22 +264,33 @@ export default function Iceman() {
         background: "rgba(20,25,35,0.9)",
         flexShrink: 0,
       }}>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <input
+        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+          <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } }}
+            onInput={e => {
+              const t = e.currentTarget
+              t.style.height = "auto"
+              t.style.height = `${Math.min(t.scrollHeight, 160)}px`
+            }}
             disabled={loading || !sessionId}
+            rows={1}
             style={{
               flex: 1,
-              padding: "11px 14px",
+              padding: "10px 14px",
               border: "1px solid #2a2f45",
               borderRadius: "8px",
               background: "#151826",
               color: "white",
-              fontSize: "15px",
+              fontSize: "14px",
               outline: "none",
+              resize: "none",
+              lineHeight: 1.5,
+              maxHeight: "160px",
+              overflowY: "auto",
+              fontFamily: "inherit",
             }}
             autoFocus
             placeholder="Message Iceman…"
@@ -284,17 +301,17 @@ export default function Iceman() {
             style={{
               background: loading ? "#2a2f45" : "#38b8da",
               color: "white",
-              fontSize: "15px",
+              fontSize: "14px",
               border: "none",
               borderRadius: "8px",
-              padding: "10px 20px",
-              cursor: loading ? "default" : "pointer",
-              opacity: !input.trim() || !sessionId ? 0.5 : 1,
-              transition: "background 0.15s",
+              padding: "10px 18px",
+              cursor: loading || !input.trim() || !sessionId ? "default" : "pointer",
+              opacity: !input.trim() || !sessionId ? 0.45 : 1,
               whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
-            {loading ? "Thinking…" : "Send"}
+            {loading ? "…" : "Send"}
           </button>
         </div>
         {sessionId && (
@@ -305,10 +322,23 @@ export default function Iceman() {
       </div>
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 1; }
-        }
+        @keyframes pulse { 0%,100%{opacity:.25} 50%{opacity:1} }
+        .md-body { font-size: 14px; line-height: 1.6; word-break: break-word; }
+        .md-body p { margin: 0 0 10px; }
+        .md-body p:last-child { margin: 0; }
+        .md-body code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-family: "IBM Plex Mono",monospace; font-size: 12.5px; }
+        .md-body pre { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; }
+        .md-body pre code { background: none; padding: 0; }
+        .md-body ul,.md-body ol { padding-left: 20px; margin: 6px 0; }
+        .md-body li { margin: 3px 0; }
+        .md-body h1,.md-body h2,.md-body h3 { margin: 12px 0 6px; font-weight: 600; }
+        .md-body blockquote { border-left: 3px solid #38b8da; margin: 0; padding: 2px 0 2px 12px; color: rgba(255,255,255,0.65); }
+        .md-body a { color: #38b8da; text-decoration: none; }
+        .md-body a:hover { text-decoration: underline; }
+        .md-body table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+        .md-body th,.md-body td { border: 1px solid rgba(255,255,255,0.12); padding: 5px 10px; text-align: left; font-size: 13px; }
+        .md-body th { background: rgba(255,255,255,0.05); }
+        .md-body hr { border: none; border-top: 1px solid rgba(255,255,255,0.12); margin: 12px 0; }
       `}</style>
     </div>
   )
