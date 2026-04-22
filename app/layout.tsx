@@ -30,6 +30,7 @@ const navItems = [
   { label: 'Ruby', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
+  { label: 'Marvin', href: '/marvin' },
   { label: 'Projects', href: '/projects' },
   { label: 'Trophy', href: '/trophy' },
   { label: 'Marco', href: '/marco' },
