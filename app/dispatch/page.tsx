@@ -315,9 +315,8 @@ function DispatchPageInner() {
   const dispatchCampaignsQuery = useQuery({
     queryKey: ['dispatch-campaigns'],
     queryFn: fetchDispatchCampaigns,
-    refetchInterval: (query) => {
-      const data = query?.state.data as DispatchCampaign[] | undefined;
-      const hasPlanning = data?.some((c) => c.status === 'PLANNING');
+    refetchInterval: (data) => {
+      const hasPlanning = (data as DispatchCampaign[] | undefined)?.some((c) => c.status === 'PLANNING');
       return hasPlanning ? 3_000 : 15_000;
     },
   });
