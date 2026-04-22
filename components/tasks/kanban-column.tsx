@@ -15,25 +15,25 @@ interface ColumnColors {
 
 export const KANBAN_COLUMN_COLORS: Record<KanbanColumnKey, ColumnColors> = {
   Active: {
-    bg:         'rgba(0,217,255,0.04)',
-    border:     'rgba(0,217,255,0.22)',
-    accent:     '#00D9FF',
-    headerBg:   'rgba(0,217,255,0.10)',
-    headerText: '#00D9FF',
+    bg:         'rgba(0,194,168,0.05)',
+    border:     'rgba(0,194,168,0.25)',
+    accent:     '#00C2A8',
+    headerBg:   'rgba(0,194,168,0.12)',
+    headerText: '#00C2A8',
   },
   Waiting: {
-    bg:         'rgba(123,104,238,0.04)',
-    border:     'rgba(123,104,238,0.22)',
-    accent:     '#7B68EE',
-    headerBg:   'rgba(123,104,238,0.10)',
-    headerText: '#7B68EE',
+    bg:         'rgba(244,163,71,0.05)',
+    border:     'rgba(244,163,71,0.25)',
+    accent:     '#F4A347',
+    headerBg:   'rgba(244,163,71,0.12)',
+    headerText: '#F4A347',
   },
   Blocked: {
-    bg:         'rgba(229,62,62,0.04)',
-    border:     'rgba(229,62,62,0.22)',
-    accent:     '#E53E3E',
-    headerBg:   'rgba(229,62,62,0.09)',
-    headerText: '#E53E3E',
+    bg:         'rgba(255,107,107,0.05)',
+    border:     'rgba(255,107,107,0.22)',
+    accent:     '#FF6B6B',
+    headerBg:   'rgba(255,107,107,0.10)',
+    headerText: '#FF6B6B',
   },
   Backlog: {
     bg:         'var(--muted)',
@@ -43,20 +43,20 @@ export const KANBAN_COLUMN_COLORS: Record<KanbanColumnKey, ColumnColors> = {
     headerText: 'var(--muted-foreground)',
   },
   Done: {
-    bg:         'rgba(15,196,138,0.04)',
-    border:     'rgba(15,196,138,0.22)',
-    accent:     '#0FC48A',
-    headerBg:   'rgba(15,196,138,0.10)',
-    headerText: '#0FC48A',
+    bg:         'rgba(61,190,140,0.05)',
+    border:     'rgba(61,190,140,0.22)',
+    accent:     '#3DBE8C',
+    headerBg:   'rgba(61,190,140,0.11)',
+    headerText: '#3DBE8C',
   },
 };
 
 const COLUMN_SUBTITLE: Record<KanbanColumnKey, string> = {
-  Active:  'Running now',
-  Waiting: 'Queued for today',
-  Blocked: 'Need intervention',
-  Backlog: 'Queued for later',
-  Done:    'Completed',
+  Active:  'In the water',
+  Waiting: 'On deck',
+  Blocked: 'Hit a reef',
+  Backlog: 'Back at the villa',
+  Done:    'Made it to shore',
 };
 
 const COLUMN_EMPTY_HINT: Record<KanbanColumnKey, string> = {

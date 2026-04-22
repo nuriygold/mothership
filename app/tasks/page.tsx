@@ -282,10 +282,10 @@ export default function TasksPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
-            Tasks
+            Task Pool 🏝️
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-            Kanban board · priorities and workflow stages at a glance
+            Turks & Caicos operations · water's always clear
           </p>
         </div>
         <SlashCommandSheet commands={TASK_COMMANDS} label="tasks" />
