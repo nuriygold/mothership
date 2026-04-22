@@ -1,28 +1,20 @@
-import { prisma } from '@/lib/prisma'
-import { plaidClient } from '@/lib/plaid'
+import { prisma } from '@/lib/prisma';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    const items = await prisma.plaidItem.findMany()
-
-    const balances = []
-
-    for (const item of items) {
-        const response = await plaidClient.accountsBalanceGet({
-            access_token: item.accessToken
-        })
-
-        balances.push({
-            institution: item.institutionName,
-            accounts: response.data.accounts.map((a: any) => ({
-                name: a.name,
-                type: a.type,
-                balance: a.balances.current,
-                available: a.balances.available
-            }))
-        })
-    }
-
-    return Response.json({ balances })
+  // Adjust model and fields to match actual Prisma schema
+  const balances = await prisma.plaidBalance.findMany({
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      accountId: true,
+      available: true,
+      current: true,
+      isoCurrencyCode: true,
+      institutionName: true,
+      updatedAt: true,
+    },
+  });
+  return Response.json({ balances });
 }
