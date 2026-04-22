@@ -99,7 +99,6 @@ export default function Iceman() {
               Error: {error}
             </div>
           )}
-
           {messages.length === 0 ? (
             <div style={{ opacity: 0.7 }}>
               Type a message below &amp; hit send to talk to Iceman.
