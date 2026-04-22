@@ -6,6 +6,17 @@ import { LiveRuby } from '@/components/today/live-ruby';
 
 function RubyPageContent() {
   const searchParams = useSearchParams();
+
+  // Force Ruby session so the UI never attaches to another agent
+  if (typeof window !== 'undefined') {
+    const session = searchParams?.get('session');
+    if (session !== 'agent:ruby:ruby') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('session', 'agent:ruby:ruby');
+      window.location.replace(url.toString());
+    }
+  }
+
   const initialPrefill = searchParams?.get('q') ?? '';
   const [prefill, setPrefill] = useState(initialPrefill);
 
