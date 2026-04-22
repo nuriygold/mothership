@@ -1,10 +1,10 @@
-import { MCPServer } from "@modelcontextprotocol/sdk";
-import axios from "axios";
+const { MCPServer } = require("@modelcontextprotocol/sdk")
+const axios = require("axios")
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const REPO = "nuriygold/task-pool";
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN
+const REPO = "nuriygold/task-pool"
 
-async function createTask({ title, description, priority }: any) {
+async function createTask({ title, description, priority }) {
   const res = await axios.post(
     `https://api.github.com/repos/${REPO}/issues`,
     {
@@ -18,13 +18,13 @@ async function createTask({ title, description, priority }: any) {
         Accept: "application/vnd.github+json"
       }
     }
-  );
+  )
 
-  return { id: res.data.number, url: res.data.html_url };
+  return { id: res.data.number, url: res.data.html_url }
 }
 
-async function updateTask({ id, status }: any) {
-  const state = status === "closed" ? "closed" : "open";
+async function updateTask({ id, status }) {
+  const state = status === "closed" ? "closed" : "open"
 
   const res = await axios.patch(
     `https://api.github.com/repos/${REPO}/issues/${id}`,
@@ -35,15 +35,15 @@ async function updateTask({ id, status }: any) {
         Accept: "application/vnd.github+json"
       }
     }
-  );
+  )
 
-  return { id: res.data.number, state: res.data.state };
+  return { id: res.data.number, state: res.data.state }
 }
 
 const server = new MCPServer({
   name: "mothership",
   version: "1.0.0"
-});
+})
 
 server.tool(
   "create_task",
@@ -59,8 +59,8 @@ server.tool(
       required: ["title"]
     }
   },
-  async (input: any) => createTask(input)
-);
+  async (input) => createTask(input)
+)
 
 server.tool(
   "update_task",
@@ -75,7 +75,7 @@ server.tool(
       required: ["id"]
     }
   },
-  async (input: any) => updateTask(input)
-);
+  async (input) => updateTask(input)
+)
 
-server.start();
+server.start()
