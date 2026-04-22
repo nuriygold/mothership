@@ -395,7 +395,7 @@ function DispatchPageInner() {
     if (incomingTask) params.set('task', incomingTask);
     if (incomingSource) params.set('source', incomingSource);
     const query = params.toString();
-    router.push(query ? `/iceman?${query}` : '/iceman');
+    router.push((query ? `/iceman?${query}` : '/iceman') as any);
   }
 
   useEffect(() => {
