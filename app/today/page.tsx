@@ -16,7 +16,6 @@ import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
 import { JarvisCard } from '@/components/voice/jarvis-card';
 import { NewTaskModal } from '@/components/today/new-task-modal';
-import { DailyBriefing } from '@/components/today/daily-briefing';
 import { FinanceAlerts } from '@/components/today/finance-alerts';
 import { StatusTicker } from '@/components/today/status-ticker';
 import { ThreeDayGrid } from '@/components/today/three-day-grid';
@@ -134,6 +133,7 @@ export default function TodayPage() {
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
   const { data: tasksData, mutate: mutateTasks } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
   const { data: campaignsData } = useSWR<CampaignListItem[]>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
+  const { data: emailData } = useSWR<{ inbox: unknown[] }>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
@@ -477,26 +477,26 @@ export default function TodayPage() {
         </p>
       </div>
 
-      {/* ── Daily Briefing ── (restyled via inline override on the wrapper) */}
-      <div style={{
-        background: 'rgba(255,255,255,0.70)',
-        border: '1px solid #b8d8e8',
-        borderRadius: '12px',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        boxShadow: '0 2px 16px rgba(64,168,200,0.08)',
-        padding: '12px 16px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ice-text3)', fontWeight: 500 }}>
-            TODAY&apos;S BRIEFING
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ice-text3)', opacity: 0.7 }}>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </span>
-        </div>
-        {/* Render the actual briefing content */}
-        <DailyBriefing tasksData={tasksData} campaigns={campaignsData} />
+      {/* ── KPI Row ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <KpiBox
+          label="Tasks"
+          count={tasksData?.counters.active ?? null}
+          sub={tasksData?.today?.length ? `${tasksData.today.length} due today` : 'active'}
+          href="/tasks"
+        />
+        <KpiBox
+          label="Emails"
+          count={emailData?.inbox?.length ?? null}
+          sub="in inbox"
+          href="/email"
+        />
+        <KpiBox
+          label="Campaigns"
+          count={campaignsData?.filter((c) => c.status && c.status !== 'COMPLETED').length ?? null}
+          sub="active"
+          href="/dispatch"
+        />
       </div>
 
       {/* ── Finance Alerts ── */}
@@ -609,3 +609,70 @@ type CampaignListItem = {
   title: string;
   status: string | null;
 };
+
+function KpiBox({ label, count, sub, href }: { label: string; count: number | null; sub: string; href: string }) {
+  return (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    <Link href={href as any} style={{ textDecoration: 'none' }}>
+      <div
+        style={{
+          background: 'rgba(255,255,255,0.72)',
+          border: '1px solid #b8d8e8',
+          borderRadius: '12px',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          boxShadow: '0 2px 12px rgba(64,168,200,0.07)',
+          padding: '14px 16px',
+          cursor: 'pointer',
+          transition: 'box-shadow 0.15s, border-color 0.15s',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 20px rgba(64,168,200,0.18)';
+          (e.currentTarget as HTMLDivElement).style.borderColor = '#7ac4e0';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(64,168,200,0.07)';
+          (e.currentTarget as HTMLDivElement).style.borderColor = '#b8d8e8';
+        }}
+      >
+        <div
+          style={{
+            fontFamily: 'var(--font-rajdhani)',
+            fontSize: '34px',
+            fontWeight: 700,
+            color: 'var(--ice-text)',
+            lineHeight: 1,
+            letterSpacing: '0.5px',
+          }}
+        >
+          {count === null ? '—' : count}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--ice-text3)',
+            marginTop: '4px',
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--ice2)',
+            marginTop: '2px',
+            opacity: 0.75,
+          }}
+        >
+          {sub}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
