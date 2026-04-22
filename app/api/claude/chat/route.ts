@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-type Provider = 'anthropic' | 'openai' | 'groq' | 'together';
+type Provider = 'anthropic' | 'openai' | 'groq' | 'together' | 'azure';
 type Message = { role: 'user' | 'assistant'; content: string };
 
 const OPENAI_BASE: Record<string, string> = {
@@ -9,6 +9,8 @@ const OPENAI_BASE: Record<string, string> = {
   groq: 'https://api.groq.com/openai/v1',
   together: 'https://api.together.xyz/v1',
 };
+
+const AZURE_API_VERSION = '2024-08-01-preview';
 
 function errSSE(msg: string): Response {
   const encoder = new TextEncoder();
@@ -130,10 +132,33 @@ export async function POST(req: Request) {
   const apiKey: string = String(body?.apiKey ?? '');
   const messages: Message[] = Array.isArray(body?.messages) ? body.messages : [];
   const system: string = String(body?.system ?? '');
+  const azureEndpoint: string = String(body?.azureEndpoint ?? '').replace(/\/$/, '');
 
   if (!apiKey) return errSSE('API key required');
   if (!model) return errSSE('Model required');
   if (!messages.length) return errSSE('No messages');
+
+  if (provider === 'azure') {
+    if (!azureEndpoint) return errSSE('Azure endpoint required');
+    const url = `${azureEndpoint}/openai/deployments/${encodeURIComponent(model)}/chat/completions?api-version=${AZURE_API_VERSION}`;
+    const allMessages = system ? [{ role: 'system' as const, content: system }, ...messages] : messages;
+    let upstream: Response;
+    try {
+      upstream = await fetch(url, {
+        method: 'POST',
+        headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream: true, messages: allMessages }),
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (err) {
+      return errSSE(err instanceof Error ? err.message : String(err));
+    }
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => '');
+      return errSSE(`Azure ${upstream.status}: ${text.slice(0, 200)}`);
+    }
+    return pipeOpenAICompat(upstream);
+  }
 
   if (provider === 'anthropic') {
     let upstream: Response;
