@@ -3,17 +3,28 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const balances = await prisma.account.findMany({
+  const accounts = await prisma.account.findMany({
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
       name: true,
       type: true,
-      currency: true,
       balance: true,
-      liquid: true,
+      currency: true,
       updatedAt: true,
     },
   });
+
+  const balances = accounts.map((account) => ({
+    id: account.id,
+    accountId: account.id,
+    available: account.balance,
+    current: account.balance,
+    isoCurrencyCode: account.currency,
+    institutionName: account.name,
+    type: account.type,
+    updatedAt: account.updatedAt,
+  }));
+
   return Response.json({ balances });
 }
