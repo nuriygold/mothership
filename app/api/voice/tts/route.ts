@@ -15,9 +15,10 @@ export async function POST(req: Request) {
   const key = process.env.AZURE_SPEECH_KEY;
   const region = process.env.AZURE_SPEECH_REGION;
   const voice = process.env.AZURE_SPEECH_VOICE ?? 'en-US-AriaNeural';
+  const speechEndpoint = process.env.AZURE_SPEECH_ENDPOINT;
 
-  if (!key || !region) {
-    return NextResponse.json({ message: 'AZURE_SPEECH_KEY or AZURE_SPEECH_REGION missing' }, { status: 500 });
+  if (!key || (!region && !speechEndpoint)) {
+    return NextResponse.json({ message: 'AZURE_SPEECH_KEY and AZURE_SPEECH_REGION (or AZURE_SPEECH_ENDPOINT) required' }, { status: 500 });
   }
 
   try {
@@ -26,21 +27,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'text is required' }, { status: 400 });
     }
 
-    const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+    const endpoint = speechEndpoint
+      ? `${speechEndpoint.replace(/\/$/, '')}/tts/cognitiveservices/v1`
+      : `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
     const voiceName = voiceId || voice;
     const ssml = `<?xml version="1.0" encoding="UTF-8"?>
 <speak version="1.0" xml:lang="en-US">
   <voice xml:lang="en-US" name="${voiceName}">${escapeXml(text)}</voice>
 </speak>`;
 
+    const ttsHeaders: Record<string, string> = {
+      'Ocp-Apim-Subscription-Key': key,
+      'Content-Type': 'application/ssml+xml',
+      'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+    };
+    if (region) ttsHeaders['Ocp-Apim-Subscription-Region'] = region;
+
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Ocp-Apim-Subscription-Key': key,
-        'Ocp-Apim-Subscription-Region': region,
-        'Content-Type': 'application/ssml+xml',
-        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
-      },
+      headers: ttsHeaders,
       body: ssml,
     });
 
