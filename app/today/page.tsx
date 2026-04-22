@@ -36,30 +36,6 @@ type CalendarTimelineItem = {
   location?: string | null;
 };
 
-type CalendarTimelineItem = {
-  _calEvent: true;
-  id: string;
-  title: string;
-  startDate: string;
-  startTime: string;
-  endTime: string | null;
-  status: 'done' | 'current' | 'upcoming';
-  meetingUrl?: string | null;
-  location?: string | null;
-};
-
-type CalendarTimelineItem = {
-  _calEvent: true;
-  id: string;
-  title: string;
-  startDate: string;
-  startTime: string;
-  endTime: string | null;
-  status: 'done' | 'current' | 'upcoming';
-  meetingUrl?: string | null;
-  location?: string | null;
-};
-
 type MergedItem =
   | (V2DashboardTimelineItem & { _calEvent?: false })
   | CalendarTimelineItem;
