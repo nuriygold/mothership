@@ -34,6 +34,7 @@ const navItems = [
   { label: 'Projects', href: '/projects' },
   { label: 'Trophy', href: '/trophy' },
   { label: 'Marco', href: '/marco' },
+  { label: 'Claude', href: '/claude' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
