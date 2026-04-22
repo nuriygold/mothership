@@ -1,0 +1,19 @@
+{
+  "name": "mothership-terminal-server",
+  "version": "1.0.0",
+  "description": "WebSocket terminal server for Mothership — spawns claude CLI sessions over xterm.js",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "TERMINAL_SECRET=dev node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-pty": "^1.0.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.17.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
