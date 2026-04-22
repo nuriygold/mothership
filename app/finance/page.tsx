@@ -10,6 +10,9 @@ const fetcher = async (url: string): Promise<V2FinanceOverviewFeed> => {
   return res.json();
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isPlaidAccount(id: string) { return !UUID_RE.test(id); }
+
 function fmtUSD(n: number, opts: Intl.NumberFormatOptions = {}) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -143,13 +146,34 @@ export default function FinancePage() {
                 key={a.id}
                 style={{
                   padding: 12,
-                  background: 'var(--bg2)',
-                  border: '1px solid var(--border-c)',
+                  background: a.liquid ? 'rgba(132, 204, 22, 0.07)' : 'var(--bg2)',
+                  border: a.liquid ? '1px solid rgba(132, 204, 22, 0.35)' : '1px solid var(--border-c)',
                   borderRadius: 'var(--radius)',
+                  position: 'relative',
                 }}
               >
-                <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {a.type}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {a.type}
+                  </div>
+                  {isPlaidAccount(a.id) && (
+                    <span
+                      title="Synced via Plaid"
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: 0.5,
+                        color: '#000',
+                        background: '#00C2A8',
+                        borderRadius: 3,
+                        padding: '1px 5px',
+                        lineHeight: '14px',
+                      }}
+                    >
+                      P
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 4, fontWeight: 500 }}>{a.name}</div>
                 <div
@@ -164,9 +188,9 @@ export default function FinancePage() {
                 >
                   {fmtUSD(a.balance)}
                 </div>
-                {a.trendPercentage && (
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                    {a.trendPercentage}
+                {a.updatedAt && (
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
+                    as of {new Date(a.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </div>
                 )}
               </div>

@@ -183,7 +183,8 @@ export type V2FinanceOverviewFeed = {
     name: string;
     type: string;
     balance: number;
-    trendPercentage: string;
+    liquid: boolean;
+    updatedAt: string | null;
   }>;
   payables: Array<{
     vendor: string;

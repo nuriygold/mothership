@@ -694,7 +694,8 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
       name: account.name,
       type: account.type,
       balance: account.balance,
-      trendPercentage: '—',
+      liquid: account.liquid ?? false,
+      updatedAt: account.updatedAt?.toISOString?.() ?? null,
     })),
     payables: payables.map((payable) => ({
       vendor: payable.vendor,
