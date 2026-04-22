@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
@@ -271,7 +271,43 @@ function gatewayGuidance(errorMessage?: string) {
   return null;
 }
 
+type DispatchTaskRoute = 'dispatch' | 'ruby' | 'iceman' | 'finance';
+
+type DispatchRouteDecision = {
+  route: DispatchTaskRoute;
+  reason: string;
+};
+
+function evaluateDispatchRoute(task?: string | null, source?: string | null): DispatchRouteDecision {
+  const title = (task ?? '').trim().toLowerCase();
+  const origin = (source ?? '').trim().toLowerCase();
+  const haystack = `${title} ${origin}`.trim();
+
+  if (!title) {
+    return { route: 'dispatch', reason: 'No task provided to route.' };
+  }
+
+  if (haystack.match(/finance|financial|budget|cash.?flow|debt|credit|expense|invoice|bill|payable|subscription|net.?worth|liquidity|merchant|income/)) {
+    return { route: 'finance', reason: 'Finance-heavy scope detected (money, bills, budget, or cash flow).' };
+  }
+
+  if (haystack.match(/campaign|dispatch|orchestrat|coordinate|roadmap|dependencies|multi.?step|backlog|execution plan|task pool/)) {
+    return { route: 'dispatch', reason: 'Multi-step orchestration scope fits Dispatch campaign handling.' };
+  }
+
+  if (haystack.match(/code|debug|bug|fix|refactor|implement|terminal|cli|shell|script|build|deploy|compile|test suite|stack trace|repo|pull request|pr /)) {
+    return { route: 'iceman', reason: 'Engineering execution scope detected (coding/debug/build work).' };
+  }
+
+  if (haystack.match(/email|reply|message|draft|copy|outreach|social|relationship|schedule|meeting|calendar|research|summarize|notes/)) {
+    return { route: 'ruby', reason: 'Communication/research scope fits Ruby.' };
+  }
+
+  return { route: 'dispatch', reason: 'No specialized scope hit; keep task in Dispatch.' };
+}
+
 function DispatchPageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
@@ -302,12 +338,27 @@ function DispatchPageInner() {
   const [retryAgents, setRetryAgents] = useState<Record<string, string>>({});
   const [showNewCampaignForm, setShowNewCampaignForm] = useState(false);
   const [showManualTaskEntry, setShowManualTaskEntry] = useState(false);
+  const [keepInDispatch, setKeepInDispatch] = useState(false);
   const campaignSectionRef = useRef<HTMLDivElement>(null);
+  const incomingTask = searchParams?.get('task') ?? '';
+  const incomingSource = searchParams?.get('source') ?? '';
+  const routeDecision = useMemo(
+    () => evaluateDispatchRoute(incomingTask, incomingSource),
+    [incomingSource, incomingTask]
+  );
+  const shouldShowRoutingCard = Boolean(incomingTask) && routeDecision.route !== 'dispatch' && !keepInDispatch;
+
+  useEffect(() => {
+    setKeepInDispatch(false);
+  }, [incomingSource, incomingTask]);
 
   // Pre-fill campaign from query params (e.g. dispatched from Today page)
   useEffect(() => {
     const task = searchParams?.get('task');
     const taskSource = searchParams?.get('source');
+    if (!task || (!keepInDispatch && routeDecision.route !== 'dispatch')) {
+      return;
+    }
     if (task) {
       setCampaignTitle(task);
       if (taskSource) setCampaignDescription(`Task from: ${taskSource}`);
@@ -316,7 +367,33 @@ function DispatchPageInner() {
         campaignSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
     }
-  }, [searchParams]);
+  }, [keepInDispatch, routeDecision.route, searchParams]);
+
+  function handleRouteLaunch(route: Exclude<DispatchTaskRoute, 'dispatch'>) {
+    if (route === 'ruby') {
+      const params = new URLSearchParams();
+      if (incomingTask) params.set('q', incomingTask);
+      if (incomingSource) params.set('source', incomingSource);
+      const query = params.toString();
+      router.push(query ? `/ruby?${query}` : '/ruby');
+      return;
+    }
+
+    if (route === 'finance') {
+      const params = new URLSearchParams();
+      if (incomingTask) params.set('task', incomingTask);
+      if (incomingSource) params.set('source', incomingSource);
+      const query = params.toString();
+      router.push(query ? `/finance?${query}` : '/finance');
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (incomingTask) params.set('task', incomingTask);
+    if (incomingSource) params.set('source', incomingSource);
+    const query = params.toString();
+    router.push(query ? `/iceman?${query}` : '/iceman');
+  }
 
   useEffect(() => {
     if (!selectedCampaignId && dispatchCampaignsQuery.data?.[0]?.id) {
@@ -510,6 +587,32 @@ function DispatchPageInner() {
       </div>
 
       {/* ── New campaign form (Phase 1 — collapsed behind button) ── */}
+      {shouldShowRoutingCard && (
+        <Card>
+          <CardTitle>Scope routing</CardTitle>
+          <CardSubtitle className="mt-1">
+            Recommended route: <span className="font-semibold">{routeDecision.route.toUpperCase()}</span>
+          </CardSubtitle>
+          <p className="mt-2 text-xs" style={{ color: 'var(--foreground)', opacity: 0.55 }}>
+            {routeDecision.reason}
+          </p>
+          <p className="mt-1 text-xs" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
+            Dispatch will not auto-launch Iceman. Use the route button to hand off manually.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => handleRouteLaunch(routeDecision.route as Exclude<DispatchTaskRoute, 'dispatch'>)}
+              style={{ textTransform: 'capitalize' }}
+            >
+              Route to {routeDecision.route}
+            </Button>
+            <Button variant="outline" onClick={() => setKeepInDispatch(true)}>
+              Keep in Dispatch
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {showNewCampaignForm && (
         <Card>
           <div ref={campaignSectionRef}>

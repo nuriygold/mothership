@@ -1,89 +1,140 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { ChatTabs } from "@/components/ui/chat-tabs"
+
+type Message = { role: 'user' | 'assistant'; content: string }
 
 export default function Iceman() {
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [messagesBySession, setMessagesBySession] = useState<Record<string, Message[]>>({})
   const [input, setInput] = useState("")
-  const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [gateway, setGateway] = useState<'checking'|'up'|'down'>('checking')
-
-  function newSession() {
-    const id = Math.random().toString(36).slice(2,8)
-    const url = `/iceman/chat?session=agent:iceman:${id}`
-    window.open(url, '_blank')
-  }
-
-  async function send() {
-    if (!input.trim() || loading) return
-
-    setError(null)
-    setLoading(true)
-
-    const userText = input
-    setMessages(m => [...m, { role: "🧊 you", text: userText }])
-
-    try {
-      const res = await fetch("https://mother.nuriy.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer 8bcb9a096d688cd87406486da0c68e1a51708425975870bc",
-          "x-openclaw-agent-id": "iceman"
-        },
-        body: JSON.stringify({ model: "openclaw", input: userText })
-      })
-
-      if (!res.ok) {
-        throw new Error("Request failed: " + res.status)
-      }
-
-      const data = await res.json()
-
-      let reply = "No reply from agent."
-
-      if (data?.output_text) {
-        reply = data.output_text
-      } else if (data?.output?.[0]?.content?.[0]?.text) {
-        reply = data.output[0].content[0].text
-      } else if (data?.error) {
-        reply = "API error: " + JSON.stringify(data.error)
-      }
-
-      // streaming style typing effect
-      let current = ""
-      for (const ch of reply) {
-        current += ch
-        setMessages(m => {
-          const last = m[m.length-1]
-          if (last && last.role === "🤖 iceman" && last.text === current.slice(0,-1)) {
-            return [...m.slice(0,-1), { role: "🤖 iceman", text: current }]
-          }
-          return [...m, { role: "🤖 iceman", text: current }]
-        })
-        await new Promise(r => setTimeout(r, 8))
-      }
-    } catch (err: any) {
-      setError(err.message || "Request failed")
-    } finally {
-      setLoading(false)
-      setInput("")
-    }
-  }
+  const [gateway, setGateway] = useState<'checking' | 'up' | 'down'>('checking')
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    async function checkGateway() {
-      try {
-        const r = await fetch("https://mother.nuriy.com/v1/health")
-        if (r.ok) setGateway('up')
-        else setGateway('down')
-      } catch {
-        setGateway('down')
-      }
+    const params = new URLSearchParams(window.location.search)
+    let sid = params.get('session')
+    if (sid?.startsWith('agent:iceman:')) {
+      setSessionId(sid)
     }
-    checkGateway()
   }, [])
+
+  const messages = sessionId ? (messagesBySession[sessionId] ?? []) : []
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, loading])
+
+  useEffect(() => {
+    fetch("https://mother.nuriy.com/v1/health")
+      .then(r => setGateway(r.ok ? 'up' : 'down'))
+      .catch(() => setGateway('down'))
+  }, [])
+
+  const handleSessionChange = useCallback((sid: string) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('session', sid)
+    window.history.replaceState({}, '', url.toString())
+    setSessionId(sid)
+    setInput('')
+    setError(null)
+    setLoading(false)
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSessionClose = useCallback((closedSessionId: string) => {
+    setMessagesBySession((prev) => {
+      if (!(closedSessionId in prev)) return prev
+      const next = { ...prev }
+      delete next[closedSessionId]
+      return next
+    })
+  }, [])
+
+  async function send() {
+    const activeSessionId = sessionId
+    if (!input.trim() || loading || !activeSessionId) return
+
+    const text = input.trim()
+    setInput("")
+    setError(null)
+    setLoading(true)
+    setMessagesBySession((prev) => ({
+      ...prev,
+      [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text }],
+    }))
+
+    try {
+      const res = await fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, sessionId: activeSessionId }),
+      })
+
+      if (!res.ok || !res.body) {
+        throw new Error(`Request failed: ${res.status}`)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let assistantContent = ''
+      let assistantAdded = false
+
+      outer: while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) continue
+          const dataStr = trimmed.slice(5).trim()
+          if (dataStr === '[DONE]') break outer
+          try {
+            const evt = JSON.parse(dataStr)
+            if (evt.error) { setError(evt.error); break outer }
+            if (evt.delta) {
+              assistantContent += evt.delta
+              if (!assistantAdded) {
+                setMessagesBySession((prev) => ({
+                  ...prev,
+                  [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'assistant', content: assistantContent } as Message],
+                }))
+                assistantAdded = true
+              } else {
+                setMessagesBySession((prev) => {
+                  const current = prev[activeSessionId] ?? []
+                  const nextMessages =
+                    current.length > 0
+                      ? [...current.slice(0, -1), { role: 'assistant', content: assistantContent } as Message]
+                      : [{ role: 'assistant', content: assistantContent } as Message]
+                  return { ...prev, [activeSessionId]: nextMessages }
+                })
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Request failed')
+    } finally {
+      setLoading(false)
+      inputRef.current?.focus()
+    }
+  }
 
   const robot = gateway === 'up' ? '🤖' : gateway === 'down' ? '⚠️' : '⏳'
 
@@ -94,117 +145,171 @@ export default function Iceman() {
       width: "100%",
       display: "flex",
       flexDirection: "column",
-      alignItems: "stretch"
     }}>
       <div style={{
-        height: "70px",
+        height: "60px",
         display: "flex",
         alignItems: "center",
         paddingLeft: "24px",
-        fontSize: "22px",
-        color: "white",
-        background: "rgba(20,25,35,0.85)",
-        backdropFilter: "blur(12px)"
+        gap: "12px",
+        background: "rgba(20,25,35,0.9)",
+        backdropFilter: "blur(12px)",
+        borderBottom: "1px solid #1e2235",
+        flexShrink: 0,
       }}>
-        {robot} 🧊 ICEMAN
-        <span style={{ marginLeft: "10px", fontSize: "12px", opacity: 0.6 }}>
-          Mothership Builder Interface
+        <span style={{ fontSize: "20px", color: "white", fontWeight: 600 }}>
+          {robot} 🧊 ICEMAN
         </span>
-        <span style={{marginLeft:"12px",fontSize:"12px",opacity:0.7}}>
-          {gateway==='up' && 'Gateway online'}
-          {gateway==='down' && 'Gateway offline'}
-          {gateway==='checking' && 'Checking gateway…'}
+        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)" }}>
+          {gateway === 'up' && 'Gateway online'}
+          {gateway === 'down' && 'Gateway offline'}
+          {gateway === 'checking' && 'Checking gateway…'}
         </span>
-        <button
-          onClick={newSession}
-          style={{
-            marginLeft: "20px",
-            background: "#2a2f45",
-            border: "1px solid #3c425e",
-            color: "white",
-            padding: "6px 10px",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "12px"
-          }}
-        >
-          + New Session
-        </button>
+        <div style={{ flex: 1 }} />
+      </div>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e2235", background: "rgba(20,25,35,0.7)" }}>
+        <ChatTabs
+          agent="iceman"
+          sessionId={sessionId}
+          onSessionChange={handleSessionChange}
+          onSessionClose={handleSessionClose}
+        />
+      </div>
+
+      <div
+        ref={messagesContainerRef}
+        style={{
+        flex: 1,
+        overflowY: "auto",
+        padding: "24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        color: "white",
+      }}
+      >
+        {messages.length === 0 && !loading && (
+          <div style={{ opacity: 0.5, fontSize: "14px" }}>
+            Type a message below to talk to Iceman.
+          </div>
+        )}
+
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
+            }}
+          >
+            <div style={{
+              maxWidth: "80%",
+              padding: "10px 14px",
+              borderRadius: m.role === 'user' ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+              background: m.role === 'user' ? "#38b8da" : "#1e2235",
+              fontSize: "15px",
+              lineHeight: 1.5,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div style={{ display: "flex", alignItems: 'flex-start' }}>
+            <div style={{
+              padding: "10px 14px",
+              borderRadius: "12px 12px 12px 2px",
+              background: "#1e2235",
+              fontSize: "15px",
+              color: "rgba(255,255,255,0.5)",
+            }}>
+              <span style={{ animation: "pulse 1.2s ease-in-out infinite" }}>●</span>
+              {" "}
+              <span style={{ animation: "pulse 1.2s ease-in-out 0.2s infinite" }}>●</span>
+              {" "}
+              <span style={{ animation: "pulse 1.2s ease-in-out 0.4s infinite" }}>●</span>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: "8px",
+            background: "rgba(255,80,80,0.1)",
+            border: "1px solid rgba(255,80,80,0.3)",
+            color: "#ff6b6b",
+            fontSize: "13px",
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div ref={bottomRef} />
       </div>
 
       <div style={{
-        flex: 1,
-        padding: 24,
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-        color: "white"
+        padding: "16px 24px",
+        borderTop: "1px solid #1e2235",
+        background: "rgba(20,25,35,0.9)",
+        flexShrink: 0,
       }}>
-        <div style={{
-          background: "rgba(40,45,60,0.7)",
-          borderRadius: "8px",
-          padding: "24px",
-          minHeight: "300px",
-          overflowY: "auto",
-          boxShadow: "0 2px 18px 0 #100f1e70"
-        }}>
-          {error && (
-            <div style={{ color: "#ff6b6b", marginBottom: 10 }}>
-              Error: {error}
-            </div>
-          )}
-          {messages.length === 0 ? (
-            <div style={{ opacity: 0.7 }}>
-              Type a message below &amp; hit send to talk to Iceman.
-            </div>
-          ) : (
-            messages.map((m, i) => (
-              <div key={i} style={{
-                marginBottom: "12px",
-                borderBottom: "1px solid #2223",
-                paddingBottom: "6px"
-              }}>
-                <strong>{m.role}:</strong> {m.text}
-              </div>
-            ))
-          )}
-        </div>
-
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: "8px" }}>
           <input
+            ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") send() }}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } }}
+            disabled={loading || !sessionId}
             style={{
               flex: 1,
               padding: "11px 14px",
-              border: "none",
-              borderRadius: "4px",
-              background: "#232434",
+              border: "1px solid #2a2f45",
+              borderRadius: "8px",
+              background: "#151826",
               color: "white",
-              fontSize: "18px"
+              fontSize: "15px",
+              outline: "none",
             }}
             autoFocus
-            placeholder="Say something to Iceman…"
+            placeholder="Message Iceman…"
           />
           <button
             onClick={send}
-            disabled={loading}
+            disabled={loading || !input.trim() || !sessionId}
             style={{
-              background: "#38b8da",
+              background: loading ? "#2a2f45" : "#38b8da",
               color: "white",
-              fontSize: "18px",
+              fontSize: "15px",
               border: "none",
-              borderRadius: "4px",
-              padding: "10px 18px",
-              cursor: "pointer",
-              opacity: loading ? 0.6 : 1
+              borderRadius: "8px",
+              padding: "10px 20px",
+              cursor: loading ? "default" : "pointer",
+              opacity: !input.trim() || !sessionId ? 0.5 : 1,
+              transition: "background 0.15s",
+              whiteSpace: "nowrap",
             }}
           >
             {loading ? "Thinking…" : "Send"}
           </button>
         </div>
+        {sessionId && (
+          <div style={{ marginTop: "6px", fontSize: "11px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace" }}>
+            {sessionId}
+          </div>
+        )}
       </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
