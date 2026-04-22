@@ -912,7 +912,16 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
   } else if (action === 'defer') {
     await updateTask({ id: taskId, status: TaskStatus.TODO });
   } else if (action === 'complete') {
-    await prisma.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE, completedAt: new Date() } });
+    // Route through updateTask so task-pool (GitHub Issues) and DB modes both work.
+    // In DB mode we additionally stamp completedAt so the trophy window query matches.
+    await updateTask({ id: taskId, status: TaskStatus.DONE });
+    if (!isTaskPoolRepositorySource()) {
+      try {
+        await prisma.task.update({ where: { id: taskId }, data: { completedAt: new Date() } });
+      } catch {
+        // updateTask already succeeded; stamping completedAt is best-effort.
+      }
+    }
   } else if (action === 'unblock') {
     await updateTask({ id: taskId, status: TaskStatus.IN_PROGRESS });
   }

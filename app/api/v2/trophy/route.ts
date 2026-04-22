@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { TaskStatus } from '@prisma/client';
+import { isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,8 @@ function weekBounds(weekOffset: number): { start: Date; end: Date } {
   return { start: monday, end: sunday };
 }
 
+type TrophyTask = { id: string; title: string; priority: string; completedAt: string };
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const weekOffset = parseInt(searchParams.get('week') ?? '0', 10);
@@ -32,59 +35,83 @@ export async function GET(req: Request) {
     ({ start, end } = weekBounds(isNaN(weekOffset) ? 0 : weekOffset));
   }
 
-  const [doneTasks, completedCommands] = await Promise.allSettled([
-    prisma.task.findMany({
-      where: {
-        status: TaskStatus.DONE,
-        OR: [
-          { completedAt: { gte: start, lt: end } },
-          { completedAt: null, updatedAt: { gte: start, lt: end } },
-        ],
-      },
-      orderBy: { completedAt: 'desc' },
-      select: { id: true, title: true, priority: true, completedAt: true, updatedAt: true },
-    }),
-    prisma.command.findMany({
+  let tasks: TrophyTask[] = [];
+
+  if (isTaskPoolRepositorySource()) {
+    // Task-pool mode: tasks live in GitHub Issues. "Done" = issue closed.
+    // We don't have a real completedAt, so use updatedAt as a proxy.
+    const pool = (await listTaskPoolTasks()) ?? [];
+    tasks = pool
+      .filter((t) => t.status === TaskStatus.DONE)
+      .filter((t) => {
+        const ts = (t.updatedAt as unknown as Date) ?? new Date(0);
+        return ts >= start && ts < end;
+      })
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        priority: String(t.priority ?? 'medium').toLowerCase(),
+        completedAt: (t.updatedAt as unknown as Date).toISOString(),
+      }))
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  } else {
+    // DB mode.
+    const doneTasks = await prisma.task
+      .findMany({
+        where: {
+          status: TaskStatus.DONE,
+          OR: [
+            { completedAt: { gte: start, lt: end } },
+            { completedAt: null, updatedAt: { gte: start, lt: end } },
+          ],
+        },
+        orderBy: { completedAt: 'desc' },
+        select: { id: true, title: true, priority: true, completedAt: true, updatedAt: true },
+      })
+      .catch(() => []);
+
+    tasks = doneTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      priority: String(t.priority).toLowerCase(),
+      completedAt: (t.completedAt ?? t.updatedAt).toISOString(),
+    }));
+  }
+
+  // Commands are DB-only; still surface them when available.
+  let commands: Array<{ id: string; input: string; channel: string; completedAt: string | null }> = [];
+  try {
+    const rows = await prisma.command.findMany({
       where: { completedAt: { gte: start, lt: end } },
       orderBy: { completedAt: 'desc' },
       select: { id: true, input: true, completedAt: true, sourceChannel: true },
-    }),
-  ]);
-
-  const tasks = doneTasks.status === 'fulfilled' ? doneTasks.value : [];
-  const commands = completedCommands.status === 'fulfilled' ? completedCommands.value : [];
-
-  // Group tasks by YYYY-MM-DD in ET
-  const byDay: Record<string, Array<{ id: string; title: string; priority: string; completedAt: string }>> = {};
-  for (const t of tasks) {
-    const ts = t.completedAt ?? t.updatedAt;
-    const day = ts.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-    if (!byDay[day]) byDay[day] = [];
-    byDay[day].push({
-      id: t.id,
-      title: t.title,
-      priority: t.priority,
-      completedAt: ts.toISOString(),
     });
+    commands = rows.map((c) => ({
+      id: c.id,
+      input: c.input,
+      channel: c.sourceChannel,
+      completedAt: c.completedAt?.toISOString() ?? null,
+    }));
+  } catch {
+    commands = [];
+  }
+
+  // Group by YYYY-MM-DD in ET
+  const byDay: Record<string, TrophyTask[]> = {};
+  for (const t of tasks) {
+    const day = new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
   }
 
   return NextResponse.json({
     weekOffset: isNaN(weekOffset) ? 0 : weekOffset,
     weekStart: start.toISOString(),
     weekEnd: end.toISOString(),
-    totals: { tasks: tasks.length, commands: commands.length },
+    since: start.toISOString(),
+    totals: { tasks: tasks.length, commands: commands.length, events: 0 },
     byDay,
-    tasks: tasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      priority: t.priority,
-      completedAt: (t.completedAt ?? t.updatedAt).toISOString(),
-    })),
-    commands: commands.map((c) => ({
-      id: c.id,
-      input: c.input,
-      channel: c.sourceChannel,
-      completedAt: c.completedAt?.toISOString() ?? null,
-    })),
+    tasks,
+    commands,
   });
 }

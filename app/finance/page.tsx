@@ -1,8 +1,8 @@
 'use client';
 
-import useSWR from 'swr';
-import { useMemo } from 'react';
-import type { V2FinanceOverviewFeed } from '@/lib/v2/types';
+import useSWR, { mutate as globalMutate } from 'swr';
+import { useCallback, useMemo, useState } from 'react';
+import type { V2FinanceOverviewFeed, V2FinancePlan } from '@/lib/v2/types';
 
 const fetcher = async (url: string): Promise<V2FinanceOverviewFeed> => {
   const res = await fetch(url);
@@ -86,6 +86,10 @@ export default function FinancePage() {
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 6);
 
+  const activePlans = data.plans.filter((p) => p.status === 'ACTIVE' || p.status === 'PAUSED');
+  const goals = activePlans.filter((p) => p.targetValue !== null);
+  const campaigns = activePlans.filter((p) => p.targetValue === null);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="section-head">
@@ -95,6 +99,8 @@ export default function FinancePage() {
         </span>
         <span className="sse-indicator"><span className="sse-pulse" /> live</span>
       </div>
+
+      <PlaidBar onSyncDone={() => globalMutate('/api/v2/finance/overview')} />
 
       {/* Hero: net worth */}
       <div className="card" style={{ padding: 20 }}>
@@ -286,6 +292,34 @@ export default function FinancePage() {
         )}
       </div>
 
+      {/* Plans · Goals · Campaigns */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+        {goals.length > 0 && (
+          <div className="card">
+            <div className="card-title">Goals &mdash; tracked progress</div>
+            {goals.map((p) => (
+              <PlanRow key={p.id} plan={p} />
+            ))}
+          </div>
+        )}
+        {campaigns.length > 0 && (
+          <div className="card">
+            <div className="card-title">Campaigns &mdash; active financial plans</div>
+            {campaigns.map((p) => (
+              <PlanRow key={p.id} plan={p} />
+            ))}
+          </div>
+        )}
+        {activePlans.length === 0 && (
+          <div className="card">
+            <div className="card-title">Plans &middot; Goals &middot; Campaigns</div>
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+              No active plans yet. Drake will surface campaigns once data comes in.
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Income sources */}
       {data.incomeSources.length > 0 && (
         <div className="card">
@@ -312,6 +346,135 @@ export default function FinancePage() {
       <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
         {data.systemStatus === 'partial' ? '⚠ partial data' : '✓ all modules ok'} ·{' '}
         generated {new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+      </div>
+    </div>
+  );
+}
+
+function PlanRow({ plan }: { plan: V2FinancePlan }) {
+  const pct = plan.progressPercent ?? (
+    plan.targetValue && plan.currentValue !== null
+      ? Math.min(100, Math.max(0, (plan.currentValue / plan.targetValue) * 100))
+      : null
+  );
+  const unit = plan.unit ?? '';
+  const fmt = (v: number | null) =>
+    v === null
+      ? '—'
+      : unit === 'USD' || unit === '$'
+        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
+        : `${v.toLocaleString()}${unit ? ` ${unit}` : ''}`;
+
+  return (
+    <div style={{ padding: '11px 0', borderBottom: '1px solid var(--border-c)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <div>
+          <div className="finance-name">{plan.title}</div>
+          <div className="finance-meta">
+            {plan.type.replace(/_/g, ' ').toLowerCase()} &middot; {plan.managedByBot}
+            {plan.targetDate ? ` · target ${plan.targetDate}` : ''}
+          </div>
+        </div>
+        {plan.targetValue !== null && (
+          <div className="finance-amount" style={{ color: 'var(--text2)' }}>
+            {fmt(plan.currentValue)} / {fmt(plan.targetValue)}
+          </div>
+        )}
+      </div>
+      {pct !== null && (
+        <div style={{ marginTop: 6, height: 4, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+          <div
+            style={{
+              width: `${Math.min(100, pct)}%`,
+              height: '100%',
+              background: pct >= 100 ? 'var(--green)' : pct >= 66 ? 'var(--blue)' : pct >= 33 ? 'var(--amber)' : 'var(--red)',
+            }}
+          />
+        </div>
+      )}
+      {plan.milestones.length > 0 && (
+        <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {plan.milestones.slice(0, 4).map((m, i) => (
+            <span
+              key={`${plan.id}-milestone-${i}`}
+              className="badge"
+              style={{
+                background: m.completedAt ? 'var(--green3)' : 'var(--bg3)',
+                color: m.completedAt ? 'var(--green)' : 'var(--text3)',
+              }}
+            >
+              {m.completedAt ? '✓ ' : ''}{m.label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
+  const { data } = useSWR<{ items: Array<{ id: string; institutionName: string; updatedAt: string | null }> }>(
+    '/api/plaid/items',
+    (url: string) => fetch(url).then((r) => r.json()).catch(() => ({ items: [] })),
+    { refreshInterval: 60_000 }
+  );
+  const [syncing, setSyncing] = useState(false);
+  const [linking, setLinking] = useState(false);
+
+  const items = data?.items ?? [];
+
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      await fetch('/api/plaid/sync-transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      onSyncDone();
+    } finally {
+      setSyncing(false);
+    }
+  }, [onSyncDone]);
+
+  const handleLink = useCallback(async () => {
+    setLinking(true);
+    try {
+      const res = await fetch('/api/plaid/create-link-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.link_token) {
+          // Open Plaid Link via the token. In demo mode we just surface the token.
+          window.open(`https://cdn.plaid.com/link/v2/stable/link.html?token=${encodeURIComponent(body.link_token)}`, '_blank');
+        }
+      }
+    } finally {
+      setLinking(false);
+    }
+  }, []);
+
+  return (
+    <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div className="card-title" style={{ margin: 0 }}>Plaid</div>
+      <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+        {items.length === 0
+          ? 'No accounts connected yet.'
+          : `${items.length} institution${items.length === 1 ? '' : 's'} connected · updated ${
+              (() => {
+                const stamps = items.map((i) => (i.updatedAt ? new Date(i.updatedAt).getTime() : 0)).filter(Boolean);
+                if (stamps.length === 0) return '—';
+                return new Date(Math.max(...stamps)).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                });
+              })()
+            }`}
+      </div>
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <button className="btn-sm" onClick={handleSync} disabled={syncing || items.length === 0}>
+          {syncing ? 'Syncing…' : 'Sync now'}
+        </button>
+        <button className="btn-sm primary" onClick={handleLink} disabled={linking}>
+          {linking ? 'Opening…' : items.length === 0 ? 'Connect Plaid' : 'Add account'}
+        </button>
       </div>
     </div>
   );
