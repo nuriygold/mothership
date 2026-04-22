@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
 
 export function Header() {
   const [now, setNow] = useState('');
@@ -24,7 +26,7 @@ export function Header() {
 
   return (
     <header
-      className="flex-shrink-0 flex items-center justify-end px-4 border-b"
+      className="flex-shrink-0 flex items-center justify-between px-4 border-b"
       style={{
         height: '46px',
         background: 'rgba(255,255,255,0.65)',
@@ -36,6 +38,13 @@ export function Header() {
         zIndex: 40,
       }}
     >
+      <div className="flex items-center gap-3">
+        <Link href="/iceman" className="flex items-center gap-2">
+          <Image src="/logo.svg" alt="Mothership" width={24} height={24} />
+          <span style={{fontWeight:600,fontSize:'13px',color:'var(--ice-text3)'}}>Iceman</span>
+        </Link>
+      </div>
+
       <div className="flex items-center gap-3 flex-shrink-0">
         <span
           className="hidden sm:inline text-[11px]"

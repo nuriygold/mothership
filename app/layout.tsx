@@ -21,6 +21,7 @@ export const viewport: Viewport = {
 
 const navItems = [
   { label: 'Today', href: '/today' },
+  { label: 'Iceman', href: '/iceman' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
