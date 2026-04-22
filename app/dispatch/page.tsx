@@ -315,7 +315,11 @@ function DispatchPageInner() {
   const dispatchCampaignsQuery = useQuery({
     queryKey: ['dispatch-campaigns'],
     queryFn: fetchDispatchCampaigns,
-    refetchInterval: 15_000,
+    refetchInterval: (query) => {
+      const data = query.state.data as DispatchCampaign[] | undefined;
+      const hasPlanning = data?.some((c) => c.status === 'PLANNING');
+      return hasPlanning ? 3_000 : 15_000;
+    },
   });
 
   const [input, setInput] = useState('');
@@ -469,6 +473,10 @@ function DispatchPageInner() {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
       await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
+    },
+    onError: async () => {
+      // Plan may have landed in DB even if the request timed out client-side — refetch to check.
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
     },
   });
 
