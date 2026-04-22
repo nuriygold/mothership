@@ -8,6 +8,12 @@ export default function Iceman() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  function newSession() {
+    const id = Math.random().toString(36).slice(2,8)
+    const url = `/iceman/chat?session=agent:iceman:${id}`
+    window.open(url, '_blank')
+  }
+
   async function send() {
     if (!input.trim() || loading) return
 
@@ -76,6 +82,21 @@ export default function Iceman() {
         <span style={{ marginLeft: "10px", fontSize: "12px", opacity: 0.6 }}>
           Mothership Builder Interface
         </span>
+        <button
+          onClick={newSession}
+          style={{
+            marginLeft: "20px",
+            background: "#2a2f45",
+            border: "1px solid #3c425e",
+            color: "white",
+            padding: "6px 10px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "12px"
+          }}
+        >
+          + New Session
+        </button>
       </div>
 
       <div style={{
