@@ -146,8 +146,8 @@ export default function FinancePage() {
                 key={a.id}
                 style={{
                   padding: 12,
-                  background: 'var(--bg2)',
-                  border: '1px solid var(--border-c)',
+                  background: a.liquid ? 'rgba(132, 204, 22, 0.07)' : 'var(--bg2)',
+                  border: a.liquid ? '1px solid rgba(132, 204, 22, 0.35)' : '1px solid var(--border-c)',
                   borderRadius: 'var(--radius)',
                   position: 'relative',
                 }}
@@ -188,9 +188,9 @@ export default function FinancePage() {
                 >
                   {fmtUSD(a.balance)}
                 </div>
-                {a.trendPercentage && (
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                    {a.trendPercentage}
+                {a.updatedAt && (
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
+                    as of {new Date(a.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </div>
                 )}
               </div>
