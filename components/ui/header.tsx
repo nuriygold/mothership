@@ -39,7 +39,7 @@ export function Header() {
       }}
     >
       <div className="flex items-center gap-3">
-        <Link href="/iceman" className="flex items-center gap-2">
+        <Link href={"/iceman" as any} className="flex items-center gap-2">
           <Image src="/logo.svg" alt="Mothership" width={24} height={24} />
           <span style={{fontWeight:600,fontSize:'13px',color:'var(--ice-text3)'}}>Iceman</span>
         </Link>

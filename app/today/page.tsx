@@ -612,7 +612,6 @@ type CampaignListItem = {
 
 function KpiBox({ label, count, sub, href }: { label: string; count: number | null; sub: string; href: string }) {
   return (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <Link href={href as any} style={{ textDecoration: 'none' }}>
       <div
         style={{
