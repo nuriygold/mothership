@@ -1,4 +1,10 @@
-import { Configuration, PlaidApi, PlaidEnvironments, Products } from 'plaid';
+import {
+  Configuration,
+  PlaidApi,
+  PlaidEnvironments,
+  Products,
+  SandboxItemFireWebhookRequestWebhookCodeEnum,
+} from 'plaid';
 import { exchangePublicToken, syncTransactionsForItem } from '@/lib/services/plaid';
 import { prisma } from '@/lib/prisma';
 
@@ -52,7 +58,7 @@ export async function POST() {
   try {
     await client.sandboxItemFireWebhook({
       access_token: await getAccessToken(itemId),
-      webhook_code: 'SYNC_UPDATES_AVAILABLE',
+      webhook_code: SandboxItemFireWebhookRequestWebhookCodeEnum.SyncUpdatesAvailable,
     });
   } catch {
     // Non-fatal — transactions/sync will still return data on next call
