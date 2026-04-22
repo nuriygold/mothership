@@ -8,6 +8,7 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      type: true,
       balance: true,
       currency: true,
       updatedAt: true,
@@ -21,6 +22,7 @@ export async function GET() {
     current: account.balance,
     isoCurrencyCode: account.currency,
     institutionName: account.name,
+    type: account.type,
     updatedAt: account.updatedAt,
   }));
 
