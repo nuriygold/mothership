@@ -25,9 +25,15 @@ export function CardTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function CardSubtitle({ children }: { children: React.ReactNode }) {
+export function CardSubtitle({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+    <p className={cn('text-xs', className)} style={{ color: 'var(--muted-foreground)' }}>
       {children}
     </p>
   );
