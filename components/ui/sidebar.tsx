@@ -14,6 +14,10 @@ import {
   Telescope,
   FolderKanban,
   Trophy,
+  Snowflake,
+  Globe,
+  Network,
+  Brain,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -23,17 +27,21 @@ interface SidebarItem {
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  '/today': Home,
-  '/tasks': ListChecks,
-  '/bots': Bot,
-  '/email': Mail,
-  '/finance': DollarSign,
+  '/today':    Home,
+  '/iceman':   Snowflake,
+  '/tasks':    ListChecks,
+  '/bots':     Bot,
+  '/email':    Mail,
+  '/finance':  DollarSign,
   '/activity': Activity,
-  '/ruby': Sparkles,
-  '/vision': Telescope,
+  '/ruby':     Sparkles,
+  '/vision':   Telescope,
   '/dispatch': Send,
+  '/marvin':   Network,
   '/projects': FolderKanban,
   '/trophy':   Trophy,
+  '/marco':    Globe,
+  '/claude':   Brain,
 };
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {

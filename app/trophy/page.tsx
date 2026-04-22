@@ -125,6 +125,22 @@ export default function TrophyPage() {
         </Link>
       </div>
 
+      {/* Drake — Trophies */}
+      <div
+        className="rounded-xl px-5 py-4"
+        style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid #90c8e0' }}
+      >
+        <p style={{ fontFamily: 'var(--font-dancing, "Dancing Script", cursive)', fontSize: '15px', lineHeight: '1.75', color: '#2a7898', fontStyle: 'italic' }}>
+          If I was doing this for you<br />
+          Then I have nothing left to prove, nah<br />
+          This for me, though<br />
+          I&apos;m just tryna stay alive and take care of my people<br />
+          And they don&apos;t have no award for that<br />
+          Trophies, trophies
+        </p>
+        <p className="mt-2 text-[10px] tracking-widest uppercase" style={{ color: '#90c0d8', fontFamily: 'var(--font-mono)' }}>— Drake</p>
+      </div>
+
       {/* Week navigator */}
       <div
         className="flex items-center justify-between rounded-xl px-4 py-3"
