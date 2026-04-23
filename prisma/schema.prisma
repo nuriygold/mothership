@@ -741,13 +741,26 @@ model PlaidItem {
 }
 
 model RevenueStreamStatus {
-  id          String    @id @default(uuid())
-  stream      String    @unique
-  status      String    @default("idle")
-  note        String?
-  requestedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           String    @id @default(uuid())
+  stream       String    @unique
+  status       String    @default("unknown")
+  note         String?
+  requestedAt  DateTime?
+  lastReportAt DateTime?
+  lastReport   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([stream])
+}
+
+model RevenueStreamStatusLog {
+  id        String   @id @default(uuid())
+  stream    String
+  status    String
+  note      String?
+  action    String?
+  createdAt DateTime @default(now())
+
+  @@index([stream, createdAt])
 }

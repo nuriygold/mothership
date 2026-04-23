@@ -1,8 +1,11 @@
 'use client';
 
 import useSWR, { mutate as globalMutate } from 'swr';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { V2FinanceOverviewFeed, V2FinancePlan, V2RevenueStreamStatus } from '@/lib/v2/types';
+import type { RevenueStreamDef } from '@/lib/v2/revenue-streams';
+import { botColor } from '@/lib/v2/revenue-streams';
 
 const fetcher = async (url: string): Promise<V2FinanceOverviewFeed> => {
   const res = await fetch(url);
@@ -480,6 +483,8 @@ export default function FinancePage() {
         );
       })()}
 
+      <IncomeStreamsRail />
+
       {/* System status footer */}
       <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
         {data.systemStatus === 'partial' ? '⚠ partial data' : '✓ all modules ok'} ·{' '}
@@ -701,6 +706,117 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: 'pos
       <div style={{ fontSize: 18, fontWeight: 600, color, marginTop: 3, fontFamily: 'var(--font-rajdhani)', letterSpacing: 0.5 }}>
         {value}
       </div>
+    </div>
+  );
+}
+
+type StreamStatus = {
+  key: string;
+  displayName: string;
+  leadBotKey: RevenueStreamDef['leadBotKey'];
+  leadDisplay: string;
+  status: string;
+  note: string | null;
+  requestedAt: string | null;
+  updatedAt: string | null;
+};
+
+const STATUS_URL = '/api/v2/revenue-streams/status';
+
+function IncomeStreamsRail() {
+  const { data, mutate } = useSWR<{ streams: StreamStatus[] }>(
+    STATUS_URL,
+    (url: string) => fetch(url).then((r) => r.json()),
+    { refreshInterval: 60_000 }
+  );
+
+  // SSE: invalidate SWR on any event
+  useEffect(() => {
+    const es = new EventSource('/api/v2/stream/revenue-streams');
+    const handler = () => { mutate(); };
+    es.addEventListener('status', handler);
+    es.addEventListener('action', handler);
+    return () => es.close();
+  }, [mutate]);
+
+  const [inflight, setInflight] = useState<Record<string, boolean>>({});
+
+  const doAction = useCallback(async (key: string, action: 'run-report' | 'check-status' | 'ping') => {
+    setInflight((prev) => ({ ...prev, [key]: true }));
+    try {
+      await fetch('/api/v2/revenue-streams/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream: key, action }),
+      });
+      mutate();
+    } finally {
+      setInflight((prev) => ({ ...prev, [key]: false }));
+    }
+  }, [mutate]);
+
+  const streams = data?.streams ?? [];
+
+  return (
+    <div className="card">
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Revenue streams</span>
+        <Link
+          href={"/revenue-streams" as any}
+          style={{ fontSize: 11, color: 'var(--green)', fontFamily: 'var(--font-mono)', textDecoration: 'none', letterSpacing: 0.3 }}
+        >
+          workspace →
+        </Link>
+      </div>
+      {streams.length === 0 ? (
+        <div style={{ padding: '16px 0', color: 'var(--text3)', fontSize: 13 }}>Loading streams…</div>
+      ) : (
+        streams.map((s) => {
+          const busy = !!inflight[s.key];
+          const leadColor = botColor(s.leadBotKey);
+          return (
+            <div key={s.key} className="finance-row" style={{ alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <Link
+                  href={`/revenue-streams/${s.key}` as any}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  <div className="finance-name" style={{ cursor: 'pointer' }}>{s.displayName}</div>
+                </Link>
+                <div className="finance-meta">
+                  lead: <span style={{ color: leadColor }}>{s.leadDisplay}</span>
+                  {s.requestedAt ? <> · pinged {new Date(s.requestedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</> : null}
+                </div>
+                {s.note && (
+                  <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 3, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 340 }}>
+                    {s.note}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 5, flexShrink: 0, alignItems: 'center' }}>
+                <span
+                  className="badge"
+                  style={{
+                    background: s.status === 'active' ? 'var(--green3)' : s.status === 'paused' ? 'var(--amber2)' : 'var(--bg3)',
+                    color: s.status === 'active' ? 'var(--green)' : s.status === 'paused' ? 'var(--amber)' : 'var(--text3)',
+                  }}
+                >
+                  {s.status}
+                </span>
+                <button className="btn-sm" disabled={busy} onClick={() => doAction(s.key, 'run-report')} title="Run report">
+                  Report
+                </button>
+                <button className="btn-sm" disabled={busy} onClick={() => doAction(s.key, 'check-status')} title="Check status">
+                  Status
+                </button>
+                <button className="btn-sm" disabled={busy} onClick={() => doAction(s.key, 'ping')} title="Ping lead">
+                  Ping
+                </button>
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

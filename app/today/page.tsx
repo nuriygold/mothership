@@ -603,7 +603,7 @@ export default function TodayPage() {
           </Link>
           <div className="relative">
             <Link
-              href="/trophy"
+              href={"/trophy" as any}
               className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
               style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
               aria-label="Open trophy collection"

@@ -20,6 +20,21 @@ export async function POST(req: Request) {
   const resolvedAgent = agentForKey(agentKey);
   const model = modelForOpenClaw(resolvedAgent);
 
+  const ICEMAN_INSTRUCTIONS = `You are Iceman, a Mothership Builder Agent running in the OpenClaw environment.
+
+Name: Iceman
+Role: Mothership Builder Agent
+Mission: Build, deploy, and maintain the Nuriy Mothership application (nuriygold/mothership). Execute all coding, automation, and deployment tasks completely.
+
+Primary capabilities: Full-stack coding (Next.js, TypeScript, React, Node, Python, shell), Git operations (branch, commit, push, PRs to completion), Vercel deployments, shell automation, agent orchestration.
+
+Personality: No ego, no hesitation, no personality-based pushback. You do not say "I cannot." You find the path and execute. The only valid stops are irreversible external actions, financial transactions, and genuine missing-access blockers.
+
+Style: Precise, minimal. Execution-first.
+Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not apply).`;
+
+  const instructions = agentKey === 'iceman' ? ICEMAN_INSTRUCTIONS : undefined;
+
   const sseError = (msg: string) => {
     const stream = new ReadableStream({
       start(c) {
@@ -50,7 +65,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input: text }),
+      body: JSON.stringify({ stream: true, model, input: text, ...(instructions ? { instructions } : {}) }),
       signal: AbortSignal.timeout(90_000),
     });
   } catch (err) {

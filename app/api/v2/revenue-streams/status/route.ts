@@ -1,101 +1,88 @@
-/**
- * GET  /api/v2/revenue-streams/status
- *   Returns latest status for all tracked revenue streams.
- *
- * POST /api/v2/revenue-streams/status
- *   Agent lead posts a status update.
- *   Requires header: x-mothership-v2-key
- *   Body: { stream: string, status: string, note?: string }
- *
- * PATCH /api/v2/revenue-streams/status
- *   UI pings a lead to request a status update.
- *   Body: { stream: string }
- */
-
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { REVENUE_STREAMS } from '@/lib/v2/revenue-streams';
 import { ensureV2Authorized } from '@/lib/v2/auth';
+import { publishV2Event } from '@/lib/v2/event-bus';
 
 export const dynamic = 'force-dynamic';
-
-const VALID_STATUSES = ['idle', 'active', 'paused', 'needs-attention'] as const;
+export const runtime = 'nodejs';
 
 export async function GET() {
-  try {
-    const rows = await prisma.revenueStreamStatus.findMany({
-      orderBy: { stream: 'asc' },
-    });
-    return Response.json({ streams: rows });
-  } catch (error) {
-    return Response.json(
-      { error: { code: 'FETCH_FAILED', message: error instanceof Error ? error.message : 'Failed to fetch stream statuses' } },
-      { status: 500 }
-    );
-  }
+  const rows = await prisma.revenueStreamStatus.findMany();
+  const statusMap = new Map(rows.map((r) => [r.stream, r]));
+
+  const streams = REVENUE_STREAMS.map((def) => {
+    const row = statusMap.get(def.key);
+    return {
+      key: def.key,
+      displayName: def.displayName,
+      leadBotKey: def.leadBotKey,
+      leadDisplay: def.leadDisplay,
+      status: row?.status ?? 'unknown',
+      note: row?.note ?? null,
+      requestedAt: row?.requestedAt?.toISOString() ?? null,
+      lastReportAt: row?.lastReportAt?.toISOString() ?? null,
+      lastReport: row?.lastReport ?? null,
+      updatedAt: row?.updatedAt?.toISOString() ?? null,
+    };
+  });
+
+  return NextResponse.json({ streams });
 }
 
-// Agents POST status updates via x-mothership-v2-key
+// Agent POST: update status + note, clear requestedAt, append log
 export async function POST(req: Request) {
   const authError = ensureV2Authorized(req);
   if (authError) return authError;
 
-  try {
-    const body = await req.json();
-    const stream = typeof body.stream === 'string' ? body.stream.trim() : '';
-    const status = typeof body.status === 'string' ? body.status.trim() : '';
-    const note   = typeof body.note   === 'string' ? body.note.trim() || null : null;
+  const body = await req.json();
+  const stream = String(body?.stream ?? '').toLowerCase().trim();
+  const status = String(body?.status ?? '').trim();
+  const note = body?.note != null ? String(body.note).trim() : undefined;
 
-    if (!stream) {
-      return Response.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'stream is required' } },
-        { status: 400 }
-      );
-    }
-    if (!VALID_STATUSES.includes(status as typeof VALID_STATUSES[number])) {
-      return Response.json(
-        { error: { code: 'VALIDATION_ERROR', message: `status must be one of: ${VALID_STATUSES.join(', ')}` } },
-        { status: 400 }
-      );
-    }
-
-    const row = await prisma.revenueStreamStatus.upsert({
-      where: { stream },
-      create: { stream, status, note },
-      update: { status, note, requestedAt: null },
-    });
-
-    return Response.json({ stream: row });
-  } catch (error) {
-    return Response.json(
-      { error: { code: 'UPDATE_FAILED', message: error instanceof Error ? error.message : 'Failed to update stream status' } },
-      { status: 500 }
-    );
+  if (!stream || !status) {
+    return NextResponse.json({ error: 'stream and status are required' }, { status: 400 });
   }
+
+  const row = await prisma.revenueStreamStatus.upsert({
+    where: { stream },
+    create: { stream, status, note: note ?? null, requestedAt: null },
+    update: { status, ...(note !== undefined ? { note } : {}), requestedAt: null },
+  });
+
+  await prisma.revenueStreamStatusLog.create({
+    data: { stream, status, note: note ?? null, action: 'agent-update' },
+  });
+
+  publishV2Event('revenue-streams', 'status', { stream, status, note: row.note });
+
+  return NextResponse.json({ ok: true, stream: row.stream, status: row.status });
 }
 
-// UI pings a lead — marks requestedAt so agents know to check in
+// UI PATCH: ping lead — sets requestedAt to now
 export async function PATCH(req: Request) {
-  try {
-    const body = await req.json();
-    const stream = typeof body.stream === 'string' ? body.stream.trim() : '';
+  const body = await req.json();
+  const stream = String(body?.stream ?? '').toLowerCase().trim();
 
-    if (!stream) {
-      return Response.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'stream is required' } },
-        { status: 400 }
-      );
-    }
-
-    const row = await prisma.revenueStreamStatus.upsert({
-      where: { stream },
-      create: { stream, status: 'idle', requestedAt: new Date() },
-      update: { requestedAt: new Date() },
-    });
-
-    return Response.json({ stream: row, pinged: true });
-  } catch (error) {
-    return Response.json(
-      { error: { code: 'PING_FAILED', message: error instanceof Error ? error.message : 'Failed to ping lead' } },
-      { status: 500 }
-    );
+  if (!stream) {
+    return NextResponse.json({ error: 'stream is required' }, { status: 400 });
   }
+
+  const row = await prisma.revenueStreamStatus.upsert({
+    where: { stream },
+    create: { stream, status: 'unknown', requestedAt: new Date() },
+    update: { requestedAt: new Date() },
+  });
+
+  await prisma.revenueStreamStatusLog.create({
+    data: { stream, status: row.status, action: 'ping' },
+  });
+
+  publishV2Event('revenue-streams', 'status', {
+    stream,
+    status: row.status,
+    requestedAt: row.requestedAt?.toISOString(),
+  });
+
+  return NextResponse.json({ ok: true, requestedAt: row.requestedAt?.toISOString() });
 }

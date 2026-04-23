@@ -13,6 +13,7 @@ Personal agentic operations platform — tasks, bots, finance, email, and daily 
 | `/bots` | Live bot cards — chat with any agent, see current work |
 | `/email` | Email triage with AI draft replies |
 | `/finance` | Cash position, payables, plans, and health score |
+| `/revenue-streams` | Revenue stream workspace — SOPs, quick actions, activity log per stream |
 | `/activity` | System-wide event log with category filters and search |
 | `/dispatch` | Campaign workspace — plan, launch, and track execution |
 | `/projects` | High-level project buckets — Creative, Robotic, Fund Dev, Home |

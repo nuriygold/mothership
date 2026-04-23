@@ -13,6 +13,7 @@ import {
   Telescope,
   FolderKanban,
   Trophy,
+  TrendingUp,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -22,16 +23,17 @@ interface SidebarItem {
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  '/today':    Sun,
-  '/trophy':   Trophy,
-  '/tasks':    ListChecks,
-  '/bots':     Bot,
-  '/email':    Mail,
-  '/finance':  DollarSign,
-  '/activity': Activity,
-  '/vision':   Telescope,
-  '/dispatch': Send,
-  '/projects': FolderKanban,
+  '/today':            Sun,
+  '/trophy':           Trophy,
+  '/tasks':            ListChecks,
+  '/bots':             Bot,
+  '/email':            Mail,
+  '/finance':          DollarSign,
+  '/revenue-streams':  TrendingUp,
+  '/activity':         Activity,
+  '/vision':           Telescope,
+  '/dispatch':         Send,
+  '/projects':         FolderKanban,
 };
 
 // Routes that live in the top header instead of the desktop sidebar.
@@ -63,6 +65,7 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
         const active = pathname?.startsWith(item.href);
         const Icon = ICON_MAP[item.href] ?? Sun;
         const shortLabel = item.label.replace(' (Log)', '');
+        const isTrophy = item.href === '/trophy';
 
         return (
           <Link
@@ -77,21 +80,24 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
               <Icon
                 className="w-5 h-5"
                 style={{
-                  color: active ? '#0470a0' : 'var(--sidebar-foreground)',
-                  opacity: active ? 1 : 0.55,
+                  color: isTrophy ? '#b8902a' : active ? '#0470a0' : 'var(--sidebar-foreground)',
+                  opacity: isTrophy ? (active ? 1 : 0.85) : active ? 1 : 0.55,
                 }}
               />
             </div>
             <span
               className="text-[10px] leading-tight"
-              style={{ color: active ? '#0470a0' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.5 }}
+              style={{
+                color: isTrophy ? '#b8902a' : active ? '#0470a0' : 'var(--sidebar-foreground)',
+                opacity: isTrophy ? (active ? 1 : 0.85) : active ? 1 : 0.5,
+              }}
             >
               {shortLabel}
             </span>
             {active && (
               <div
                 className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-8 rounded-full"
-                style={{ background: '#0470a0' }}
+                style={{ background: isTrophy ? '#b8902a' : '#0470a0' }}
               />
             )}
           </Link>
