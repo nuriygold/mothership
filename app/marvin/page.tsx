@@ -22,6 +22,15 @@ const SESSIONS: Record<AgentKey, string> = {
   adobe: "agent:adobe:marvin",
 }
 
+const DISPATCH_URL: Record<AgentKey, string> = {
+  iceman:  "/api/agent",
+  ruby:    "/api/v2/ruby/dispatch",
+  emerald: "/api/v2/emerald/dispatch",
+  anchor:  "/api/v2/anchor/dispatch",
+  adrian:  "/api/v2/adrian/dispatch",
+  adobe:   "/api/v2/adobe/dispatch",
+}
+
 const AGENT_LABEL: Record<AgentKey, string> = {
   iceman: "🧊 Iceman",
   ruby: "🌹 Drizzy",
@@ -188,7 +197,7 @@ export default function MarvinPage() {
   }
 
   async function streamAgent(agent: AgentKey, text: string, controller: AbortController) {
-    const res = await fetch("/api/agent", {
+    const res = await fetch(DISPATCH_URL[agent], {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, agent, sessionId: SESSIONS[agent] }),
