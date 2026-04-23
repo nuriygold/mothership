@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Home,
+  Sun,
   ListChecks,
   Bot,
   Mail,
@@ -27,21 +27,21 @@ interface SidebarItem {
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  '/today':    Home,
+  '/today':    Sun,
+  '/marco':    Globe,
+  '/claude':   Brain,
+  '/ruby':     Sparkles,
+  '/marvin':   Network,
   '/iceman':   Snowflake,
   '/tasks':    ListChecks,
   '/bots':     Bot,
   '/email':    Mail,
   '/finance':  DollarSign,
   '/activity': Activity,
-  '/ruby':     Sparkles,
   '/vision':   Telescope,
   '/dispatch': Send,
-  '/marvin':   Network,
   '/projects': FolderKanban,
   '/trophy':   Trophy,
-  '/marco':    Globe,
-  '/claude':   Brain,
 };
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
@@ -60,8 +60,9 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
       {/* Nav items */}
       {items.map((item) => {
         const active = pathname?.startsWith(item.href);
-        const Icon = ICON_MAP[item.href] ?? Home;
+        const Icon = ICON_MAP[item.href] ?? Sun;
         const shortLabel = item.label.replace(' (Log)', '');
+        const isTrophy = item.href === '/trophy';
 
         return (
           <Link
@@ -76,21 +77,24 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
               <Icon
                 className="w-5 h-5"
                 style={{
-                  color: active ? '#0470a0' : 'var(--sidebar-foreground)',
-                  opacity: active ? 1 : 0.55,
+                  color: isTrophy ? '#b8902a' : active ? '#0470a0' : 'var(--sidebar-foreground)',
+                  opacity: isTrophy ? (active ? 1 : 0.85) : active ? 1 : 0.55,
                 }}
               />
             </div>
             <span
               className="text-[10px] leading-tight"
-              style={{ color: active ? '#0470a0' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.5 }}
+              style={{
+                color: isTrophy ? '#b8902a' : active ? '#0470a0' : 'var(--sidebar-foreground)',
+                opacity: isTrophy ? (active ? 1 : 0.85) : active ? 1 : 0.5,
+              }}
             >
               {shortLabel}
             </span>
             {active && (
               <div
                 className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-8 rounded-full"
-                style={{ background: '#0470a0' }}
+                style={{ background: isTrophy ? '#b8902a' : '#0470a0' }}
               />
             )}
           </Link>

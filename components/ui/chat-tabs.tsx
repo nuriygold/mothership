@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type ChatTabsProps = {
   agent: string;
@@ -20,6 +20,16 @@ function isValidSessionId(agent: string, sessionId: string | null): sessionId is
 
 function createSessionId(agent: string): string {
   return `agent:${agent}:${crypto.randomUUID()}`;
+}
+
+function readStoredNames(namesKey: string): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(namesKey) ?? '{}');
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function readStoredSessions(storageKey: string, agent: string): string[] {
@@ -51,12 +61,19 @@ export function ChatTabs({
   className,
 }: ChatTabsProps) {
   const storageKey = useMemo(() => `chat-tabs:${agent}:sessions`, [agent]);
+  const namesKey = useMemo(() => `chat-tabs:${agent}:names`, [agent]);
+
   const [sessions, setSessions] = useState<string[]>([]);
+  const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const stored = readStoredSessions(storageKey, agent);
     setSessions(stored);
-  }, [agent, storageKey]);
+    setSessionNames(readStoredNames(namesKey));
+  }, [agent, storageKey, namesKey]);
 
   useEffect(() => {
     setSessions((prev) => {
@@ -76,6 +93,18 @@ export function ChatTabs({
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(storageKey, JSON.stringify(sessions));
   }, [sessions, storageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(namesKey, JSON.stringify(sessionNames));
+  }, [sessionNames, namesKey]);
+
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
 
   const createSession = useCallback(() => {
     const created = createSessionId(agent);
@@ -105,9 +134,33 @@ export function ChatTabs({
         onSessionClose?.(toClose);
         return next;
       });
+      setSessionNames((prev) => {
+        if (!(toClose in prev)) return prev;
+        const next = { ...prev };
+        delete next[toClose];
+        return next;
+      });
     },
     [agent, onSessionChange, onSessionClose, sessionId]
   );
+
+  const startRename = useCallback((id: string, defaultLabel: string) => {
+    setEditingId(id);
+    setEditValue(sessionNames[id] ?? defaultLabel);
+  }, [sessionNames]);
+
+  const commitRename = useCallback((id: string) => {
+    const trimmed = editValue.trim();
+    setSessionNames((prev) => {
+      if (!trimmed) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: trimmed };
+    });
+    setEditingId(null);
+  }, [editValue]);
 
   return (
     <div
@@ -130,7 +183,9 @@ export function ChatTabs({
       >
         {sessions.map((id, index) => {
           const active = id === sessionId;
-          const label = `Session ${index + 1}`;
+          const defaultLabel = `Session ${index + 1}`;
+          const label = sessionNames[id] ?? defaultLabel;
+          const isEditing = editingId === id;
 
           return (
             <div
@@ -147,24 +202,48 @@ export function ChatTabs({
                 flexShrink: 0,
               }}
             >
-              <button
-                type="button"
-                onClick={() => onSessionChange(id)}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'inherit',
-                  padding: '7px 10px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  maxWidth: 190,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-                title={id}
-              >
-                {label}
-              </button>
+              {isEditing ? (
+                <input
+                  ref={editInputRef}
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitRename(id);
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  onBlur={() => commitRename(id)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'white',
+                    padding: '7px 10px',
+                    fontSize: 12,
+                    outline: 'none',
+                    width: 120,
+                    fontFamily: 'inherit',
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSessionChange(id)}
+                  onDoubleClick={() => startRename(id, defaultLabel)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    padding: '7px 10px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 190,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  title={`${id}\nDouble-click to rename`}
+                >
+                  {label}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => closeSession(id)}

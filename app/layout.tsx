@@ -21,20 +21,20 @@ export const viewport: Viewport = {
 
 const navItems = [
   { label: 'Today', href: '/today' },
+  { label: 'Marco', href: '/marco' },
+  { label: 'Claude', href: '/claude' },
+  { label: 'Ruby', href: '/ruby' },
+  { label: 'Marvin', href: '/marvin' },
   { label: 'Iceman', href: '/iceman' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
   { label: 'Finance', href: '/finance' },
   { label: 'Activity (Log)', href: '/activity' },
-  { label: 'Ruby', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
-  { label: 'Marvin', href: '/marvin' },
   { label: 'Projects', href: '/projects' },
   { label: 'Trophy', href: '/trophy' },
-  { label: 'Marco', href: '/marco' },
-  { label: 'Claude', href: '/claude' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
