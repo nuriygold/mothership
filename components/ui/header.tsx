@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { LogOut, Snowflake, Network, Brain, Globe, Gem } from 'lucide-react';
 import Link from 'next/link';
+import { NotificationBell } from '@/components/ui/notification-panel';
 
 /** Inline ice-cube logo — isometric cube with a frosty highlight. */
 function IceCubeLogo({ size = 22 }: { size?: number }) {
@@ -121,7 +122,7 @@ export function Header() {
         })}
       </nav>
 
-      {/* Right: time + logout */}
+      {/* Right: time + notification bell + logout */}
       <div className="flex items-center gap-3 flex-shrink-0">
         <span
           className="hidden sm:inline text-[11px]"
@@ -129,6 +130,7 @@ export function Header() {
         >
           {now}
         </span>
+        <NotificationBell />
         <button
           type="button"
           title="Sign out"

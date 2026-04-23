@@ -740,6 +740,28 @@ function IncomeStreamsRail() {
   }, [mutate]);
 
   const [inflight, setInflight] = useState<Record<string, boolean>>({});
+  const [assignStream, setAssignStream] = useState<StreamStatus | null>(null);
+  const [assignTitle, setAssignTitle] = useState('');
+  const [assignDesc, setAssignDesc] = useState('');
+  const [assigning, setAssigning] = useState(false);
+
+  const submitAssign = useCallback(async () => {
+    if (!assignStream || !assignTitle.trim()) return;
+    setAssigning(true);
+    try {
+      await fetch('/api/v2/revenue-streams/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream: assignStream.key, title: assignTitle.trim(), description: assignDesc.trim() || undefined }),
+      });
+      mutate();
+    } finally {
+      setAssigning(false);
+      setAssignStream(null);
+      setAssignTitle('');
+      setAssignDesc('');
+    }
+  }, [assignStream, assignTitle, assignDesc, mutate]);
 
   const doAction = useCallback(async (key: string, action: 'run-report' | 'check-status' | 'ping') => {
     setInflight((prev) => ({ ...prev, [key]: true }));
@@ -812,10 +834,69 @@ function IncomeStreamsRail() {
                 <button className="btn-sm" disabled={busy} onClick={() => doAction(s.key, 'ping')} title="Ping lead">
                   Ping
                 </button>
+                <button className="btn-sm" onClick={() => { setAssignStream(s); setAssignTitle(''); setAssignDesc(''); }} title="Assign task">
+                  Assign
+                </button>
               </div>
             </div>
           );
         })
+      )}
+      {assignStream && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setAssignStream(null); }}
+        >
+          <div style={{
+            background: '#fff', borderRadius: 12, border: '1px solid #b8e0f5',
+            boxShadow: '0 8px 32px rgba(64,168,200,0.18)', width: 360, padding: '20px 20px 16px',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>
+              Assign task — {assignStream.displayName}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+              Will be assigned to <span style={{ color: 'var(--green)', fontWeight: 600 }}>{assignStream.leadDisplay}</span>
+            </div>
+            <input
+              autoFocus
+              placeholder="Task title *"
+              value={assignTitle}
+              onChange={(e) => setAssignTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitAssign(); if (e.key === 'Escape') setAssignStream(null); }}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+                border: '1px solid #b8e0f5', borderRadius: 8, fontSize: 12, marginBottom: 8,
+                fontFamily: 'var(--font-body)', outline: 'none', color: 'var(--text)',
+              }}
+            />
+            <textarea
+              placeholder="Description (optional)"
+              value={assignDesc}
+              onChange={(e) => setAssignDesc(e.target.value)}
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+                border: '1px solid #b8e0f5', borderRadius: 8, fontSize: 12, marginBottom: 12,
+                fontFamily: 'var(--font-body)', outline: 'none', color: 'var(--text)', resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn-sm" onClick={() => setAssignStream(null)} style={{ opacity: 0.7 }}>Cancel</button>
+              <button
+                className="btn-sm"
+                onClick={submitAssign}
+                disabled={assigning || !assignTitle.trim()}
+                style={{ background: 'var(--green)', color: '#fff', borderColor: 'var(--green)', opacity: (assigning || !assignTitle.trim()) ? 0.6 : 1 }}
+              >
+                {assigning ? 'Assigning…' : 'Assign Task'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
