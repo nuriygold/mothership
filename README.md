@@ -174,6 +174,12 @@ npm run dev
 
 Open [http://localhost:3000/today](http://localhost:3000/today).
 
+## Claude Terminal Server (WebSocket backend)
+
+The `/claude` terminal mode requires a separate WebSocket server (`terminal-server/`) and cannot run on Vercel serverless functions.
+
+DigitalOcean Droplet deployment guide: `terminal-server/README.md`.
+
 ---
 
 ## Cross-Browser Memory Setup
