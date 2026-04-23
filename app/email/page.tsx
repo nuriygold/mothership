@@ -6,7 +6,7 @@ import {
   Flame, Briefcase, DollarSign, Users, PartyPopper,
   ShoppingBag, Code2, BookOpen, Plane,
   CheckCircle, XCircle, MessageSquare, ChevronRight, ArrowLeft, ExternalLink, Calendar, Search,
-  ListPlus, Trash2, Eye, UserX, Sparkles, Square, CheckSquare,
+  ListPlus, Trash2, Eye, UserX, Sparkles, Square, CheckSquare, Send, X,
 } from 'lucide-react';
 import type { V2EmailFeed, V2EmailItem } from '@/lib/v2/types';
 
@@ -39,13 +39,25 @@ const BUCKET_META: Record<EmailBucket, { label: string; icon: any; color: string
   ON_FIRE:        { label: 'On Fire',        icon: Flame,        color: '#ef4444', description: 'Urgent — needs you today',                    action: '' },
   BUSINESS:       { label: 'Business',       icon: Briefcase,    color: '#38bdf8', description: 'Work, clients, professional',                 action: 'Reply / Task' },
   FINANCIAL:      { label: 'Financial',      icon: DollarSign,   color: '#10b981', description: 'Bills, invoices, banking',                   action: 'Review' },
-  MY_PEOPLE:      { label: 'My People',      icon: Users,        color: '#a78bfa', description: 'Friends, family, real humans',               action: 'Done' },
+  MY_PEOPLE:      { label: 'My People',      icon: Users,        color: '#a78bfa', description: 'Friends, family, real humans',               action: '' },
   FUN_EVENTS:     { label: 'Fun & Events',   icon: PartyPopper,  color: '#f472b6', description: 'Invites, parties, social plans',            action: 'RSVP + Calendar' },
   SHOPPING_GIFTS: { label: 'Shopping',       icon: ShoppingBag,  color: '#f59e0b', description: 'Orders, deals, gifts',                      action: 'View / Delete' },
   TECH_PROJECTS:  { label: 'Tech & Projects',icon: Code2,        color: '#06b6d4', description: 'GitHub, dev tools, side projects, tech events', action: 'Task / Archive' },
   GOOD_READS:     { label: 'Good Reads',     icon: BookOpen,     color: '#8b5cf6', description: 'Newsletters, articles, content',            action: 'Read / Unsub' },
   TRAVEL:         { label: 'Travel',         icon: Plane,        color: '#0ea5e9', description: 'Flights, hotels, itineraries',              action: 'Add to Calendar' },
 };
+
+type AgentKey = 'adrian' | 'ruby' | 'emerald' | 'adobe' | 'anchor';
+
+const AGENTS: { key: AgentKey; name: string; tagline: string; color: string }[] = [
+  { key: 'adrian',  name: 'Adrian',  tagline: 'Urgent triage, admin, marketing',  color: '#ef4444' },
+  { key: 'ruby',    name: 'Ruby',    tagline: 'People, replies, relationships',   color: '#a78bfa' },
+  { key: 'emerald', name: 'Emerald', tagline: 'Events, opportunities, calendar',  color: '#10b981' },
+  { key: 'adobe',   name: 'Adobe',   tagline: 'Bills, finance, receipts',         color: '#f59e0b' },
+  { key: 'anchor',  name: 'Anchor',  tagline: 'Deep research, long-form work',    color: '#0ea5e9' },
+];
+
+type AgentPickerTarget = { emailIds: string[]; bucket: EmailBucket | null };
 
 // Ordered by priority for display
 const BUCKET_ORDER: EmailBucket[] = [
@@ -93,6 +105,11 @@ export default function EmailPage() {
   const [replyError, setReplyError] = useState<Map<string, string>>(new Map());
   const [replySent, setReplySent] = useState<Set<string>>(new Set());
   const [selectedSearchIds, setSelectedSearchIds] = useState<Set<string>>(new Set());
+  const [agentPickerTarget, setAgentPickerTarget] = useState<AgentPickerTarget | null>(null);
+  const [agentPickerKey, setAgentPickerKey] = useState<AgentKey>('adrian');
+  const [agentPickerNote, setAgentPickerNote] = useState('');
+  const [agentPickerSending, setAgentPickerSending] = useState(false);
+  const [agentPickerResult, setAgentPickerResult] = useState<string | null>(null);
 
   const emails = useMemo(() => data?.inbox ?? [], [data?.inbox]);
   const fetchedIds = useRef<Set<string>>(new Set());
@@ -142,6 +159,62 @@ export default function EmailPage() {
       .catch(() => {})
       .finally(() => setBodyLoading(prev => { const n = new Set(prev); n.delete(selectedEmail); return n; }));
   }, [selectedEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openAgentPicker(target: AgentPickerTarget) {
+    setAgentPickerTarget(target);
+    setAgentPickerKey('adrian');
+    setAgentPickerNote('');
+    setAgentPickerResult(null);
+  }
+
+  function closeAgentPicker() {
+    if (agentPickerSending) return;
+    setAgentPickerTarget(null);
+    setAgentPickerNote('');
+    setAgentPickerResult(null);
+  }
+
+  async function submitAgentPicker() {
+    if (!agentPickerTarget) return;
+    const { emailIds, bucket } = agentPickerTarget;
+    setAgentPickerSending(true);
+    setAgentPickerResult(null);
+    try {
+      const summaries = emailIds
+        .map(id => emails.find(e => e.id === id))
+        .filter((e): e is V2EmailItem => !!e)
+        .map(e => ({
+          id: e.id,
+          sender: e.sender,
+          subject: e.subject,
+          snippet: e.snippet || e.preview || '',
+        }));
+      const res = await fetch('/api/v2/agent-inbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentKey: agentPickerKey,
+          note: agentPickerNote,
+          emailIds,
+          bucket,
+          summaries,
+        }),
+      });
+      const json = res.ok ? await res.json() : null;
+      if (json?.ok) {
+        const agent = AGENTS.find(a => a.key === agentPickerKey)?.name ?? agentPickerKey;
+        setAgentPickerResult(`Sent ${emailIds.length} email${emailIds.length !== 1 ? 's' : ''} to ${agent}.`);
+        setTimeout(() => { setAgentPickerTarget(null); setAgentPickerResult(null); }, 900);
+      } else {
+        const err = json?.error ?? 'Failed to send.';
+        setAgentPickerResult(err);
+      }
+    } catch {
+      setAgentPickerResult('Network error — not sent.');
+    } finally {
+      setAgentPickerSending(false);
+    }
+  }
 
   async function handleRSVP(emailId: string) {
     setProcessing(prev => new Set(prev).add(emailId));
@@ -455,6 +528,14 @@ export default function EmailPage() {
                     <UserX className="w-3 h-3" />
                     Unsub
                   </button>
+                  <button
+                    onClick={() => openAgentPicker({ emailIds: Array.from(selectedSearchIds), bucket: null })}
+                    className="rounded-full px-2.5 py-1 text-xs flex items-center gap-1 transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <Send className="w-3 h-3" />
+                    Send to Agent
+                  </button>
                 </>
               )}
             </div>
@@ -607,11 +688,20 @@ export default function EmailPage() {
                     <UserX className="w-3 h-3 inline mr-1" />
                     Unsub All
                   </button>
+                  <button
+                    onClick={() => openAgentPicker({ emailIds: bucketEmails.map(e => e.id), bucket })}
+                    className="rounded-full px-3 py-1.5 text-xs"
+                    style={{ border: '1px solid var(--border)' }}
+                  >
+                    <Send className="w-3 h-3 inline mr-1" />
+                    Send to Agent
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>}
+        {renderAgentPicker()}
       </div>
     );
   }
@@ -676,20 +766,12 @@ export default function EmailPage() {
           Unsub All
         </button>
         <button
-          onClick={() => handleDeleteAll(selectedBucket)}
-          className="rounded-full px-4 py-2 text-xs"
-          style={{ border: '1px solid #ef444460', color: '#ef4444' }}
-        >
-          <Trash2 className="w-3 h-3 inline mr-1" />
-          Delete All
-        </button>
-        <button
-          onClick={() => handleUnsubscribeAll(selectedBucket)}
+          onClick={() => openAgentPicker({ emailIds: bucketEmails.map(e => e.id), bucket: selectedBucket })}
           className="rounded-full px-4 py-2 text-xs"
           style={{ border: '1px solid var(--border)' }}
         >
-          <UserX className="w-3 h-3 inline mr-1" />
-          Unsub All
+          <Send className="w-3 h-3 inline mr-1" />
+          Send to Agent
         </button>
       </div>
 
@@ -762,6 +844,15 @@ export default function EmailPage() {
                     title="Delete"
                   >
                     <Trash2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => openAgentPicker({ emailIds: [email.id], bucket: selectedBucket })}
+                    disabled={isProcessing}
+                    className="rounded-full p-1 transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--border)' }}
+                    title="Send to Agent"
+                  >
+                    <Send className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -986,6 +1077,14 @@ export default function EmailPage() {
                       Unsubscribe
                     </button>
                     <button
+                      onClick={() => openAgentPicker({ emailIds: [detailEmail.id], bucket: selectedBucket })}
+                      className="rounded-full px-4 py-2 text-xs"
+                      style={{ border: '1px solid var(--border)' }}
+                    >
+                      <Send className="w-3 h-3 inline mr-1" />
+                      Send to Agent
+                    </button>
+                    <button
                       onClick={() => setFeedbackMode(feedbackMode === detailEmail.id ? null : detailEmail.id)}
                       className="rounded-full px-4 py-2 text-xs"
                       style={{ border: '1px solid var(--border)' }}
@@ -1031,6 +1130,115 @@ export default function EmailPage() {
           )}
         </div>
       </div>
+      {renderAgentPicker()}
     </div>
   );
+
+  function renderAgentPicker() {
+    if (!agentPickerTarget) return null;
+    const count = agentPickerTarget.emailIds.length;
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: 'rgba(0,0,0,0.5)' }}
+        onClick={closeAgentPicker}
+      >
+        <div
+          className="rounded-3xl p-5 w-full max-w-md space-y-4"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Send to Agent</h3>
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {count} email{count !== 1 ? 's' : ''}
+                {agentPickerTarget.bucket ? ` · ${BUCKET_META[agentPickerTarget.bucket].label}` : ''}
+              </p>
+            </div>
+            <button
+              onClick={closeAgentPicker}
+              disabled={agentPickerSending}
+              className="rounded-full p-1 transition-opacity hover:opacity-70"
+              style={{ color: 'var(--muted-foreground)' }}
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Pick an agent</p>
+            <div className="grid grid-cols-1 gap-2">
+              {AGENTS.map(agent => {
+                const isActive = agent.key === agentPickerKey;
+                return (
+                  <button
+                    key={agent.key}
+                    onClick={() => setAgentPickerKey(agent.key)}
+                    disabled={agentPickerSending}
+                    className="rounded-2xl p-3 text-left transition-all"
+                    style={{
+                      border: `1px solid ${isActive ? agent.color : 'var(--border)'}`,
+                      background: isActive ? `${agent.color}15` : 'var(--background)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${agent.color}25` }}>
+                        <Sparkles className="w-3 h-3" style={{ color: agent.color }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">{agent.name}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{agent.tagline}</p>
+                      </div>
+                      {isActive && <CheckCircle className="w-4 h-4" style={{ color: agent.color }} />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Note for the agent</p>
+            <textarea
+              value={agentPickerNote}
+              onChange={e => setAgentPickerNote(e.target.value)}
+              disabled={agentPickerSending}
+              placeholder="e.g. 'Draft a polite decline and flag anything urgent.'"
+              className="w-full text-xs p-3 rounded-lg resize-none outline-none"
+              style={{ background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--foreground)' }}
+              rows={3}
+            />
+          </div>
+
+          {agentPickerResult && (
+            <p className="text-xs" style={{ color: agentPickerResult.startsWith('Sent') ? '#10b981' : '#ef4444' }}>
+              {agentPickerResult}
+            </p>
+          )}
+
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={closeAgentPicker}
+              disabled={agentPickerSending}
+              className="rounded-full px-4 py-2 text-xs"
+              style={{ border: '1px solid var(--border)' }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitAgentPicker}
+              disabled={agentPickerSending}
+              className="rounded-full px-4 py-2 text-xs font-semibold flex items-center gap-1"
+              style={{ background: AGENTS.find(a => a.key === agentPickerKey)?.color ?? '#0ea5e9', color: '#fff' }}
+            >
+              <Send className="w-3 h-3" />
+              {agentPickerSending ? 'Sending…' : 'Send to Inbox'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }

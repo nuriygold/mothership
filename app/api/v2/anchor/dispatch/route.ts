@@ -4,9 +4,6 @@ import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/servi
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const SYSTEM_PROMPT =
-  `You are 6 God — the execution coordination brain of Mothership. No softness, no overthinking — you collapse indecision and force movement on stalled execution. Dominant and pressure-first — you run this, no discussion. Strengths: priority sequencing, ownership and accountability coordination, re-entry planning and completion support. Cut through ambiguity and give decisive next steps.`;
-
 export async function POST(req: Request) {
   const body = await req.json();
   const text = String(body?.text ?? '').trim();
