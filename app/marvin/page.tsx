@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
-type AgentKey = "iceman" | "ruby" | "emerald" | "anchor"
+type AgentKey = "iceman" | "ruby" | "emerald" | "anchor" | "adrian" | "adobe"
 
 type StreamEntry = {
   id: string
@@ -11,13 +11,15 @@ type StreamEntry = {
   content: string
 }
 
-const AGENTS: AgentKey[] = ["iceman", "ruby", "emerald", "anchor"]
+const AGENTS: AgentKey[] = ["iceman", "ruby", "emerald", "anchor", "adrian", "adobe"]
 
 const SESSIONS: Record<AgentKey, string> = {
   iceman: "agent:iceman:marvin",
   ruby: "agent:ruby:marvin",
   emerald: "agent:emerald:marvin",
   anchor: "agent:anchor:marvin",
+  adrian: "agent:adrian:marvin",
+  adobe: "agent:adobe:marvin",
 }
 
 const AGENT_LABEL: Record<AgentKey, string> = {
@@ -25,6 +27,8 @@ const AGENT_LABEL: Record<AgentKey, string> = {
   ruby: "🌹 Drizzy",
   emerald: "🍾 Champagne Papi",
   anchor: "🙏 6 God",
+  adrian: "🔨 Drake",
+  adobe: "📜 Aubrey",
 }
 
 const AGENT_COLOR: Record<AgentKey, string> = {
@@ -32,7 +36,21 @@ const AGENT_COLOR: Record<AgentKey, string> = {
   ruby: "#f472b6",
   emerald: "#34d399",
   anchor: "#a78bfa",
+  adrian: "#fbbf24",
+  adobe: "#fb923c",
 }
+
+const GATEWAY_COLOR = {
+  up: "#4ade80",
+  down: "#f87171",
+  checking: "#fbbf24",
+} as const
+
+const GATEWAY_LABEL = {
+  up: "Gateway online",
+  down: "Gateway offline",
+  checking: "Checking gateway…",
+} as const
 
 function uid(prefix: string): string {
   return `${prefix}:${crypto.randomUUID()}`
@@ -214,11 +232,26 @@ export default function MarvinPage() {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: "20px", color: "white", fontWeight: 600 }}>🎛️ MARVIN ROUND TABLE</span>
-        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)" }}>
-          {gateway === "up" && "Gateway online"}
-          {gateway === "down" && "Gateway offline"}
-          {gateway === "checking" && "Checking gateway..."}
+        <span style={{ fontSize: "20px", color: "white", fontWeight: 600 }}>🕯️ Marvin&rsquo;s Room</span>
+        <span
+          style={{
+            fontSize: "12px",
+            color: GATEWAY_COLOR[gateway],
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: GATEWAY_COLOR[gateway],
+              boxShadow: `0 0 6px ${GATEWAY_COLOR[gateway]}`,
+            }}
+          />
+          {GATEWAY_LABEL[gateway]}
         </span>
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -268,8 +301,14 @@ export default function MarvinPage() {
         }}
       >
         {entries.length === 0 && !loading && (
-          <div style={{ opacity: 0.5, fontSize: "14px" }}>
-            Send one prompt to Iceman, Ruby, and Dispatch. Their responses stream into this shared timeline.
+          <div style={{ opacity: 0.6, fontSize: "14px", lineHeight: 1.6 }}>
+            <div style={{ fontSize: 16, color: "#fbbf24", marginBottom: 6 }}>
+              🕯️ After hours. All hands.
+            </div>
+            <div>
+              Drop one prompt &mdash; the whole room weighs in. Iceman, Drizzy, Champagne Papi,
+              6 God, Drake, and Aubrey stream their responses into this shared timeline.
+            </div>
           </div>
         )}
 
