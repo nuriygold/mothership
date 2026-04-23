@@ -61,7 +61,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ ok: false, message: 'Failed to create zip archive' }, { status: 500 });
     }
     const zipName = `${campaignOutputDirName(campaign.title, campaign.createdAt)}.zip`;
-    return new Response(zipBuf, {
+    return new Response(new Uint8Array(zipBuf), {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${zipName}"`,
