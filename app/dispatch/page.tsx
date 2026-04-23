@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Trash2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
@@ -115,6 +116,26 @@ async function fetchDispatchCampaigns(): Promise<DispatchCampaign[]> {
   const res = await fetch('/api/dispatch/campaigns', { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to load dispatch campaigns');
   return res.json();
+}
+
+async function deleteDispatchCampaign(payload: { campaignId: string; reason: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: payload.reason }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { message?: string })?.message ?? 'Failed to delete campaign');
+  return body;
+}
+
+async function trophyDispatchCampaign(payload: { campaignId: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/trophy`, {
+    method: 'POST',
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { message?: string })?.message ?? 'Failed to trophy campaign');
+  return body;
 }
 
 async function createDispatchCampaign(payload: { title: string; description?: string }) {
@@ -342,10 +363,6 @@ function DispatchPageInner() {
   const [showNewCampaignForm, setShowNewCampaignForm] = useState(false);
   const [showManualTaskEntry, setShowManualTaskEntry] = useState(false);
   const [keepInDispatch, setKeepInDispatch] = useState(false);
-  const [trashTarget, setTrashTarget] = useState<DispatchCampaign | null>(null);
-  const [trashReason, setTrashReason] = useState('');
-  const [trashScope, setTrashScope] = useState<'campaign' | 'tasks'>('campaign');
-  const [trashLoading, setTrashLoading] = useState(false);
   const campaignSectionRef = useRef<HTMLDivElement>(null);
   const incomingTask = searchParams?.get('task') ?? '';
   const incomingSource = searchParams?.get('source') ?? '';
@@ -458,6 +475,21 @@ function DispatchPageInner() {
     },
   });
 
+  const deleteCampaignMutation = useMutation({
+    mutationFn: deleteDispatchCampaign,
+    onSuccess: async (_, vars) => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+      if (selectedCampaignId === vars.campaignId) setSelectedCampaignId('');
+    },
+  });
+
+  const trophyCampaignMutation = useMutation({
+    mutationFn: trophyDispatchCampaign,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+    },
+  });
+
   const createTaskMutation = useMutation({
     mutationFn: createDispatchTask,
     onSuccess: async () => {
@@ -535,25 +567,6 @@ function DispatchPageInner() {
       await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
     },
   });
-
-  async function handleTrashConfirm() {
-    if (!trashTarget || !trashReason.trim()) return;
-    setTrashLoading(true);
-    try {
-      const res = await fetch(`/api/dispatch/campaigns/${trashTarget.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: trashReason.trim(), scope: trashScope }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
-      if (selectedCampaignId === trashTarget.id) setSelectedCampaignId('');
-      setTrashTarget(null);
-      setTrashReason('');
-      setTrashScope('campaign');
-    } catch {}
-    setTrashLoading(false);
-  }
 
   const availablePlans = selectedCampaign?.latestPlan?.plans ?? [];
 
@@ -735,15 +748,24 @@ function DispatchPageInner() {
           {campaigns.map((campaign) => {
             const isSelected = selectedCampaignId === campaign.id;
             const failedCount = campaign.tasks.filter((t) => t.status === 'FAILED').length;
+            const isDeleting = deleteCampaignMutation.isLoading && deleteCampaignMutation.variables?.campaignId === campaign.id;
             return (
-              <button
+              <div
                 key={campaign.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedCampaignId(isSelected ? '' : campaign.id)}
-                className="rounded-2xl p-4 text-left transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedCampaignId(isSelected ? '' : campaign.id);
+                  }
+                }}
+                className="rounded-2xl p-4 text-left transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1"
                 style={{
                   background: isSelected ? 'var(--card)' : 'var(--muted)',
                   border: isSelected ? '2px solid var(--color-cyan)' : '1px solid var(--card-border)',
+                  opacity: isDeleting ? 0.5 : 1,
                 }}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -756,11 +778,36 @@ function DispatchPageInner() {
                     </span>
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); setTrashTarget(campaign); setTrashReason(''); setTrashScope('campaign'); }}
-                      className="w-6 h-6 flex items-center justify-center rounded-lg transition-colors hover:bg-rose-100"
-                      title="Move to trash"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        trophyCampaignMutation.mutate({ campaignId: campaign.id });
+                      }}
+                      disabled={trophyCampaignMutation.isLoading || campaign.status === 'COMPLETED'}
+                      title={campaign.status === 'COMPLETED' ? 'Already in the Trophy Case' : 'Move to Trophy Case'}
+                      aria-label="Move campaign to Trophy Case"
+                      className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
+                      style={{ background: 'transparent', color: '#b8902a' }}
                     >
-                      <span style={{ fontSize: 13 }}>🗑</span>
+                      <Trophy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const reason = window.prompt(
+                          `Delete campaign "${campaign.title}"?\n\nWhy are you deleting it? (leave blank to skip)`,
+                          '',
+                        );
+                        if (reason === null) return; // cancelled
+                        deleteCampaignMutation.mutate({ campaignId: campaign.id, reason });
+                      }}
+                      disabled={isDeleting}
+                      title="Delete campaign (logged to Activity)"
+                      aria-label="Delete campaign"
+                      className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
+                      style={{ background: 'transparent', color: 'var(--foreground)', opacity: 0.5 }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -786,7 +833,7 @@ function DispatchPageInner() {
                     </a>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -1456,91 +1503,6 @@ function DispatchPageInner() {
           </Card>
         </div>
       </details>
-
-      {/* ── Trash modal ── */}
-      {trashTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
-          onClick={() => !trashLoading && setTrashTarget(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-4"
-            style={{ background: 'var(--card)', border: '1px solid var(--card-border)', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <p className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
-                🗑 Trash &ldquo;{trashTarget.title}&rdquo;?
-              </p>
-              <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                This action is logged and sent to the agent for documentation.
-              </p>
-            </div>
-
-            {/* Scope */}
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium" style={{ color: 'var(--foreground)' }}>What are you deleting?</p>
-              {(['campaign', 'tasks'] as const).map((s) => (
-                <label key={s} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="trash-scope"
-                    value={s}
-                    checked={trashScope === s}
-                    onChange={() => setTrashScope(s)}
-                    className="accent-rose-500"
-                  />
-                  <span className="text-sm" style={{ color: 'var(--foreground)' }}>
-                    {s === 'campaign' ? 'Entire campaign (and all tasks)' : 'Cancel all tasks only (keep campaign)'}
-                  </span>
-                </label>
-              ))}
-            </div>
-
-            {/* Reason */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium" style={{ color: 'var(--foreground)' }}>
-                Reason <span className="text-rose-400">*</span>
-              </label>
-              <textarea
-                value={trashReason}
-                onChange={(e) => setTrashReason(e.target.value)}
-                placeholder="Why is this campaign being trashed?"
-                rows={3}
-                className="w-full rounded-xl px-3 py-2 text-sm resize-none outline-none"
-                style={{
-                  background: 'var(--muted)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--foreground)',
-                }}
-              />
-            </div>
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setTrashTarget(null)}
-                disabled={trashLoading}
-                className="px-4 py-2 rounded-xl text-sm font-medium"
-                style={{ background: 'var(--muted)', color: 'var(--foreground)' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleTrashConfirm}
-                disabled={!trashReason.trim() || trashLoading}
-                className="px-4 py-2 rounded-xl text-sm font-medium transition-opacity"
-                style={{
-                  background: trashReason.trim() && !trashLoading ? '#e11d48' : 'var(--muted)',
-                  color: trashReason.trim() && !trashLoading ? '#fff' : 'var(--muted-foreground)',
-                }}
-              >
-                {trashLoading ? 'Trashing…' : `Confirm — ${trashScope === 'campaign' ? 'Delete campaign' : 'Cancel tasks'}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

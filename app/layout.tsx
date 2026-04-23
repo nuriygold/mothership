@@ -20,6 +20,8 @@ export const viewport: Viewport = {
 };
 
 const navItems = [
+  // Sidebar anchor — directly under the Mothership logo.
+  { label: 'Trophies', href: '/trophy' },
   { label: 'Today', href: '/today' },
   { label: 'Marco', href: '/marco' },
   { label: 'Claude', href: '/claude' },
@@ -33,10 +35,13 @@ const navItems = [
   { label: 'Finance', href: '/finance' },
   { label: 'Streams', href: '/revenue-streams' },
   { label: 'Activity (Log)', href: '/activity' },
+  { label: 'Drizzy', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
+  { label: "Marvin's Room", href: '/marvin' },
   { label: 'Projects', href: '/projects' },
-  { label: 'Trophy', href: '/trophy' },
+  { label: 'Marco', href: '/marco' },
+  { label: 'Claude', href: '/claude' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

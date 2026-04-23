@@ -6,16 +6,19 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   const key = process.env.AZURE_SPEECH_KEY;
   const region = process.env.AZURE_SPEECH_REGION;
+  const speechEndpoint = process.env.AZURE_SPEECH_ENDPOINT;
 
-  if (!key || !region) {
-    return NextResponse.json({ message: 'AZURE_SPEECH_KEY or AZURE_SPEECH_REGION missing' }, { status: 500 });
+  if (!key || (!region && !speechEndpoint)) {
+    return NextResponse.json({ message: 'AZURE_SPEECH_KEY and AZURE_SPEECH_REGION (or AZURE_SPEECH_ENDPOINT) required' }, { status: 500 });
   }
 
   try {
     const contentType = req.headers.get('content-type') || 'audio/ogg';
     const audioBuffer = await req.arrayBuffer();
 
-    const endpoint = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=simple`;
+    const endpoint = speechEndpoint
+      ? `${speechEndpoint.replace(/\/$/, '')}/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=simple`
+      : `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=simple`;
 
     const res = await fetch(endpoint, {
       method: 'POST',

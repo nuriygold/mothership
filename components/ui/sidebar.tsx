@@ -9,16 +9,11 @@ import {
   Mail,
   DollarSign,
   Activity,
-  Sparkles,
   Send,
   Telescope,
   FolderKanban,
   Trophy,
-  Snowflake,
-  Globe,
-  Network,
-  Brain,
-  Zap,
+  TrendingUp,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -28,39 +23,45 @@ interface SidebarItem {
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  '/today':    Sun,
-  '/marco':    Globe,
-  '/claude':   Brain,
-  '/ruby':     Sparkles,
-  '/marvin':   Network,
-  '/iceman':   Snowflake,
-  '/scorpion': Zap,
-  '/tasks':    ListChecks,
-  '/bots':     Bot,
-  '/email':    Mail,
-  '/finance':  DollarSign,
-  '/activity': Activity,
-  '/vision':   Telescope,
-  '/dispatch': Send,
-  '/projects': FolderKanban,
-  '/trophy':   Trophy,
+  '/today':            Sun,
+  '/trophy':           Trophy,
+  '/tasks':            ListChecks,
+  '/bots':             Bot,
+  '/email':            Mail,
+  '/finance':          DollarSign,
+  '/revenue-streams':  TrendingUp,
+  '/activity':         Activity,
+  '/vision':           Telescope,
+  '/dispatch':         Send,
+  '/projects':         FolderKanban,
 };
+
+// Routes that live in the top header instead of the desktop sidebar.
+// Drizzy (Ruby) moved up here with the personas. Trophies moved out — it now
+// anchors the sidebar directly under the logo.
+const HEADER_ROUTES = new Set(['/iceman', '/marvin', '/ruby', '/claude', '/marco']);
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
   const pathname = usePathname();
+  const sidebarItems = items.filter((item) => !HEADER_ROUTES.has(item.href));
 
   return (
     <aside
-      className="hidden md:flex flex-shrink-0 w-20 flex-col items-center py-5 gap-1 border-r"
-      style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)', minHeight: '100vh' }}
+      className="hidden md:flex flex-shrink-0 w-20 flex-col items-center py-5 gap-1 border-r sticky self-start overflow-y-auto"
+      style={{
+        background: 'var(--sidebar)',
+        borderColor: 'var(--sidebar-border)',
+        top: 'var(--header-h)',
+        height: 'calc(100vh - var(--header-h))',
+      }}
     >
-      {/* Logo at top — links to Dispatch */}
-      <Link href="/dispatch" className="mb-5 mt-1 transition-opacity hover:opacity-85">
+      {/* Logo at top — links Home (Today) */}
+      <Link href="/today" className="mb-5 mt-1 transition-opacity hover:opacity-85">
         <MothershipLogo size={44} />
       </Link>
 
       {/* Nav items */}
-      {items.map((item) => {
+      {sidebarItems.map((item) => {
         const active = pathname?.startsWith(item.href);
         const Icon = ICON_MAP[item.href] ?? Sun;
         const shortLabel = item.label.replace(' (Log)', '');

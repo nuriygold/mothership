@@ -174,6 +174,13 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
         celebrateTimer.current = setTimeout(() => setCelebrate(false), 1800);
         if (!wasAllDone) {
           onAllComplete?.();
+          // Fire-and-forget: persists a trophy for today so it shows up on the Trophy page.
+          // Server endpoint is idempotent per date, so retries/re-renders are safe.
+          void fetch('/api/v2/trophy/anchor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: todayDate() }),
+          }).catch(() => { /* offline is fine — will retry on next flip if still all-done */ });
         }
       }
       return next;
@@ -182,7 +189,7 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
 
   const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal, w.vitamins].filter(Boolean).length;
   const pct = (done / 6) * 100;
-  const r = 16; const circ = 2 * Math.PI * r;
+  const r = 9; const circ = 2 * Math.PI * r;
 
   const anchors: AnchorDef[] = [
     {
@@ -250,54 +257,54 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
   ];
 
   return (
-    <div className="rounded-3xl border p-4 transition-all"
+    <div className="rounded-2xl border p-2 transition-all"
       style={{
         background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : '#EDE8DC',
         borderColor: celebrate ? '#F59E0B' : 'var(--border)',
       }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <svg width="40" height="40" viewBox="0 0 40 40" className="-rotate-90">
-            <circle cx="20" cy="20" r={r} fill="none" stroke="var(--border)" strokeWidth="3" />
-            <circle cx="20" cy="20" r={r} fill="none"
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <svg width="24" height="24" viewBox="0 0 24 24" className="-rotate-90">
+            <circle cx="12" cy="12" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
+            <circle cx="12" cy="12" r={r} fill="none"
               stroke={done === 6 ? '#F59E0B' : 'var(--color-cyan)'}
-              strokeWidth="3"
+              strokeWidth="2"
               strokeDasharray={circ}
               strokeDashoffset={circ - (circ * pct) / 100}
               strokeLinecap="round"
               style={{ transition: 'stroke-dashoffset 0.4s ease' }}
             />
-            <text x="20" y="20" textAnchor="middle" dominantBaseline="central"
-              className="rotate-90" style={{ fontSize: 10, fontWeight: 700, fill: done === 6 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '20px 20px' }}>
+            <text x="12" y="12" textAnchor="middle" dominantBaseline="central"
+              className="rotate-90" style={{ fontSize: 7, fontWeight: 700, fill: done === 6 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '12px 12px' }}>
               {done}/6
             </text>
           </svg>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>Daily Anchors</p>
-            <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide leading-tight" style={{ color: 'var(--muted-foreground)' }}>Daily Anchors</p>
+            <p className="text-[8px] leading-tight" style={{ color: 'var(--muted-foreground)' }}>
               {done === 6 ? '🏆 All done — you\'re on fire!' : `${6 - done} left today`}
             </p>
           </div>
         </div>
-        {celebrate && <span className="text-lg animate-bounce">🎉</span>}
+        {celebrate && <span className="text-sm animate-bounce">🎉</span>}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
         {anchors.map((a) => {
           const Icon = a.icon;
           return (
-            <div key={a.key} className="rounded-2xl overflow-hidden flex flex-col sm:flex-row"
+            <div key={a.key} className="rounded-xl overflow-hidden flex flex-col sm:flex-row"
               style={{
-                border: `1.5px solid ${a.todayActive ? a.text : 'transparent'}`,
-                boxShadow: a.todayActive ? `0 2px 8px rgba(0,0,0,0.08)` : 'none',
+                border: `1px solid ${a.todayActive ? a.text : 'transparent'}`,
+                boxShadow: a.todayActive ? `0 1px 4px rgba(0,0,0,0.08)` : 'none',
               }}>
               {/* Yesterday — read-only */}
-              <div className="flex flex-col items-center gap-0.5 py-2 px-1 flex-1 opacity-55"
+              <div className="flex flex-col items-center gap-0 py-1 px-0.5 flex-1 opacity-55"
                 style={{ background: a.ydayActive ? a.bg : 'rgba(0,0,0,0.05)' }}>
-                <span className="text-[7px] font-semibold uppercase tracking-wide"
+                <span className="text-[6px] font-semibold uppercase tracking-wide"
                   style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>Yday</span>
-                <Icon className="w-3.5 h-3.5" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }} />
-                <span className="text-[9px] font-semibold leading-tight"
+                <Icon className="w-2.5 h-2.5" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }} />
+                <span className="text-[7px] font-semibold leading-tight"
                   style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
                 <div style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.ydaySub}</div>
               </div>
@@ -306,12 +313,12 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
                 style={{ background: a.todayActive ? a.text : 'rgba(0,0,0,0.1)', opacity: 0.3 }} />
               {/* Today — interactive */}
               <button onClick={a.onTap}
-                className="flex flex-col items-center gap-0.5 py-2 px-1 transition-all hover:brightness-95 active:scale-95 flex-1"
+                className="flex flex-col items-center gap-0 py-1 px-0.5 transition-all hover:brightness-95 active:scale-95 flex-1"
                 style={{ background: a.todayActive ? a.bg : 'var(--muted)' }}>
-                <span className="text-[7px] font-semibold uppercase tracking-wide"
+                <span className="text-[6px] font-semibold uppercase tracking-wide"
                   style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>Today</span>
-                <Icon className="w-3.5 h-3.5" style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }} />
-                <span className="text-[9px] font-semibold leading-tight"
+                <Icon className="w-2.5 h-2.5" style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }} />
+                <span className="text-[7px] font-semibold leading-tight"
                   style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
                 <div style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.todaySub}</div>
               </button>

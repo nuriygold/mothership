@@ -1,40 +1,33 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import dynamic from "next/dynamic"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatTabs } from "@/components/ui/chat-tabs"
+import { GatewayTicker, useGatewayStatus } from "@/components/ui/gateway-ticker"
+import { SessionPalette } from "@/components/ui/session-palette"
+import { maybeAutoTitle } from "@/lib/chat/tabs-client"
 
-const TerminalView = dynamic(() => import('@/components/ui/terminal-view'), {
-  ssr: false,
-  loading: () => <div style={{ flex: 1, background: '#0b0f17' }} />,
-})
-
-const TUI_URL_KEY = 'iceman-tui-url'
-
-type Mode = 'chat' | 'tui'
 type Message = { role: 'user' | 'assistant'; content: string }
 
 export default function Iceman() {
-  const [mode, setMode] = useState<Mode>('chat')
-  const [tuiUrl, setTuiUrl] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [messagesBySession, setMessagesBySession] = useState<Record<string, Message[]>>({})
+  const [loadedSessions, setLoadedSessions] = useState<Set<string>>(new Set())
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [gateway, setGateway] = useState<'checking' | 'up' | 'down'>('checking')
+  const gateway = useGatewayStatus()
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    setTuiUrl(localStorage.getItem(TUI_URL_KEY) ?? '')
     const params = new URLSearchParams(window.location.search)
-    const sid = params.get('session')
-    if (sid?.startsWith('agent:iceman:')) setSessionId(sid)
+    let sid = params.get('session')
+    if (sid?.startsWith('agent:iceman:')) {
+      setSessionId(sid)
+    }
   }, [])
 
   const messages = sessionId ? (messagesBySession[sessionId] ?? []) : []
@@ -48,16 +41,37 @@ export default function Iceman() {
     }
   }, [messages, loading])
 
+  // Hydrate messages for any session we haven't loaded yet from the server.
   useEffect(() => {
-    fetch("https://mother.nuriy.com/v1/health")
-      .then(r => setGateway(r.ok ? 'up' : 'down'))
-      .catch(() => setGateway('down'))
-  }, [])
-
-  function saveTuiUrl(url: string) {
-    setTuiUrl(url)
-    if (typeof window !== 'undefined') localStorage.setItem(TUI_URL_KEY, url)
-  }
+    if (!sessionId) return
+    if (loadedSessions.has(sessionId)) return
+    let cancelled = false
+    setLoadedSessions((prev) => {
+      const next = new Set(prev)
+      next.add(sessionId)
+      return next
+    })
+    fetch(`/api/chat/messages?sessionId=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return
+        const msgs: Message[] = Array.isArray(data?.messages)
+          ? data.messages
+              .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+              .map((m: any) => ({ role: m.role, content: String(m.content ?? '') }))
+          : []
+        if (!msgs.length) return
+        setMessagesBySession((prev) => {
+          // Don't overwrite if we already have local messages newer than fetch.
+          if ((prev[sessionId] ?? []).length >= msgs.length) return prev
+          return { ...prev, [sessionId]: msgs }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, loadedSessions])
 
   const handleSessionChange = useCallback((sid: string) => {
     const url = new URL(window.location.href)
@@ -91,6 +105,7 @@ export default function Iceman() {
       ...prev,
       [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text }],
     }))
+    maybeAutoTitle('iceman', activeSessionId, text)
 
     try {
       const res = await fetch('/api/agent', {
@@ -154,7 +169,7 @@ export default function Iceman() {
     }
   }
 
-  const robot = gateway === 'up' ? '🤖' : gateway === 'down' ? '⚠️' : '⏳'
+  const robot = gateway.status === 'up' ? '🤖' : gateway.status === 'down' ? '⚠️' : '⏳'
 
   return (
     <div style={{
@@ -164,13 +179,11 @@ export default function Iceman() {
       display: "flex",
       flexDirection: "column",
     }}>
-      {/* Header */}
       <div style={{
         height: "60px",
         display: "flex",
         alignItems: "center",
-        paddingLeft: "24px",
-        paddingRight: "16px",
+        padding: "0 20px 0 24px",
         gap: "12px",
         background: "rgba(20,25,35,0.9)",
         backdropFilter: "blur(12px)",
@@ -180,229 +193,173 @@ export default function Iceman() {
         <span style={{ fontSize: "20px", color: "white", fontWeight: 600 }}>
           {robot} 🧊 ICEMAN
         </span>
-        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)" }}>
-          {gateway === 'up' && 'Gateway online'}
-          {gateway === 'down' && 'Gateway offline'}
-          {gateway === 'checking' && 'Checking gateway…'}
-        </span>
         <div style={{ flex: 1 }} />
-        {/* Mode toggle */}
-        <div style={{ display: 'flex', border: '1px solid #2a2f45', borderRadius: 8, overflow: 'hidden' }}>
-          {(['chat', 'tui'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              style={{
-                background: mode === m ? 'rgba(56,184,218,0.15)' : 'transparent',
-                color: mode === m ? '#38b8da' : 'rgba(255,255,255,0.4)',
-                border: 'none',
-                borderRight: m === 'chat' ? '1px solid #2a2f45' : 'none',
-                padding: '5px 14px',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {m === 'tui' ? 'TUI' : 'Chat'}
-            </button>
-          ))}
-        </div>
+        <span
+          title="Jump to session"
+          style={{
+            fontSize: 11,
+            color: 'rgba(255,255,255,0.4)',
+            fontFamily: 'monospace',
+            letterSpacing: 0.5,
+          }}
+        >
+          ⌘K sessions
+        </span>
+        <GatewayTicker label="Gateway" />
+      </div>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e2235", background: "rgba(20,25,35,0.7)" }}>
+        <ChatTabs
+          agent="iceman"
+          sessionId={sessionId}
+          onSessionChange={handleSessionChange}
+          onSessionClose={handleSessionClose}
+        />
       </div>
 
-      {mode === 'tui' ? (
-        <>
-          {/* TUI URL config */}
-          <div style={{
-            padding: '8px 16px',
-            borderBottom: '1px solid #1e2235',
-            background: 'rgba(15,19,28,0.9)',
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            flexShrink: 0,
-          }}>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', flexShrink: 0, fontFamily: 'monospace' }}>TUI</span>
-            <input
-              type="text"
-              value={tuiUrl}
-              onChange={e => saveTuiUrl(e.target.value)}
-              placeholder="wss://mother.nuriy.com/ws"
-              style={{
-                flex: 1,
-                background: '#151826',
-                border: '1px solid #2a2f45',
-                borderRadius: 6,
-                color: 'white',
-                padding: '5px 8px',
-                fontSize: 12,
-                outline: 'none',
-                fontFamily: 'monospace',
-              }}
-            />
-          </div>
-          {/* Terminal */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <TerminalView serverUrl={tuiUrl} token="" sessionId={sessionId} />
-          </div>
-        </>
-      ) : (
-        <>
-          {/* Chat tabs */}
-          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e2235", background: "rgba(20,25,35,0.7)" }}>
-            <ChatTabs
-              agent="iceman"
-              sessionId={sessionId}
-              onSessionChange={handleSessionChange}
-              onSessionClose={handleSessionClose}
-            />
-          </div>
+      <SessionPalette agent="iceman" onSelect={handleSessionChange} />
 
-          {/* Messages */}
+      <div
+        ref={messagesContainerRef}
+        style={{
+        flex: 1,
+        overflowY: "auto",
+        padding: "24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        color: "white",
+      }}
+      >
+        {messages.length === 0 && !loading && (
+          <div style={{ opacity: 0.5, fontSize: "14px" }}>
+            Type a message below to talk to Iceman.
+          </div>
+        )}
+
+        {messages.map((m, i) => (
           <div
-            ref={messagesContainerRef}
+            key={i}
             style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "24px",
               display: "flex",
               flexDirection: "column",
-              gap: "12px",
-              color: "white",
+              alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
             }}
           >
-            {messages.length === 0 && !loading && (
-              <div style={{ opacity: 0.5, fontSize: "14px" }}>
-                Type a message below to talk to Iceman.
-              </div>
-            )}
-
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
-                }}
-              >
-                <div style={{
-                  maxWidth: "82%",
-                  padding: "10px 14px",
-                  borderRadius: m.role === 'user' ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                  background: m.role === 'user' ? "#38b8da" : "#1a1f30",
-                  fontSize: "14px",
-                  lineHeight: 1.55,
-                }}>
-                  {m.role === 'user' ? (
-                    <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.content}</span>
-                  ) : (
-                    <div className="md-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                    </div>
-                  )}
+            <div style={{
+              maxWidth: "82%",
+              padding: "10px 14px",
+              borderRadius: m.role === 'user' ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+              background: m.role === 'user' ? "#38b8da" : "#1a1f30",
+              fontSize: "14px",
+              lineHeight: 1.55,
+            }}>
+              {m.role === 'user' ? (
+                <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.content}</span>
+              ) : (
+                <div className="md-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                 </div>
-              </div>
-            ))}
-
-            {loading && (
-              <div style={{ display: "flex", alignItems: 'flex-start' }}>
-                <div style={{
-                  padding: "10px 14px",
-                  borderRadius: "12px 12px 12px 2px",
-                  background: "#1a1f30",
-                  fontSize: "14px",
-                  color: "rgba(255,255,255,0.5)",
-                }}>
-                  <span style={{ animation: "pulse 1.2s ease-in-out infinite" }}>●</span>
-                  {" "}
-                  <span style={{ animation: "pulse 1.2s ease-in-out 0.2s infinite" }}>●</span>
-                  {" "}
-                  <span style={{ animation: "pulse 1.2s ease-in-out 0.4s infinite" }}>●</span>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                background: "rgba(255,80,80,0.1)",
-                border: "1px solid rgba(255,80,80,0.3)",
-                color: "#ff6b6b",
-                fontSize: "13px",
-              }}>
-                {error}
-              </div>
-            )}
-
-            <div ref={bottomRef} />
-          </div>
-
-          {/* Input */}
-          <div style={{
-            padding: "16px 24px",
-            borderTop: "1px solid #1e2235",
-            background: "rgba(20,25,35,0.9)",
-            flexShrink: 0,
-          }}>
-            <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } }}
-                onInput={e => {
-                  const t = e.currentTarget
-                  t.style.height = "auto"
-                  t.style.height = `${Math.min(t.scrollHeight, 160)}px`
-                }}
-                disabled={loading || !sessionId}
-                rows={1}
-                style={{
-                  flex: 1,
-                  padding: "10px 14px",
-                  border: "1px solid #2a2f45",
-                  borderRadius: "8px",
-                  background: "#151826",
-                  color: "white",
-                  fontSize: "14px",
-                  outline: "none",
-                  resize: "none",
-                  lineHeight: 1.5,
-                  maxHeight: "160px",
-                  overflowY: "auto",
-                  fontFamily: "inherit",
-                }}
-                autoFocus
-                placeholder="Message Iceman…"
-              />
-              <button
-                onClick={send}
-                disabled={loading || !input.trim() || !sessionId}
-                style={{
-                  background: loading ? "#2a2f45" : "#38b8da",
-                  color: "white",
-                  fontSize: "14px",
-                  border: "none",
-                  borderRadius: "8px",
-                  padding: "10px 18px",
-                  cursor: loading || !input.trim() || !sessionId ? "default" : "pointer",
-                  opacity: !input.trim() || !sessionId ? 0.45 : 1,
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                {loading ? "…" : "Send"}
-              </button>
+              )}
             </div>
-            {sessionId && (
-              <div style={{ marginTop: "6px", fontSize: "11px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace" }}>
-                {sessionId}
-              </div>
-            )}
           </div>
-        </>
-      )}
+        ))}
+
+        {loading && (
+          <div style={{ display: "flex", alignItems: 'flex-start' }}>
+            <div style={{
+              padding: "10px 14px",
+              borderRadius: "12px 12px 12px 2px",
+              background: "#1e2235",
+              fontSize: "15px",
+              color: "rgba(255,255,255,0.5)",
+            }}>
+              <span style={{ animation: "pulse 1.2s ease-in-out infinite" }}>●</span>
+              {" "}
+              <span style={{ animation: "pulse 1.2s ease-in-out 0.2s infinite" }}>●</span>
+              {" "}
+              <span style={{ animation: "pulse 1.2s ease-in-out 0.4s infinite" }}>●</span>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: "8px",
+            background: "rgba(255,80,80,0.1)",
+            border: "1px solid rgba(255,80,80,0.3)",
+            color: "#ff6b6b",
+            fontSize: "13px",
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      <div style={{
+        padding: "16px 24px",
+        borderTop: "1px solid #1e2235",
+        background: "rgba(20,25,35,0.9)",
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } }}
+            onInput={e => {
+              const t = e.currentTarget
+              t.style.height = "auto"
+              t.style.height = `${Math.min(t.scrollHeight, 160)}px`
+            }}
+            disabled={loading || !sessionId}
+            rows={1}
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              border: "1px solid #2a2f45",
+              borderRadius: "8px",
+              background: "#151826",
+              color: "white",
+              fontSize: "14px",
+              outline: "none",
+              resize: "none",
+              lineHeight: 1.5,
+              maxHeight: "160px",
+              overflowY: "auto",
+              fontFamily: "inherit",
+            }}
+            autoFocus
+            placeholder="Message Iceman…"
+          />
+          <button
+            onClick={send}
+            disabled={loading || !input.trim() || !sessionId}
+            style={{
+              background: loading ? "#2a2f45" : "#38b8da",
+              color: "white",
+              fontSize: "14px",
+              border: "none",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: loading || !input.trim() || !sessionId ? "default" : "pointer",
+              opacity: !input.trim() || !sessionId ? 0.45 : 1,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {loading ? "…" : "Send"}
+          </button>
+        </div>
+        {sessionId && (
+          <div style={{ marginTop: "6px", fontSize: "11px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace" }}>
+            {sessionId}
+          </div>
+        )}
+      </div>
 
       <style>{`
         @keyframes pulse { 0%,100%{opacity:.25} 50%{opacity:1} }

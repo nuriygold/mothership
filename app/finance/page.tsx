@@ -3,7 +3,7 @@
 import useSWR, { mutate as globalMutate } from 'swr';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import type { V2FinanceOverviewFeed, V2FinancePlan } from '@/lib/v2/types';
+import type { V2FinanceOverviewFeed, V2FinancePlan, V2RevenueStreamStatus } from '@/lib/v2/types';
 import type { RevenueStreamDef } from '@/lib/v2/revenue-streams';
 import { botColor } from '@/lib/v2/revenue-streams';
 
@@ -34,12 +34,44 @@ function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+async function pingLead(stream: string) {
+  await fetch('/api/v2/revenue-streams/status', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stream }),
+  });
+  await globalMutate('/api/v2/revenue-streams/status');
+}
+
+const STREAM_STATUS_COLORS: Record<string, string> = {
+  active:           'green',
+  idle:             'blue',
+  paused:           'amber',
+  'needs-attention': 'red',
+};
+
 export default function FinancePage() {
   const { data, error, isLoading } = useSWR<V2FinanceOverviewFeed>(
     '/api/v2/finance/overview',
     fetcher,
     { refreshInterval: 30_000 }
   );
+
+  const { data: streamData } = useSWR<{ streams: V2RevenueStreamStatus[] }>(
+    '/api/v2/revenue-streams/status',
+    (url: string) => fetch(url).then((r) => r.json()),
+    { refreshInterval: 60_000 }
+  );
+
+  const streamStatusMap = useMemo(() => {
+    const map = new Map<string, V2RevenueStreamStatus>();
+    for (const s of streamData?.streams ?? []) {
+      map.set(s.stream.toLowerCase(), s);
+    }
+    return map;
+  }, [streamData]);
+
+  const [pinging, setPinging] = useState<string | null>(null);
 
   const metrics = useMemo(() => {
     if (!data) return null;
@@ -51,6 +83,23 @@ export default function FinancePage() {
         ? data.netWorthHistory[data.netWorthHistory.length - 1].netWorth
         : data.accounts.reduce((s, a) => s + a.balance, 0);
 
+    // Debt (credit cards + loans) flips negative balances to positive owed.
+    const debt = data.accounts
+      .filter((a) => {
+        const t = a.type.toLowerCase();
+        return t.includes('credit') || t.includes('loan') || t.includes('mortgage');
+      })
+      .reduce((s, a) => s + Math.abs(a.balance), 0);
+
+    // Assets = everything non-debt.
+    const assets = data.accounts
+      .filter((a) => {
+        const t = a.type.toLowerCase();
+        return !(t.includes('credit') || t.includes('loan') || t.includes('mortgage'));
+      })
+      .reduce((s, a) => s + a.balance, 0);
+
+    // Available liquidity = cash/checking/savings only.
     const cash = data.accounts
       .filter((a) => {
         const t = a.type.toLowerCase();
@@ -68,7 +117,7 @@ export default function FinancePage() {
 
     const monthlySubs = data.subscriptions.reduce((s, x) => s + x.monthlyEquivalent, 0);
 
-    return { netWorth, cash, spend, income, monthlySubs };
+    return { netWorth, assets, debt, cash, spend, income, monthlySubs };
   }, [data]);
 
   if (isLoading && !data) {
@@ -131,10 +180,12 @@ export default function FinancePage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <Stat label="Cash on hand"  value={fmtUSD(metrics?.cash ?? 0)}   tone="neutral" />
-            <Stat label="Income (MTD)"  value={fmtUSD(metrics?.income ?? 0)} tone="pos" />
-            <Stat label="Spend (MTD)"   value={fmtUSD(metrics?.spend ?? 0)}  tone="neg" />
-            <Stat label="Subs / month"  value={fmtUSD(metrics?.monthlySubs ?? 0)} tone="neutral" />
+            <Stat label="Assets"            value={fmtUSD(metrics?.assets ?? 0)}  tone="pos" />
+            <Stat label="Debt"              value={fmtUSD(metrics?.debt ?? 0)}    tone="neg" />
+            <Stat label="Available liquidity" value={fmtUSD(metrics?.cash ?? 0)}  tone="neutral" />
+            <Stat label="Income (MTD)"      value={fmtUSD(metrics?.income ?? 0)}  tone="pos" />
+            <Stat label="Spend (MTD)"       value={fmtUSD(metrics?.spend ?? 0)}   tone="neg" />
+            <Stat label="Subs / month"      value={fmtUSD(metrics?.monthlySubs ?? 0)} tone="neutral" />
           </div>
         </div>
       </div>
@@ -144,13 +195,28 @@ export default function FinancePage() {
         <div className="card">
           <div className="card-title">Accounts &mdash; /api/v2/finance/overview</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-            {data.accounts.map((a) => (
+            {data.accounts.map((a) => {
+              const t = a.type.toLowerCase();
+              const isDebt = t.includes('credit') || t.includes('loan') || t.includes('mortgage');
+              const isInvestment = t.includes('investment');
+              // Debit (liquid): muted lime. Credit/loan/mortgage: warm amber. Investment: champagne papi emerald. Other: neutral.
+              const cardBg =
+                isDebt        ? 'rgba(245, 158, 11, 0.08)'
+                : isInvestment ? 'rgba(16, 185, 129, 0.08)'
+                : a.liquid    ? 'rgba(132, 204, 22, 0.07)'
+                :               'var(--bg2)';
+              const cardBorder =
+                isDebt        ? '1px solid rgba(245, 158, 11, 0.40)'
+                : isInvestment ? '1px solid rgba(16, 185, 129, 0.40)'
+                : a.liquid    ? '1px solid rgba(132, 204, 22, 0.35)'
+                :               '1px solid var(--border-c)';
+              return (
               <div
                 key={a.id}
                 style={{
                   padding: 12,
-                  background: a.liquid ? 'rgba(132, 204, 22, 0.07)' : 'var(--bg2)',
-                  border: a.liquid ? '1px solid rgba(132, 204, 22, 0.35)' : '1px solid var(--border-c)',
+                  background: cardBg,
+                  border: cardBorder,
                   borderRadius: 'var(--radius)',
                   position: 'relative',
                 }}
@@ -197,7 +263,8 @@ export default function FinancePage() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -206,6 +273,7 @@ export default function FinancePage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
         <div className="card">
           <div className="card-title">Transactions &mdash; recent</div>
+          <TransactionSparkline transactions={data.transactions} />
           {recent.length === 0 ? (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
               No transactions yet.
@@ -347,27 +415,73 @@ export default function FinancePage() {
         )}
       </div>
 
-      {/* Income sources */}
-      {data.incomeSources.length > 0 && (
-        <div className="card">
-          <div className="card-title">Income sources</div>
-          {data.incomeSources.map((src) => (
-            <div key={src.id} className="finance-row">
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="finance-name">{src.source}</div>
-                <div className="finance-meta">
-                  {src.interval}
-                  {src.nextPayday ? ` · next payday ${src.nextPayday}` : ''}
-                  {src.confirmed ? '' : ' · unverified'}
+      {/* Income Streams — live rows from incomeSources, plus the Working Agency
+          revenue stream rails so each stream is visible and mapped to its lead. */}
+      {(() => {
+        const PLACEHOLDER_STREAMS = [
+          { id: 'placeholder-shopify',       source: 'Shopify',        lead: 'Adrian',                    amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-tiktok',        source: 'TikTok',         lead: 'Ruby',                      amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-nuriy-product', source: 'Nuriy Product',  lead: 'Iceman (Dev) · Emerald (Ops/QA)', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-truckstop',     source: 'Truckstop.com',  lead: 'Adrian',                    amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-notary',        source: 'Notary Services',lead: 'Ruby',                      amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+        ] as const;
+        const liveSourceNames = new Set(data.incomeSources.map((s) => s.source.toLowerCase()));
+        const unseen = PLACEHOLDER_STREAMS.filter((p) => !liveSourceNames.has(p.source.toLowerCase()));
+        type StreamRow = { id: string; source: string; amount: number; interval: string; nextPayday: string | null; confirmed: boolean; lead?: string };
+        const allStreams: StreamRow[] = [
+          ...data.incomeSources,
+          ...unseen,
+        ];
+        if (allStreams.length === 0) return null;
+        return (
+          <div className="card">
+            <div className="card-title">Income Streams</div>
+            {allStreams.map((src) => {
+              const isPlaceholder = src.id.startsWith('placeholder-');
+              const streamStatus = streamStatusMap.get(src.source.toLowerCase());
+              const statusLabel  = streamStatus?.status ?? (isPlaceholder ? 'idle' : 'active');
+              const badgeColor   = STREAM_STATUS_COLORS[statusLabel] ?? 'blue';
+              const isPinging    = pinging === src.source;
+              const wasPinged    = !!streamStatus?.requestedAt;
+              return (
+                <div key={src.id} className="finance-row" style={isPlaceholder ? { opacity: 0.75 } : undefined}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span className="finance-name">{src.source}</span>
+                      <span className={`badge ${badgeColor}`}>{statusLabel}</span>
+                      {streamStatus?.note && (
+                        <span style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                          {streamStatus.note}
+                        </span>
+                      )}
+                    </div>
+                    <div className="finance-meta">
+                      {src.interval}
+                      {src.nextPayday ? ` · next payday ${src.nextPayday}` : ''}
+                      {src.lead ? ` · lead ${src.lead}` : ''}
+                      {isPlaceholder ? ' · not wired yet' : src.confirmed ? '' : ' · unverified'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+                    <div className="finance-amount in">{fmtSigned(Math.abs(src.amount))}</div>
+                    <button
+                      className={`btn-sm${wasPinged ? ' primary' : ''}`}
+                      disabled={isPinging}
+                      onClick={async () => {
+                        setPinging(src.source);
+                        await pingLead(src.source);
+                        setPinging(null);
+                      }}
+                    >
+                      {isPinging ? '…' : wasPinged ? 'pinged' : 'ping lead'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="finance-amount in">{fmtSigned(Math.abs(src.amount))}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
 
       <IncomeStreamsRail />
 
@@ -490,13 +604,21 @@ function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
     });
   })();
 
+  const institutionLabel = items.length === 0
+    ? 'No accounts connected yet.'
+    : items.map((i) => i.institutionName).filter(Boolean).join(' · ') || `${items.length} connected`;
+
   return (
     <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <div className="card-title" style={{ margin: 0 }}>Plaid</div>
-      <div style={{ fontSize: 12, color: 'var(--text2)' }}>
-        {items.length === 0
-          ? 'No accounts connected yet.'
-          : `${items.length} institution${items.length === 1 ? '' : 's'} connected${lastUpdated ? ` · updated ${lastUpdated}` : ''}`}
+      <div style={{ fontSize: 12, color: 'var(--text2)', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <strong style={{ fontWeight: 600 }}>{institutionLabel}</strong>
+        {items.length > 0 && (
+          <span style={{ color: 'var(--text3)' }}>
+            · syncing balances &amp; transactions from {items.length === 1 ? 'this institution' : 'these institutions'}
+            {lastUpdated ? ` · updated ${lastUpdated}` : ''}
+          </span>
+        )}
       </div>
       {seedError && (
         <div style={{ fontSize: 11, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{seedError}</div>
@@ -513,6 +635,63 @@ function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+type TxPoint = { date: string; amount: number };
+
+function TransactionSparkline({ transactions }: { transactions: TxPoint[] }) {
+  const days = 30;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Bucket transactions by day (net amount = income + negative spend).
+  const buckets = new Array<number>(days).fill(0);
+  for (const tx of transactions) {
+    const d = new Date(tx.date);
+    if (isNaN(d.getTime())) continue;
+    d.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+    if (diffDays >= 0 && diffDays < days) buckets[days - 1 - diffDays] += tx.amount;
+  }
+
+  const hasData = buckets.some((v) => v !== 0);
+  const max = Math.max(...buckets, 0);
+  const min = Math.min(...buckets, 0);
+  const range = max - min || 1;
+
+  const width = 100;
+  const height = 36;
+  const points = buckets.map((v, i) => {
+    const x = (i / (days - 1)) * width;
+    const y = height - ((v - min) / range) * height;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+  const areaPath = `M0,${height} L${points.replaceAll(' ', ' L')} L${width},${height} Z`;
+  const zeroY = height - ((0 - min) / range) * height;
+
+  const total = buckets.reduce((s, v) => s + v, 0);
+
+  return (
+    <div style={{ marginBottom: 10, padding: '8px 2px 6px', borderBottom: '1px solid var(--border-c)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--text3)' }}>
+          Last {days} days · net cash flow
+        </span>
+        <span style={{ fontFamily: 'var(--font-rajdhani)', fontSize: 13, fontWeight: 600, color: total >= 0 ? 'var(--green)' : 'var(--red)' }}>
+          {fmtSigned(total)}
+        </span>
+      </div>
+      {hasData ? (
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: 40, display: 'block' }}>
+          <line x1={0} x2={width} y1={zeroY} y2={zeroY} stroke="var(--border-c)" strokeWidth={0.5} strokeDasharray="1 2" />
+          <path d={areaPath} fill="rgba(4, 112, 160, 0.10)" />
+          <polyline points={points} fill="none" stroke="var(--green)" strokeWidth={1.2} strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--text3)', padding: '6px 0' }}>No recent transactions to chart.</div>
+      )}
     </div>
   );
 }

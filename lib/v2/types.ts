@@ -41,6 +41,8 @@ export type V2TodayFeed = {
     userName: string;
     greeting: string;
     affirmation: string;
+    /** Attribution for the affirmation — e.g. "Drake · Marvin's Room" or an author / scripture reference. */
+    affirmationSource: string | null;
   };
   timeline: V2DashboardTimelineItem[];
 };
@@ -248,6 +250,15 @@ export type V2IncomeSource = {
   nextPayday: string | null;
   lastSeen: string;
   confirmed: boolean;
+};
+
+export type V2RevenueStreamStatus = {
+  id: string;
+  stream: string;
+  status: 'idle' | 'active' | 'paused' | 'needs-attention';
+  note: string | null;
+  requestedAt: string | null;
+  updatedAt: string;
 };
 
 export type V2NetWorthPoint = {

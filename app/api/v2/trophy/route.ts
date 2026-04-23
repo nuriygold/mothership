@@ -96,6 +96,52 @@ export async function GET(req: Request) {
     commands = [];
   }
 
+  // Daily-anchor trophies — written as AuditEvent rows when all six anchors
+  // are completed in one day. One trophy per day max (enforced via entityId).
+  let anchors: Array<{ id: string; date: string; completedAt: string }> = [];
+  try {
+    const rows = await prisma.auditEvent.findMany({
+      where: {
+        entityType: 'WellnessAnchor',
+        eventType: 'COMPLETED',
+        createdAt: { gte: start, lt: end },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, entityId: true, createdAt: true },
+    });
+    anchors = rows.map((r) => ({
+      id: r.id,
+      date: r.entityId, // entityId is YYYY-MM-DD (ET)
+      completedAt: r.createdAt.toISOString(),
+    }));
+  } catch {
+    anchors = [];
+  }
+
+  // Campaigns trophied from Dispatch → show them in the Trophy Case too.
+  let campaignTrophies: Array<{ id: string; title: string; completedAt: string }> = [];
+  try {
+    const rows = await prisma.auditEvent.findMany({
+      where: {
+        entityType: 'DispatchCampaign',
+        eventType: 'TROPHIED',
+        createdAt: { gte: start, lt: end },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, entityId: true, createdAt: true, metadata: true },
+    });
+    campaignTrophies = rows.map((r) => {
+      const meta = (r.metadata as { title?: string } | null) ?? {};
+      return {
+        id: r.id,
+        title: meta.title ?? `Campaign ${r.entityId.slice(0, 8)}`,
+        completedAt: r.createdAt.toISOString(),
+      };
+    });
+  } catch {
+    campaignTrophies = [];
+  }
+
   // Group by YYYY-MM-DD in ET
   const byDay: Record<string, TrophyTask[]> = {};
   for (const t of tasks) {
@@ -109,9 +155,17 @@ export async function GET(req: Request) {
     weekStart: start.toISOString(),
     weekEnd: end.toISOString(),
     since: start.toISOString(),
-    totals: { tasks: tasks.length, commands: commands.length, events: 0 },
+    totals: {
+      tasks: tasks.length,
+      commands: commands.length,
+      events: 0,
+      anchors: anchors.length,
+      campaigns: campaignTrophies.length,
+    },
     byDay,
     tasks,
     commands,
+    anchors,
+    campaigns: campaignTrophies,
   });
 }

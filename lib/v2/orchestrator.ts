@@ -773,11 +773,13 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
   const tasksFeed = await getV2TasksFeed();
   const timeline = await buildTimeline(tasksFeed);
 
+  const daily = getDailyAffirmation();
   return {
     userContext: {
       userName: process.env.MOTHERSHIP_OPERATOR_NAME || 'Rudolph',
       greeting: getTimeAwareGreeting(),
-      affirmation: getDailyAffirmation(),
+      affirmation: daily.text,
+      affirmationSource: daily.source,
     },
     timeline,
   };
@@ -792,56 +794,50 @@ function getTimeAwareGreeting(): string {
   return 'Good night';
 }
 
-const AFFIRMATIONS = [
-  'You move with intention and grace.',
-  'Your clarity creates momentum for everyone around you.',
-  'Today is built for focus. Trust your rhythm.',
-  'Every system you touch gets sharper.',
-  'The work you do today compounds into something extraordinary.',
-  'You are exactly where you need to be — and ahead of schedule.',
-  'Your attention is your superpower. Spend it wisely today.',
-  'Small consistent actions. That\'s how empires are built.',
-  'The team is stronger because you showed up.',
-  'Progress over perfection. Let\'s get it done.',
-  'You don\'t just manage operations — you orchestrate them.',
-  'Your bots are working. Your systems are running. Now breathe.',
-  'What you build today, your future self will thank you for.',
-  'Discipline is choosing between what you want now and what you want most.',
-  'The details matter. And you notice every single one.',
-  'Build the vision. Trust the process. Execute with precision.',
-  'You\'re not just moving fast — you\'re moving right.',
-  'Every decision you make today is an investment in something bigger.',
-  'Rest is part of the strategy. So is this moment.',
-  'One focused hour beats ten distracted ones.',
-  'You set the standard. The systems follow.',
-  'The compound effect is already working in your favor.',
-  'Clarity is a competitive advantage. You have it.',
-  'Today\'s discipline is tomorrow\'s freedom.',
-  'You built something from nothing. That\'s still true every morning.',
-  'The right people are watching. Keep going.',
-  'Momentum is a choice. You\'re making it right now.',
-  'You operate at a level most people never reach.',
-  'Excellence is the baseline. Everything above it is the goal.',
-  'The version of you that gets it done shows up today.',
-  'Your systems are your legacy. Tend to them.',
-  'Quiet focus is your loudest flex.',
-  'What you protect your time for reveals what matters most.',
-  'You\'re playing a long game. Stay in it.',
-  'Every rep counts. Even the ones no one sees.',
-  'The gap between where you are and where you\'re going closes today.',
-  'You run the operation. Don\'t let the operation run you.',
-  'Trust your preparation. You\'ve already done the work.',
-  'Ship something today. Even something small.',
-  'The best operators make the hard thing look calm.',
+type DailyAffirmation = { text: string; source: string | null };
+
+// Daily Drake-themed motivational lines. These are original prose, not lyrics,
+// so they're credited generically to Drake — not to specific songs.
+const DRAKE_DAILIES: DailyAffirmation[] = [
+  { text: 'Call the ones that still pick up. Protect the real ones today.',       source: 'Drake' },
+  { text: 'Step into the room on your own terms. Everything you built is yours.', source: 'Drake' },
+  { text: 'Put the wins on the shelf — then go earn another one.',                source: 'Drake' },
+  { text: 'Keep the real ones close. Archive the noise.',                          source: 'Drake' },
+  { text: 'Let the ones who stayed know they stayed for a reason.',               source: 'Drake' },
+  { text: 'One more push. The view is earned, not given.',                        source: 'Drake' },
+  { text: 'Answer the calls that matter. Silence the rest.',                      source: 'Drake' },
+  { text: 'The energy you bring in is the energy the room carries.',              source: 'Drake' },
+  { text: 'Move like the opportunity is already yours — because it is.',          source: 'Drake' },
+  { text: 'Clean out the phone, keep the real numbers.',                          source: 'Drake' },
+  { text: 'Less reacting. More architecting.',                                    source: 'Drake' },
+  { text: 'The quiet seasons are where the empire gets built.',                   source: 'Drake' },
+  { text: 'Run the day. Don\'t let the day run you.',                             source: 'Drake' },
+  { text: 'Lock in. One focused block beats a scattered afternoon.',              source: 'Drake' },
+  { text: 'Build the kind of day your future self would sign off on.',            source: 'Drake' },
+  { text: 'You\'ve been on. Stay on.',                                            source: 'Drake' },
+  { text: 'Count the wins quietly. Let the work make the noise.',                 source: 'Drake' },
+  { text: 'Set the tone in the first hour. The rest follows.',                    source: 'Drake' },
+  { text: 'Every answered message is a seed. Plant carefully.',                   source: 'Drake' },
+  { text: 'Momentum is a choice. Choose it before noon.',                         source: 'Drake' },
+  { text: 'Keep the list short. Make the list matter.',                           source: 'Drake' },
+  { text: 'Small, steady, non-stop. That\'s the whole playbook.',                 source: 'Drake' },
+  { text: 'The team is only as sharp as the captain is calm.',                    source: 'Drake' },
+  { text: 'Protect the hours nobody sees. That\'s where the edge lives.',         source: 'Drake' },
+  { text: 'Give the real ones their flowers while the work is still wet.',        source: 'Drake' },
+  { text: 'Rest is strategy. Schedule it like a meeting.',                        source: 'Drake' },
+  { text: 'You don\'t need the spotlight — you are the source.',                  source: 'Drake' },
+  { text: 'Finish what you opened. Close the loops.',                             source: 'Drake' },
+  { text: 'Show up for the version of you that\'s already winning.',              source: 'Drake' },
+  { text: 'The numbers follow the habits. Tend the habits.',                      source: 'Drake' },
 ];
 
-function getDailyAffirmation(): string {
+function getDailyAffirmation(): DailyAffirmation {
   const now = new Date();
   // Offset by day AND week so adjacent days never share an affirmation
   const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
   const week = Math.floor(dayOfYear / 7);
-  const idx = (dayOfYear * 7 + week * 3) % AFFIRMATIONS.length;
-  return AFFIRMATIONS[idx];
+  const idx = (dayOfYear * 7 + week * 3) % DRAKE_DAILIES.length;
+  return DRAKE_DAILIES[idx];
 }
 
 async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline']> {

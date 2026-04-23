@@ -5,6 +5,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatTabs } from '@/components/ui/chat-tabs';
+import { GatewayTicker } from '@/components/ui/gateway-ticker';
+import { SessionPalette } from '@/components/ui/session-palette';
+import { maybeAutoTitle } from '@/lib/chat/tabs-client';
 
 const TerminalView = dynamic(() => import('./terminal-view'), {
   ssr: false,
@@ -51,7 +54,7 @@ const PROVIDERS = {
 } as const;
 
 type Provider = keyof typeof PROVIDERS;
-type Mode = 'chat' | 'terminal';
+type Mode = 'chat' | 'terminal' | 'live';
 type Message = { role: 'user' | 'assistant'; content: string };
 
 type Config = {
@@ -100,11 +103,20 @@ export default function ClaudePage() {
   const [showKey, setShowKey] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messagesBySession, setMessagesBySession] = useState<Record<string, Message[]>>({});
+  const [loadedSessions, setLoadedSessions] = useState<Set<string>>(new Set());
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'recording' | 'thinking' | 'speaking'>('idle');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [liveResponse, setLiveResponse] = useState('');
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const liveAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => { setCfg(loadCfg()); }, []);
 
@@ -120,6 +132,37 @@ export default function ClaudePage() {
     const el = messagesRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
+
+  // Hydrate persisted messages for any session we haven't loaded yet.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (loadedSessions.has(sessionId)) return;
+    let cancelled = false;
+    setLoadedSessions((prev) => {
+      const next = new Set(prev);
+      next.add(sessionId);
+      return next;
+    });
+    fetch(`/api/chat/messages?sessionId=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const msgs: Message[] = Array.isArray(data?.messages)
+          ? data.messages
+              .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+              .map((m: any) => ({ role: m.role, content: String(m.content ?? '') }))
+          : [];
+        if (!msgs.length) return;
+        setMessagesBySession((prev) => {
+          if ((prev[sessionId] ?? []).length >= msgs.length) return prev;
+          return { ...prev, [sessionId]: msgs };
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, loadedSessions]);
 
   function patchCfg(patch: Partial<Config>) {
     setCfg((prev) => {
@@ -163,13 +206,159 @@ export default function ClaudePage() {
     });
   }, []);
 
+  async function startMicRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+    } catch {}
+  }
+
+  async function stopMicAndTranscribe(): Promise<string> {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return '';
+    return new Promise((resolve) => {
+      recorder.onstop = async () => {
+        recorder.stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 1000) { resolve(''); return; }
+        try {
+          const res = await fetch('/api/voice/stt', {
+            method: 'POST',
+            headers: { 'Content-Type': recorder.mimeType || 'audio/webm' },
+            body: blob,
+          });
+          const data = await res.json();
+          resolve((data.text ?? '').trim());
+        } catch { resolve(''); }
+      };
+      recorder.stop();
+    });
+  }
+
+  async function playTts(text: string) {
+    try {
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return;
+      const buf = await res.arrayBuffer();
+      const blob = new Blob([buf], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      liveAudioRef.current = audio;
+      await new Promise<void>((resolve) => {
+        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.play().catch(() => resolve());
+      });
+    } catch {}
+  }
+
+  async function handleChatMicDown(e: React.PointerEvent) {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setRecording(true);
+    await startMicRecording();
+  }
+
+  async function handleChatMicUp() {
+    if (!recording) return;
+    setRecording(false);
+    setTranscribing(true);
+    const text = await stopMicAndTranscribe();
+    setTranscribing(false);
+    if (text) setInput(text);
+  }
+
+  async function handleLiveMicDown(e: React.PointerEvent) {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    if (liveStatus !== 'idle') return;
+    liveAudioRef.current?.pause();
+    setLiveStatus('recording');
+    setLiveTranscript('');
+    setLiveResponse('');
+    await startMicRecording();
+  }
+
+  async function handleLiveMicUp() {
+    if (liveStatus !== 'recording') return;
+    setLiveStatus('thinking');
+    const text = await stopMicAndTranscribe();
+    if (!text) { setLiveStatus('idle'); return; }
+    setLiveTranscript(text);
+
+    const activeSession = sessionId;
+    if (!activeSession) { setLiveStatus('idle'); return; }
+
+    const prev = messagesBySession[activeSession] ?? [];
+    const withUser: Message[] = [...prev, { role: 'user', content: text }];
+    setMessagesBySession((m) => ({ ...m, [activeSession]: withUser }));
+    maybeAutoTitle('claude', activeSession, text);
+
+    let fullResponse = '';
+    try {
+      const res = await fetch('/api/claude/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: cfg.provider,
+          model: cfg.model,
+          apiKey: cfg.keys[cfg.provider] ?? '',
+          messages: withUser,
+          azureEndpoint: cfg.azureEndpoint,
+          sessionId: activeSession,
+          source: 'live',
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+
+      outer: while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (raw === '[DONE]') break outer;
+          try {
+            const evt = JSON.parse(raw);
+            if (evt.delta) { fullResponse += evt.delta; setLiveResponse(fullResponse); }
+          } catch {}
+        }
+      }
+
+      const withAssistant: Message[] = [...withUser, { role: 'assistant', content: fullResponse }];
+      setMessagesBySession((m) => ({ ...m, [activeSession]: withAssistant }));
+
+      if (fullResponse) {
+        setLiveStatus('speaking');
+        await playTts(fullResponse);
+      }
+    } catch {}
+    setLiveStatus('idle');
+  }
+
   async function send() {
     const text = input.trim();
     const activeSession = sessionId;
     if (!text || loading || !activeSession) return;
 
     const apiKey = cfg.keys[cfg.provider] ?? '';
-    if (!apiKey) {
+    if (!apiKey && cfg.provider !== 'azure') {
       setError(`No API key set for ${PROVIDERS[cfg.provider].name}. Add it in the config bar above.`);
       return;
     }
@@ -180,12 +369,13 @@ export default function ClaudePage() {
     setError(null);
     setLoading(true);
     setMessagesBySession((m) => ({ ...m, [activeSession]: withUser }));
+    maybeAutoTitle('claude', activeSession, text);
 
     try {
       const res = await fetch('/api/claude/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: cfg.provider, model: cfg.model, apiKey, messages: withUser, azureEndpoint: cfg.azureEndpoint }),
+        body: JSON.stringify({ provider: cfg.provider, model: cfg.model, apiKey, messages: withUser, azureEndpoint: cfg.azureEndpoint, sessionId: activeSession }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -238,6 +428,7 @@ export default function ClaudePage() {
 
   return (
     <div style={{ background: '#0b0f17', minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <SessionPalette agent="claude" onSelect={handleSessionChange} />
       {/* Header */}
       <div style={{
         height: 56,
@@ -250,13 +441,28 @@ export default function ClaudePage() {
         borderBottom: '1px solid #1e2235',
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 18, color: 'white', fontWeight: 600, letterSpacing: 1 }}>
-          CLAUDE
+        <span style={{ fontSize: 18, color: 'white', fontWeight: 600, letterSpacing: 1, fontFamily: 'monospace' }}>
+          OPENCLAUDE TUI
+        </span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace', letterSpacing: 1 }}>
+          {mode === 'terminal' ? '// PTY MODE' : mode === 'live' ? '// VOICE MODE' : '// CHAT MODE'}
         </span>
         <div style={{ flex: 1 }} />
+        <span
+          title="Jump to session"
+          style={{
+            fontSize: 11,
+            color: 'rgba(255,255,255,0.4)',
+            fontFamily: 'monospace',
+            letterSpacing: 0.5,
+          }}
+        >
+          ⌘K sessions
+        </span>
+        <GatewayTicker label="Gateway" />
         {/* Mode toggle */}
         <div style={{ display: 'flex', border: '1px solid #2a2f45', borderRadius: 8, overflow: 'hidden' }}>
-          {(['chat', 'terminal'] as const).map((m) => (
+          {(['chat', 'live', 'terminal'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -264,7 +470,7 @@ export default function ClaudePage() {
                 background: mode === m ? 'rgba(56,184,218,0.15)' : 'transparent',
                 color: mode === m ? '#38b8da' : 'rgba(255,255,255,0.4)',
                 border: 'none',
-                borderRight: m === 'chat' ? '1px solid #2a2f45' : 'none',
+                borderRight: m !== 'terminal' ? '1px solid #2a2f45' : 'none',
                 padding: '5px 14px',
                 fontSize: 13,
                 cursor: 'pointer',
@@ -320,19 +526,8 @@ export default function ClaudePage() {
           </select>
         )}
 
-        {/* Azure endpoint */}
-        {cfg.provider === 'azure' && (
-          <input
-            type="text"
-            value={cfg.azureEndpoint}
-            onChange={(e) => patchCfg({ azureEndpoint: e.target.value })}
-            placeholder="https://your-resource.openai.azure.com"
-            style={{ ...sel, width: 300, fontSize: 12, fontFamily: 'monospace' }}
-          />
-        )}
-
-        {/* API Key */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
+        {/* API Key — hidden for Azure (endpoint + key are in Vercel env vars) */}
+        {cfg.provider !== 'azure' && <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
           <input
             type={showKey ? 'text' : 'password'}
             value={currentKey}
@@ -362,7 +557,7 @@ export default function ClaudePage() {
           >
             {showKey ? '○' : '●'}
           </button>
-        </div>
+        </div>}
 
         {/* Terminal config (only visible in terminal mode) */}
         {mode === 'terminal' && (
@@ -391,7 +586,82 @@ export default function ClaudePage() {
       )}
 
       {/* Main content */}
-      {mode === 'terminal' ? (
+      {mode === 'live' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '40px 24px', color: 'white' }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: 3, textTransform: 'uppercase', fontFamily: 'monospace' }}>
+            {liveStatus === 'idle' && (sessionId ? 'Ready' : 'No active session')}
+            {liveStatus === 'recording' && '● Recording'}
+            {liveStatus === 'thinking' && '⟳ Thinking'}
+            {liveStatus === 'speaking' && '♪ Speaking'}
+          </div>
+
+          {!sessionId && liveStatus === 'idle' && (
+            <button
+              onClick={() => handleSessionChange(`agent:claude:${crypto.randomUUID()}`)}
+              style={{
+                background: '#38b8da',
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                padding: '9px 20px',
+                fontSize: 13,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              + New Session
+            </button>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 520 }}>
+            {liveTranscript && (
+              <div style={{ padding: '11px 15px', background: '#38b8da', borderRadius: '12px 12px 2px 12px', fontSize: 14, lineHeight: 1.5, alignSelf: 'flex-end', maxWidth: '88%' }}>
+                {liveTranscript}
+              </div>
+            )}
+            {liveResponse && (
+              <div style={{ padding: '11px 15px', background: '#1a1f30', border: '1px solid #2a2f45', borderRadius: '12px 12px 12px 2px', fontSize: 14, lineHeight: 1.55, alignSelf: 'flex-start', maxWidth: '88%' }}>
+                <div className="md-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveResponse}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            onPointerDown={handleLiveMicDown}
+            onPointerUp={handleLiveMicUp}
+            onPointerLeave={handleLiveMicUp}
+            disabled={liveStatus === 'thinking' || liveStatus === 'speaking' || !sessionId}
+            style={{
+              width: 76, height: 76,
+              borderRadius: '50%',
+              border: 'none',
+              background: liveStatus === 'recording' ? 'rgba(255,68,68,0.85)' : liveStatus !== 'idle' ? '#2a2f45' : '#38b8da',
+              color: 'white',
+              fontSize: 30,
+              cursor: liveStatus === 'idle' && sessionId ? 'pointer' : 'default',
+              opacity: (liveStatus === 'thinking' || liveStatus === 'speaking' || !sessionId) ? 0.45 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: liveStatus === 'recording'
+                ? '0 0 0 10px rgba(255,68,68,0.15), 0 0 28px rgba(255,68,68,0.35)'
+                : liveStatus === 'idle' && sessionId
+                  ? '0 0 0 6px rgba(56,184,218,0.15)'
+                  : 'none',
+              transition: 'all 0.2s',
+              userSelect: 'none',
+              touchAction: 'none',
+              marginTop: 16,
+            }}
+          >
+            🎤
+          </button>
+
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', fontFamily: 'monospace' }}>
+            {liveStatus === 'idle' && sessionId ? 'hold to speak · release to send' : ''}
+          </div>
+        </div>
+      ) : mode === 'terminal' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <TerminalView
             serverUrl={cfg.terminalUrl}
@@ -505,6 +775,27 @@ export default function ClaudePage() {
                   t.style.height = `${Math.min(t.scrollHeight, 160)}px`;
                 }}
               />
+              <button
+                onPointerDown={handleChatMicDown}
+                onPointerUp={handleChatMicUp}
+                onPointerLeave={handleChatMicUp}
+                disabled={(loading || transcribing) && !recording}
+                title="Hold to speak"
+                style={{
+                  background: recording ? 'rgba(255,68,68,0.15)' : 'transparent',
+                  color: recording ? '#ff6b6b' : transcribing ? '#fbbf24' : 'rgba(255,255,255,0.35)',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '10px 10px',
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  flexShrink: 0,
+                  userSelect: 'none',
+                  touchAction: 'none',
+                }}
+              >
+                🎤
+              </button>
               <button
                 onClick={send}
                 disabled={loading || !input.trim() || !sessionId}

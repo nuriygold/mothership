@@ -1,6 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  onTitlesUpdated,
+  readTitles,
+  sessionsKey,
+  writeTitles,
+} from '@/lib/chat/tabs-client';
 
 type ChatTabsProps = {
   agent: string;
@@ -22,21 +28,11 @@ function createSessionId(agent: string): string {
   return `agent:${agent}:${crypto.randomUUID()}`;
 }
 
-function readStoredNames(namesKey: string): Record<string, string> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(namesKey) ?? '{}');
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function readStoredSessions(storageKey: string, agent: string): string[] {
+function readStoredSessions(agent: string): string[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]');
+    const parsed = JSON.parse(window.localStorage.getItem(sessionsKey(agent)) ?? '[]');
     if (!Array.isArray(parsed)) return [];
 
     const unique = new Set<string>();
@@ -60,21 +56,75 @@ export function ChatTabs({
   onSessionClose,
   className,
 }: ChatTabsProps) {
-  const storageKey = useMemo(() => `chat-tabs:${agent}:sessions`, [agent]);
-  const namesKey = useMemo(() => `chat-tabs:${agent}:names`, [agent]);
-
+  const storageKey = useMemo(() => sessionsKey(agent), [agent]);
   const [sessions, setSessions] = useState<string[]>([]);
-  const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const editInputRef = useRef<HTMLInputElement>(null);
+  const [titles, setTitles] = useState<Record<string, string>>({});
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
+  // Hydrate from localStorage
   useEffect(() => {
-    const stored = readStoredSessions(storageKey, agent);
-    setSessions(stored);
-    setSessionNames(readStoredNames(namesKey));
-  }, [agent, storageKey, namesKey]);
+    setSessions(readStoredSessions(agent));
+    setTitles(readTitles(agent));
+  }, [agent]);
 
+  // Listen for title updates dispatched by pages (auto-title after first send,
+  // renames from other windows/tabs).
+  useEffect(() => {
+    return onTitlesUpdated(agent, () => setTitles(readTitles(agent)));
+  }, [agent]);
+
+  // Pull recent sessions from the server so other devices' tabs show up here,
+  // and fill in titles and previews for our local tabs.
+  useEffect(() => {
+    let cancelled = false;
+
+    const merge = async () => {
+      try {
+        const res = await fetch(`/api/chat/sessions?agent=${encodeURIComponent(agent)}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const remote: Array<{ id: string; title: string | null }> = data?.sessions ?? [];
+        if (cancelled) return;
+
+        const remoteValid = remote.filter((s) => isValidSessionId(agent, s.id));
+
+        // Merge tab list — prepend any server IDs we don't have locally.
+        setSessions((prev) => {
+          const seen = new Set(prev);
+          const mergedRemote = remoteValid.map((s) => s.id).filter((id) => !seen.has(id));
+          if (mergedRemote.length === 0) return prev;
+          return [...prev, ...mergedRemote].slice(0, MAX_SESSIONS);
+        });
+
+        // Merge titles — server wins if local has none; don't clobber local renames.
+        setTitles((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const s of remoteValid) {
+            if (s.title && !next[s.id]) {
+              next[s.id] = s.title;
+              changed = true;
+            }
+          }
+          if (changed) writeTitles(agent, next);
+          return changed ? next : prev;
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    merge();
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
+
+  // Ensure there's an active session
   useEffect(() => {
     setSessions((prev) => {
       if (isValidSessionId(agent, sessionId)) {
@@ -89,22 +139,15 @@ export function ChatTabs({
     });
   }, [agent, onSessionChange, sessionId]);
 
+  // Persist tab list
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(storageKey, JSON.stringify(sessions));
   }, [sessions, storageKey]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(namesKey, JSON.stringify(sessionNames));
-  }, [sessionNames, namesKey]);
-
-  useEffect(() => {
-    if (editingId && editInputRef.current) {
-      editInputRef.current.focus();
-      editInputRef.current.select();
-    }
-  }, [editingId]);
+    if (renamingId) renameInputRef.current?.select();
+  }, [renamingId]);
 
   const createSession = useCallback(() => {
     const created = createSessionId(agent);
@@ -112,8 +155,21 @@ export function ChatTabs({
     onSessionChange(created);
   }, [agent, onSessionChange]);
 
+  const dropTitle = useCallback(
+    (id: string) => {
+      setTitles((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        writeTitles(agent, next);
+        return next;
+      });
+    },
+    [agent]
+  );
+
   const closeSession = useCallback(
-    (toClose: string) => {
+    (toClose: string, opts: { deleteRemote?: boolean } = {}) => {
       setSessions((prev) => {
         const idx = prev.indexOf(toClose);
         if (idx < 0) return prev;
@@ -134,33 +190,59 @@ export function ChatTabs({
         onSessionClose?.(toClose);
         return next;
       });
-      setSessionNames((prev) => {
-        if (!(toClose in prev)) return prev;
-        const next = { ...prev };
-        delete next[toClose];
-        return next;
-      });
+      dropTitle(toClose);
+      if (opts.deleteRemote) {
+        fetch(`/api/chat/sessions/${encodeURIComponent(toClose)}`, { method: 'DELETE' }).catch(() => {});
+      }
     },
-    [agent, onSessionChange, onSessionClose, sessionId]
+    [agent, dropTitle, onSessionChange, onSessionClose, sessionId]
   );
 
-  const startRename = useCallback((id: string, defaultLabel: string) => {
-    setEditingId(id);
-    setEditValue(sessionNames[id] ?? defaultLabel);
-  }, [sessionNames]);
-
-  const commitRename = useCallback((id: string) => {
-    const trimmed = editValue.trim();
-    setSessionNames((prev) => {
-      if (!trimmed) {
-        const next = { ...prev };
-        delete next[id];
-        return next;
+  const handleCloseClick = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      const destructive = e.shiftKey || e.altKey;
+      if (destructive) {
+        const name = titles[id] ?? 'this session';
+        if (!window.confirm(`Permanently delete "${name}" and all its messages?`)) return;
       }
-      return { ...prev, [id]: trimmed };
+      closeSession(id, { deleteRemote: destructive });
+    },
+    [closeSession, titles]
+  );
+
+  const beginRename = useCallback(
+    (id: string) => {
+      setRenamingId(id);
+      setRenameValue(titles[id] ?? '');
+    },
+    [titles]
+  );
+
+  const commitRename = useCallback(() => {
+    if (!renamingId) return;
+    const trimmed = renameValue.trim().slice(0, 80);
+    const id = renamingId;
+    setRenamingId(null);
+    if (!trimmed) {
+      dropTitle(id);
+      return;
+    }
+    setTitles((prev) => {
+      const next = { ...prev, [id]: trimmed };
+      writeTitles(agent, next);
+      return next;
     });
-    setEditingId(null);
-  }, [editValue]);
+    fetch(`/api/chat/sessions/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: trimmed }),
+    }).catch(() => {});
+  }, [agent, dropTitle, renameValue, renamingId]);
+
+  const cancelRename = useCallback(() => {
+    setRenamingId(null);
+    setRenameValue('');
+  }, []);
 
   return (
     <div
@@ -183,9 +265,9 @@ export function ChatTabs({
       >
         {sessions.map((id, index) => {
           const active = id === sessionId;
-          const defaultLabel = `Session ${index + 1}`;
-          const label = sessionNames[id] ?? defaultLabel;
-          const isEditing = editingId === id;
+          const customTitle = titles[id];
+          const label = customTitle && customTitle.trim() ? customTitle : `Session ${index + 1}`;
+          const isRenaming = renamingId === id;
 
           return (
             <div
@@ -193,7 +275,7 @@ export function ChatTabs({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                maxWidth: 240,
+                maxWidth: 260,
                 borderRadius: 999,
                 border: active ? '1px solid rgba(255,255,255,0.35)' : '1px solid rgba(255,255,255,0.18)',
                 background: active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)',
@@ -202,32 +284,39 @@ export function ChatTabs({
                 flexShrink: 0,
               }}
             >
-              {isEditing ? (
+              {isRenaming ? (
                 <input
-                  ref={editInputRef}
-                  value={editValue}
-                  onChange={e => setEditValue(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitRename(id);
-                    if (e.key === 'Escape') setEditingId(null);
+                  ref={renameInputRef}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitRename();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelRename();
+                    }
                   }}
-                  onBlur={() => commitRename(id)}
+                  maxLength={80}
+                  autoFocus
                   style={{
                     border: 'none',
                     background: 'transparent',
-                    color: 'white',
+                    color: 'inherit',
                     padding: '7px 10px',
                     fontSize: 12,
                     outline: 'none',
-                    width: 120,
-                    fontFamily: 'inherit',
+                    width: 180,
                   }}
+                  placeholder="Session name…"
                 />
               ) : (
                 <button
                   type="button"
                   onClick={() => onSessionChange(id)}
-                  onDoubleClick={() => startRename(id, defaultLabel)}
+                  onDoubleClick={() => beginRename(id)}
                   style={{
                     border: 'none',
                     background: 'transparent',
@@ -239,14 +328,34 @@ export function ChatTabs({
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}
-                  title={`${id}\nDouble-click to rename`}
+                  title={`${label}\n${id}\nDouble-click to rename`}
                 >
                   {label}
                 </button>
               )}
+              {!isRenaming && (
+                <button
+                  type="button"
+                  onClick={() => beginRename(id)}
+                  aria-label={`Rename ${label}`}
+                  title={`Rename ${label}`}
+                  style={{
+                    border: 'none',
+                    borderLeft: '1px solid rgba(255,255,255,0.14)',
+                    background: 'transparent',
+                    color: 'rgba(255,255,255,0.55)',
+                    width: 26,
+                    height: 28,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                  }}
+                >
+                  ✎
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => closeSession(id)}
+                onClick={(e) => handleCloseClick(id, e)}
                 style={{
                   border: 'none',
                   borderLeft: '1px solid rgba(255,255,255,0.14)',
@@ -258,7 +367,7 @@ export function ChatTabs({
                   fontSize: 14,
                 }}
                 aria-label={`Close ${label}`}
-                title={`Close ${label}`}
+                title={`Close ${label} (shift-click to delete permanently)`}
               >
                 ×
               </button>

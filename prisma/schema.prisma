@@ -693,6 +693,22 @@ model ShoppingItem {
   @@index([completedAt])
 }
 
+model AgentInboxItem {
+  id             String    @id @default(uuid())
+  agentKey       String
+  note           String
+  source         String    @default("email")
+  bucket         String?
+  emailIds       Json      @default("[]")
+  emailSummaries Json      @default("[]")
+  status         String    @default("PENDING")
+  handledAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([agentKey, status, createdAt])
+}
+
 model ChatSession {
   id        String        @id @default(uuid())
   title     String?

@@ -14,9 +14,8 @@ import { TrophyModal } from '@/components/today/trophy-modal';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
-import { JarvisCard } from '@/components/voice/jarvis-card';
+import { HotlineBlingCard } from '@/components/voice/hotline-bling-card';
 import { NewTaskModal } from '@/components/today/new-task-modal';
-import { DailyBriefing } from '@/components/today/daily-briefing';
 import { FinanceAlerts } from '@/components/today/finance-alerts';
 import { StatusTicker } from '@/components/today/status-ticker';
 import { ThreeDayGrid } from '@/components/today/three-day-grid';
@@ -134,6 +133,7 @@ export default function TodayPage() {
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
   const { data: tasksData, mutate: mutateTasks } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
   const { data: campaignsData } = useSWR<CampaignListItem[]>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
+  const { data: emailData } = useSWR<{ inbox: unknown[] }>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [completedTitles, setCompletedTitles] = useState<string[]>([]);
@@ -242,6 +242,19 @@ export default function TodayPage() {
   }, [feed]);
 
   const affirmation = feed?.userContext?.affirmation ?? '';
+  const affirmationSource = feed?.userContext?.affirmationSource ?? null;
+
+  // Count emails received today (local time), by timestamp field.
+  const emailsToday = useMemo(() => {
+    const inbox = (emailData?.inbox ?? []) as Array<{ timestamp?: string }>;
+    if (inbox.length === 0) return 0;
+    const today = new Date().toDateString();
+    return inbox.reduce((n, item) => {
+      if (!item?.timestamp) return n;
+      const d = new Date(item.timestamp);
+      return isNaN(d.getTime()) || d.toDateString() !== today ? n : n + 1;
+    }, 0);
+  }, [emailData]);
 
   // ── Done → Trophy ──
   const handleComplete = useCallback(async (taskId?: string) => {
@@ -446,8 +459,8 @@ export default function TodayPage() {
 
     <div className="space-y-4 md:space-y-5" style={{ background: 'var(--ice-bg)', minHeight: '100%', borderRadius: '0' }}>
 
-      {/* ── Greeting ── */}
-      <div style={{ paddingBottom: '2px' }}>
+      {/* ── Greeting + Affirmation ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, paddingBottom: '2px', flexWrap: 'wrap' }}>
         <h1
           style={{
             fontFamily: 'var(--font-rajdhani)',
@@ -456,46 +469,65 @@ export default function TodayPage() {
             color: 'var(--ice-text)',
             letterSpacing: '1px',
             lineHeight: 1.1,
+            margin: 0,
           }}
         >
           {greeting}
         </h1>
-        <p
-          style={{
-            fontFamily: 'var(--font-script)',
-            fontWeight: 700,
-            fontSize: '28px',
-            color: '#b8902a',
-            lineHeight: 1.3,
-            margin: 0,
-            textAlign: 'right',
-            maxWidth: '55%',
-          }}
-        >
-          {affirmation || 'You move with intention and grace.'}
-        </p>
+        <div style={{ textAlign: 'right', maxWidth: '55%' }}>
+          <p
+            style={{
+              fontFamily: 'var(--font-script)',
+              fontWeight: 600,
+              fontSize: '29px',
+              color: 'var(--ice-gold)',
+              lineHeight: 1.25,
+              margin: 0,
+              textShadow: '0 1px 2px rgba(184,144,42,0.18)',
+            }}
+          >
+            {affirmation || 'You move with intention and grace.'}
+          </p>
+          {affirmationSource && (
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--ice-text3)',
+                opacity: 0.8,
+                marginTop: 4,
+              }}
+            >
+              — {affirmationSource}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ── Daily Briefing ── (restyled via inline override on the wrapper) */}
-      <div style={{
-        background: 'rgba(255,255,255,0.70)',
-        border: '1px solid #b8d8e8',
-        borderRadius: '12px',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        boxShadow: '0 2px 16px rgba(64,168,200,0.08)',
-        padding: '12px 16px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ice-text3)', fontWeight: 500 }}>
-            TODAY&apos;S BRIEFING
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ice-text3)', opacity: 0.7 }}>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </span>
-        </div>
-        {/* Render the actual briefing content */}
-        <DailyBriefing tasksData={tasksData} campaigns={campaignsData} />
+      {/* ── KPI Row ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <KpiBox
+          label="Tasks"
+          count={tasksData?.today?.length ?? null}
+          sub={tasksData?.counters ? `${tasksData.counters.tracked} total` : 'due today'}
+          subLabel="due today"
+          href="/tasks"
+        />
+        <KpiBox
+          label="Emails"
+          count={emailData ? emailsToday : null}
+          sub={emailData?.inbox?.length ? `${emailData.inbox.length} in inbox` : 'new today'}
+          subLabel="new today"
+          href="/email"
+        />
+        <KpiBox
+          label="Campaigns"
+          count={campaignsData?.filter((c) => c.status && c.status !== 'COMPLETED').length ?? null}
+          sub="active"
+          href="/dispatch"
+        />
       </div>
 
       {/* ── Finance Alerts ── */}
@@ -515,83 +547,89 @@ export default function TodayPage() {
       <div style={{
         background: 'rgba(255,255,255,0.70)',
         border: '1px solid #b8d8e8',
-        borderRadius: '12px',
+        borderRadius: '10px',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
         boxShadow: '0 2px 16px rgba(64,168,200,0.08)',
-        padding: '14px',
+        padding: '7px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-          <Zap className="w-4 h-4" style={{ color: 'var(--ice)' }} />
-          <span style={{ fontFamily: 'var(--font-rajdhani)', fontWeight: 700, fontSize: '14px', letterSpacing: '0.06em', color: 'var(--ice-text)', textTransform: 'uppercase' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '5px' }}>
+          <Zap className="w-3 h-3" style={{ color: 'var(--ice)' }} />
+          <span style={{ fontFamily: 'var(--font-rajdhani)', fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', color: 'var(--ice-text)', textTransform: 'uppercase' }}>
             Quick Actions
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1">
           <button
             type="button"
             onClick={() => setShowNewTaskModal(true)}
-            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
           >
-            <Plus className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>New Task</span>
+            <Plus className="w-3.5 h-3.5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>New Task</span>
           </button>
           <Link
             href="/activity"
-            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
           >
-            <ListChecks className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Activity</span>
+            <ListChecks className="w-3.5 h-3.5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Activity</span>
           </Link>
           <Link
             href="/ruby"
-            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
           >
-            <Sparkles className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ask Ruby</span>
+            <Sparkles className="w-3.5 h-3.5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ask Ruby</span>
           </Link>
           <Link
             href="/dispatch"
-            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
           >
-            <Rocket className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dispatch</span>
+            <Rocket className="w-3.5 h-3.5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dispatch</span>
           </Link>
           <Link
             href="/email"
-            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95"
+            className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
             style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
           >
-            <MessageSquare className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email</span>
+            <MessageSquare className="w-3.5 h-3.5" style={{ color: 'var(--ice2)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email</span>
           </Link>
-          <button
-            type="button"
-            onClick={() => setShowTrophy(true)}
-            className="rounded-xl flex flex-col items-center justify-center gap-1.5 py-4 transition-opacity hover:opacity-80 active:scale-95 relative"
-            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
-          >
+          <div className="relative">
+            <Link
+              href={"/trophy" as any}
+              className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
+              style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+              aria-label="Open trophy collection"
+            >
+              <Trophy className="w-3.5 h-3.5" style={{ color: '#b8902a' }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophies</span>
+            </Link>
             {completedTitles.length > 0 && (
-              <span
-                className="absolute top-2 right-2 rounded-full w-4 h-4 flex items-center justify-center"
-                style={{ background: 'var(--ice)', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 700 }}
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTrophy(true); }}
+                aria-label={`View ${completedTitles.length} local win${completedTitles.length !== 1 ? 's' : ''}`}
+                title="Today's wins · click for quick view"
+                className="absolute top-1 right-1 rounded-full w-3.5 h-3.5 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+                style={{ background: '#b8902a', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '7px', fontWeight: 700, border: 'none', cursor: 'pointer' }}
               >
                 {completedTitles.length}
-              </span>
+              </button>
             )}
-            <Trophy className="w-5 h-5" style={{ color: 'var(--ice2)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophy</span>
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* ── Voice (Jarvis) ── */}
+      {/* ── Voice (Hotline Bling · 6 God) ── */}
       <div>
-        <JarvisCard />
+        <HotlineBlingCard />
       </div>
 
     </div>
@@ -608,3 +646,98 @@ type CampaignListItem = {
   title: string;
   status: string | null;
 };
+
+function KpiBox({
+  label,
+  count,
+  sub,
+  subLabel,
+  href,
+}: {
+  label: string;
+  count: number | null;
+  sub: string;
+  /** Optional small caption shown above the big number — used when the count's unit differs from the label. */
+  subLabel?: string;
+  href: string;
+}) {
+  return (
+    <Link href={href as any} style={{ textDecoration: 'none' }}>
+      <div
+        style={{
+          background: 'rgba(255,255,255,0.72)',
+          border: '1px solid #b8d8e8',
+          borderRadius: '12px',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          boxShadow: '0 2px 12px rgba(64,168,200,0.07)',
+          padding: '14px 16px',
+          cursor: 'pointer',
+          transition: 'box-shadow 0.15s, border-color 0.15s',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 20px rgba(64,168,200,0.18)';
+          (e.currentTarget as HTMLDivElement).style.borderColor = '#7ac4e0';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(64,168,200,0.07)';
+          (e.currentTarget as HTMLDivElement).style.borderColor = '#b8d8e8';
+        }}
+      >
+        {subLabel && (
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: 'var(--ice2)',
+              opacity: 0.85,
+              marginBottom: '2px',
+            }}
+          >
+            {subLabel}
+          </div>
+        )}
+        <div
+          style={{
+            fontFamily: 'var(--font-rajdhani)',
+            fontSize: '34px',
+            fontWeight: 700,
+            color: 'var(--ice-text)',
+            lineHeight: 1,
+            letterSpacing: '0.5px',
+          }}
+        >
+          {count === null ? '—' : count}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--ice-text3)',
+            marginTop: '4px',
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--ice2)',
+            marginTop: '2px',
+            opacity: 0.75,
+          }}
+        >
+          {sub}
+        </div>
+      </div>
+    </Link>
+  );
+}
+

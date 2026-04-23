@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
+import { ensureSession } from '@/lib/chat/session-util';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -49,8 +50,7 @@ Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not
   }
 
   if (sessionId) {
-    prisma.chatSession
-      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+    ensureSession(sessionId, { firstMessageText: text })
       .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
       .catch(() => {});
   }
@@ -66,7 +66,7 @@ Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
       body: JSON.stringify({ stream: true, model, input: text, ...(instructions ? { instructions } : {}) }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(90_000),
     });
   } catch (err) {
     return sseError(err instanceof Error ? err.message : String(err));
