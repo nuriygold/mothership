@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatTabs } from '@/components/ui/chat-tabs';
+import { GatewayTicker } from '@/components/ui/gateway-ticker';
 
 const TerminalView = dynamic(() => import('./terminal-view'), {
   ssr: false,
@@ -100,6 +101,7 @@ export default function ClaudePage() {
   const [showKey, setShowKey] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messagesBySession, setMessagesBySession] = useState<Record<string, Message[]>>({});
+  const [loadedSessions, setLoadedSessions] = useState<Set<string>>(new Set());
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +130,37 @@ export default function ClaudePage() {
     const el = messagesRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
+
+  // Hydrate persisted messages for any session we haven't loaded yet.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (loadedSessions.has(sessionId)) return;
+    let cancelled = false;
+    setLoadedSessions((prev) => {
+      const next = new Set(prev);
+      next.add(sessionId);
+      return next;
+    });
+    fetch(`/api/chat/messages?sessionId=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const msgs: Message[] = Array.isArray(data?.messages)
+          ? data.messages
+              .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+              .map((m: any) => ({ role: m.role, content: String(m.content ?? '') }))
+          : [];
+        if (!msgs.length) return;
+        setMessagesBySession((prev) => {
+          if ((prev[sessionId] ?? []).length >= msgs.length) return prev;
+          return { ...prev, [sessionId]: msgs };
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, loadedSessions]);
 
   function patchCfg(patch: Partial<Config>) {
     setCfg((prev) => {
@@ -278,6 +311,8 @@ export default function ClaudePage() {
           apiKey: cfg.keys[cfg.provider] ?? '',
           messages: withUser,
           azureEndpoint: cfg.azureEndpoint,
+          sessionId: activeSession,
+          source: 'live',
         }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -336,7 +371,7 @@ export default function ClaudePage() {
       const res = await fetch('/api/claude/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: cfg.provider, model: cfg.model, apiKey, messages: withUser, azureEndpoint: cfg.azureEndpoint }),
+        body: JSON.stringify({ provider: cfg.provider, model: cfg.model, apiKey, messages: withUser, azureEndpoint: cfg.azureEndpoint, sessionId: activeSession }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -401,10 +436,14 @@ export default function ClaudePage() {
         borderBottom: '1px solid #1e2235',
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 18, color: 'white', fontWeight: 600, letterSpacing: 1 }}>
-          CLAUDE
+        <span style={{ fontSize: 18, color: 'white', fontWeight: 600, letterSpacing: 1, fontFamily: 'monospace' }}>
+          OPENCLAUDE TUI
+        </span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace', letterSpacing: 1 }}>
+          {mode === 'terminal' ? '// PTY MODE' : mode === 'live' ? '// VOICE MODE' : '// CHAT MODE'}
         </span>
         <div style={{ flex: 1 }} />
+        <GatewayTicker label="Gateway" />
         {/* Mode toggle */}
         <div style={{ display: 'flex', border: '1px solid #2a2f45', borderRadius: 8, overflow: 'hidden' }}>
           {(['chat', 'live', 'terminal'] as const).map((m) => (
