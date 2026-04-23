@@ -6,32 +6,41 @@ export const runtime = 'nodejs';
 const DEFAULT_MODEL = process.env.OPENAI_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2024-12-17';
 const DEFAULT_VOICE = process.env.OPENAI_REALTIME_VOICE ?? 'ash';
 
-// ── Azure OpenAI Realtime (WebRTC) config ─────────────────────────────────
-const AZURE_ENDPOINT = process.env.AZURE_OPENAI_REALTIME_ENDPOINT;           // e.g. https://<resource>.openai.azure.com
+// ── Azure config ──────────────────────────────────────────────────────────────
+const AZURE_ENDPOINT = process.env.AZURE_OPENAI_REALTIME_ENDPOINT;
 const AZURE_KEY = process.env.AZURE_OPENAI_REALTIME_KEY ?? process.env.AZURE_OPENAI_KEY;
-const AZURE_DEPLOYMENT = process.env.AZURE_OPENAI_REALTIME_DEPLOYMENT;       // deployment name of a gpt-4o-realtime-preview model
+const AZURE_DEPLOYMENT = process.env.AZURE_OPENAI_REALTIME_DEPLOYMENT;
 const AZURE_API_VERSION = process.env.AZURE_OPENAI_REALTIME_API_VERSION ?? '2025-04-01-preview';
 const AZURE_WEBRTC_BASE = process.env.AZURE_OPENAI_REALTIME_WEBRTC_BASE
   ?? 'https://eastus2.realtimeapi-preview.ai.azure.com/v1/realtimertc';
-// OpenAI direct WebRTC base
 const OPENAI_WEBRTC_BASE = 'https://api.openai.com/v1/realtime';
 
 type SessionResponse = {
-  client_secret: { value: string; expires_at?: number };
-  model: string;
+  mode: 'webrtc' | 'azure-ws';
+  client_secret?: { value: string; expires_at?: number };
+  model?: string;
   voice?: string;
-  base_url: string;  // Where the client should POST its SDP offer
+  base_url?: string;
 };
 
 /**
  * Mint an ephemeral Realtime session token on behalf of the browser.
- * Prefers Azure OpenAI when AZURE_OPENAI_REALTIME_ENDPOINT + KEY + DEPLOYMENT
- * are configured; otherwise uses OpenAI direct with OPENAI_API_KEY. The real
- * key never leaves the server.
+ *
+ * Azure VoiceLive (cognitiveservices.azure.com) → WebSocket relay mode.
+ * Azure OpenAI (openai.azure.com) → Azure WebRTC mode.
+ * OpenAI direct → OpenAI WebRTC mode.
+ * The real key never leaves the server.
  */
 export async function POST() {
   const instructions = `${SIX_GOD_SYSTEM_PROMPT}\n\n${SIX_GOD_VOICE_ADDENDUM}`;
 
+  // ── Azure VoiceLive (Cognitive Services) → WebSocket relay ────────────────
+  if (AZURE_ENDPOINT && AZURE_KEY && AZURE_ENDPOINT.includes('cognitiveservices.azure.com')) {
+    // Connection is handled server-side by pages/api/voice/realtime.ts relay.
+    return Response.json({ mode: 'azure-ws' } satisfies SessionResponse);
+  }
+
+  // ── Azure OpenAI (openai.azure.com) → WebRTC ──────────────────────────────
   if (AZURE_ENDPOINT && AZURE_KEY && AZURE_DEPLOYMENT) {
     const url = `${AZURE_ENDPOINT.replace(/\/$/, '')}/openai/realtimeapi/sessions?api-version=${AZURE_API_VERSION}`;
     const upstream = await fetch(url, {
@@ -53,6 +62,7 @@ export async function POST() {
     }
     const data = await upstream.json();
     const body: SessionResponse = {
+      mode: 'webrtc',
       client_secret: data?.client_secret,
       model: AZURE_DEPLOYMENT,
       voice: data?.voice ?? DEFAULT_VOICE,
@@ -91,6 +101,7 @@ export async function POST() {
   }
   const data = await upstream.json();
   const body: SessionResponse = {
+    mode: 'webrtc',
     client_secret: data?.client_secret,
     model: data?.model ?? DEFAULT_MODEL,
     voice: data?.voice ?? DEFAULT_VOICE,

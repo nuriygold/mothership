@@ -51,11 +51,90 @@ function actionLabel(action: string | null) {
   }
 }
 
+function AssignModal({ stream, onClose, onDone }: { stream: StreamStatus; onClose: () => void; onDone: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = useCallback(async () => {
+    if (!title.trim()) { setError('Title is required'); return; }
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/v2/revenue-streams/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream: stream.key, title: title.trim(), description: description.trim() || undefined }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d?.error ?? 'Failed'); return; }
+      onDone();
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  }, [title, description, stream.key, onDone, onClose]);
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 12, border: '1px solid #b8e0f5',
+        boxShadow: '0 8px 32px rgba(64,168,200,0.18)', width: 360, padding: '20px 20px 16px',
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>
+          Assign task — {stream.displayName}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+          Will be assigned to <span style={{ color: 'var(--green)', fontWeight: 600 }}>{stream.leadDisplay}</span>
+        </div>
+        <input
+          autoFocus
+          placeholder="Task title *"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) submit(); if (e.key === 'Escape') onClose(); }}
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+            border: '1px solid #b8e0f5', borderRadius: 8, fontSize: 12, marginBottom: 8,
+            fontFamily: 'var(--font-body)', outline: 'none', color: 'var(--text)',
+          }}
+        />
+        <textarea
+          placeholder="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+            border: '1px solid #b8e0f5', borderRadius: 8, fontSize: 12, marginBottom: 12,
+            fontFamily: 'var(--font-body)', outline: 'none', color: 'var(--text)', resize: 'vertical',
+          }}
+        />
+        {error && <div style={{ fontSize: 11, color: 'var(--red)', marginBottom: 8 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn-sm" onClick={onClose} style={{ opacity: 0.7 }}>Cancel</button>
+          <button className="btn-sm" onClick={submit} disabled={submitting} style={{ background: 'var(--green)', color: '#fff', borderColor: 'var(--green)', opacity: submitting ? 0.6 : 1 }}>
+            {submitting ? 'Assigning…' : 'Assign Task'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StreamCard({ stream, onMutate }: { stream: StreamStatus; onMutate: () => void }) {
   const [sopOpen, setSopOpen] = useState(false);
   const [sopData, setSopData] = useState<SopData | null>(null);
   const [sopLoading, setSopLoading] = useState(false);
   const [inflight, setInflight] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const { data: activityData } = useSWR<{ stream: string; activity: ActivityEntry[] }>(
     `/api/v2/revenue-streams/activity?stream=${stream.key}`,
@@ -142,7 +221,7 @@ function StreamCard({ stream, onMutate }: { stream: StreamStatus; onMutate: () =
         </div>
 
         {/* Action row */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
           <button className="btn-sm" disabled={inflight} onClick={() => doAction('run-report')}>
             Run Report
           </button>
@@ -152,7 +231,13 @@ function StreamCard({ stream, onMutate }: { stream: StreamStatus; onMutate: () =
           <button className="btn-sm" disabled={inflight} onClick={() => doAction('ping')}>
             Ping Lead
           </button>
+          <button className="btn-sm" onClick={() => setAssignOpen(true)} style={{ marginLeft: 'auto' }}>
+            Assign Task
+          </button>
         </div>
+        {assignOpen && (
+          <AssignModal stream={stream} onClose={() => setAssignOpen(false)} onDone={onMutate} />
+        )}
       </div>
 
       {/* Status note */}
