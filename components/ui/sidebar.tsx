@@ -18,6 +18,7 @@ import {
   Globe,
   Network,
   Brain,
+  Zap,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -33,6 +34,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/ruby':     Sparkles,
   '/marvin':   Network,
   '/iceman':   Snowflake,
+  '/scorpion': Zap,
   '/tasks':    ListChecks,
   '/bots':     Bot,
   '/email':    Mail,

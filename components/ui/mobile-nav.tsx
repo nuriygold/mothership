@@ -18,6 +18,7 @@ import {
   Globe,
   Network,
   Brain,
+  Zap,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -29,6 +30,7 @@ interface SidebarItem {
 const ICON_MAP: Record<string, React.ElementType> = {
   '/today':    Home,
   '/iceman':   Snowflake,
+  '/scorpion': Zap,
   '/tasks':    ListChecks,
   '/bots':     Bot,
   '/email':    Mail,

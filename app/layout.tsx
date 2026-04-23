@@ -26,6 +26,7 @@ const navItems = [
   { label: 'Ruby', href: '/ruby' },
   { label: 'Marvin', href: '/marvin' },
   { label: 'Iceman', href: '/iceman' },
+  { label: 'Scorpion', href: '/scorpion' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
