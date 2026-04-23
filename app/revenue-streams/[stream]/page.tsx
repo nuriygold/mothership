@@ -50,7 +50,8 @@ function actionLabel(action: string | null) {
 }
 
 export default function StreamDrilldown() {
-  const { stream: streamKey } = useParams<{ stream: string }>();
+  const params = useParams<{ stream: string }>();
+  const streamKey = params?.stream ?? '';
   const def = streamByKey(streamKey);
 
   const { data: statusData, mutate } = useSWR<{ streams: StreamStatus[] }>(
