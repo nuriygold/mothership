@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { ensureSession } from '@/lib/chat/session-util';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -49,11 +50,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    await prisma.chatSession.upsert({
-      where: { id: sessionId },
-      create: { id: sessionId },
-      update: { updatedAt: new Date() },
-    });
+    await ensureSession(sessionId, { firstMessageText: role === 'user' ? content : undefined });
     const message = await prisma.chatMessage.create({
       data: { sessionId, role, content },
       select: { id: true, role: true, content: true, createdAt: true },

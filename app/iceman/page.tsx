@@ -5,6 +5,8 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatTabs } from "@/components/ui/chat-tabs"
 import { GatewayTicker, useGatewayStatus } from "@/components/ui/gateway-ticker"
+import { SessionPalette } from "@/components/ui/session-palette"
+import { maybeAutoTitle } from "@/lib/chat/tabs-client"
 
 type Message = { role: 'user' | 'assistant'; content: string }
 
@@ -103,6 +105,7 @@ export default function Iceman() {
       ...prev,
       [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text }],
     }))
+    maybeAutoTitle('iceman', activeSessionId, text)
 
     try {
       const res = await fetch('/api/agent', {
@@ -191,6 +194,17 @@ export default function Iceman() {
           {robot} 🧊 ICEMAN
         </span>
         <div style={{ flex: 1 }} />
+        <span
+          title="Jump to session"
+          style={{
+            fontSize: 11,
+            color: 'rgba(255,255,255,0.4)',
+            fontFamily: 'monospace',
+            letterSpacing: 0.5,
+          }}
+        >
+          ⌘K sessions
+        </span>
         <GatewayTicker label="Gateway" />
       </div>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e2235", background: "rgba(20,25,35,0.7)" }}>
@@ -201,6 +215,8 @@ export default function Iceman() {
           onSessionClose={handleSessionClose}
         />
       </div>
+
+      <SessionPalette agent="iceman" onSelect={handleSessionChange} />
 
       <div
         ref={messagesContainerRef}

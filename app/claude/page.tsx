@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatTabs } from '@/components/ui/chat-tabs';
 import { GatewayTicker } from '@/components/ui/gateway-ticker';
+import { SessionPalette } from '@/components/ui/session-palette';
+import { maybeAutoTitle } from '@/lib/chat/tabs-client';
 
 const TerminalView = dynamic(() => import('./terminal-view'), {
   ssr: false,
@@ -299,6 +301,7 @@ export default function ClaudePage() {
     const prev = messagesBySession[activeSession] ?? [];
     const withUser: Message[] = [...prev, { role: 'user', content: text }];
     setMessagesBySession((m) => ({ ...m, [activeSession]: withUser }));
+    maybeAutoTitle('claude', activeSession, text);
 
     let fullResponse = '';
     try {
@@ -366,6 +369,7 @@ export default function ClaudePage() {
     setError(null);
     setLoading(true);
     setMessagesBySession((m) => ({ ...m, [activeSession]: withUser }));
+    maybeAutoTitle('claude', activeSession, text);
 
     try {
       const res = await fetch('/api/claude/chat', {
@@ -424,6 +428,7 @@ export default function ClaudePage() {
 
   return (
     <div style={{ background: '#0b0f17', minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <SessionPalette agent="claude" onSelect={handleSessionChange} />
       {/* Header */}
       <div style={{
         height: 56,
@@ -443,6 +448,17 @@ export default function ClaudePage() {
           {mode === 'terminal' ? '// PTY MODE' : mode === 'live' ? '// VOICE MODE' : '// CHAT MODE'}
         </span>
         <div style={{ flex: 1 }} />
+        <span
+          title="Jump to session"
+          style={{
+            fontSize: 11,
+            color: 'rgba(255,255,255,0.4)',
+            fontFamily: 'monospace',
+            letterSpacing: 0.5,
+          }}
+        >
+          ⌘K sessions
+        </span>
         <GatewayTicker label="Gateway" />
         {/* Mode toggle */}
         <div style={{ display: 'flex', border: '1px solid #2a2f45', borderRadius: 8, overflow: 'hidden' }}>

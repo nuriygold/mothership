@@ -131,6 +131,16 @@ export default function TerminalView({ serverUrl, token, sessionId }: Props) {
     setRemoteSessionId(null);
   }, []);
 
+  // Auto-connect when we have both a sessionId and a serverUrl. The server
+  // replays scrollback on reconnect, so re-entering the page resumes the
+  // existing PTY (within the server-side TTL).
+  useEffect(() => {
+    if (!serverUrl || !sessionId) return;
+    if (status !== 'idle') return;
+    connect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverUrl, sessionId]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div style={{
