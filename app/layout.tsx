@@ -31,6 +31,7 @@ const navItems = [
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
   { label: 'Finance', href: '/finance' },
+  { label: 'Streams', href: '/revenue-streams' },
   { label: 'Activity (Log)', href: '/activity' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
