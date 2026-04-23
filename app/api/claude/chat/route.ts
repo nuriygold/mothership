@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { ensureSession } from '@/lib/chat/session-util';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -6,10 +7,14 @@ export const runtime = 'nodejs';
 type Provider = 'anthropic' | 'openai' | 'groq' | 'together' | 'azure';
 type Message = { role: 'user' | 'assistant'; content: string };
 
-function persistMessage(sessionId: string, role: 'user' | 'assistant', content: string) {
+function persistMessage(
+  sessionId: string,
+  role: 'user' | 'assistant',
+  content: string,
+  firstMessageText?: string
+) {
   if (!sessionId || !content) return;
-  prisma.chatSession
-    .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+  ensureSession(sessionId, { firstMessageText })
     .then(() => prisma.chatMessage.create({ data: { sessionId, role, content } }))
     .catch(() => {});
 }
@@ -164,12 +169,13 @@ export async function POST(req: Request) {
   if (!model) return errSSE('Model required');
   if (!messages.length) return errSSE('No messages');
 
+  const firstUserText = messages.find((m) => m.role === 'user')?.content ?? '';
   if (sessionId) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    if (lastUser?.content) persistMessage(sessionId, 'user', lastUser.content);
+    if (lastUser?.content) persistMessage(sessionId, 'user', lastUser.content, firstUserText);
   }
   const onAssistantDone = (text: string) => {
-    if (sessionId && text) persistMessage(sessionId, 'assistant', text);
+    if (sessionId && text) persistMessage(sessionId, 'assistant', text, firstUserText);
   };
 
   if (provider === 'azure') {

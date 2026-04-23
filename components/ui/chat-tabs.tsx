@@ -1,6 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  onTitlesUpdated,
+  readTitles,
+  sessionsKey,
+  writeTitles,
+} from '@/lib/chat/tabs-client';
 
 type ChatTabsProps = {
   agent: string;
@@ -22,11 +28,11 @@ function createSessionId(agent: string): string {
   return `agent:${agent}:${crypto.randomUUID()}`;
 }
 
-function readStoredSessions(storageKey: string, agent: string): string[] {
+function readStoredSessions(agent: string): string[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]');
+    const parsed = JSON.parse(window.localStorage.getItem(sessionsKey(agent)) ?? '[]');
     if (!Array.isArray(parsed)) return [];
 
     const unique = new Set<string>();
@@ -43,16 +49,6 @@ function readStoredSessions(storageKey: string, agent: string): string[] {
   }
 }
 
-function readStoredTitles(storageKey: string): Record<string, string> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
-  } catch {
-    return {};
-  }
-}
-
 export function ChatTabs({
   agent,
   sessionId,
@@ -60,46 +56,73 @@ export function ChatTabs({
   onSessionClose,
   className,
 }: ChatTabsProps) {
-  const storageKey = useMemo(() => `chat-tabs:${agent}:sessions`, [agent]);
-  const titlesKey = useMemo(() => `chat-tabs:${agent}:titles`, [agent]);
+  const storageKey = useMemo(() => sessionsKey(agent), [agent]);
   const [sessions, setSessions] = useState<string[]>([]);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const remoteSyncedRef = useRef(false);
 
   // Hydrate from localStorage
   useEffect(() => {
-    setSessions(readStoredSessions(storageKey, agent));
-    setTitles(readStoredTitles(titlesKey));
-  }, [agent, storageKey, titlesKey]);
+    setSessions(readStoredSessions(agent));
+    setTitles(readTitles(agent));
+  }, [agent]);
 
-  // Pull titles & last-message previews for the loaded sessions from the server,
-  // so renames performed in another window are reflected here too.
+  // Listen for title updates dispatched by pages (auto-title after first send,
+  // renames from other windows/tabs).
   useEffect(() => {
-    if (!sessions.length || remoteSyncedRef.current) return;
-    remoteSyncedRef.current = true;
-    const ids = sessions.join(',');
-    fetch(`/api/chat/sessions?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        const list: Array<{ id: string; title: string | null }> = data?.sessions ?? [];
-        if (!list.length) return;
+    return onTitlesUpdated(agent, () => setTitles(readTitles(agent)));
+  }, [agent]);
+
+  // Pull recent sessions from the server so other devices' tabs show up here,
+  // and fill in titles and previews for our local tabs.
+  useEffect(() => {
+    let cancelled = false;
+
+    const merge = async () => {
+      try {
+        const res = await fetch(`/api/chat/sessions?agent=${encodeURIComponent(agent)}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const remote: Array<{ id: string; title: string | null }> = data?.sessions ?? [];
+        if (cancelled) return;
+
+        const remoteValid = remote.filter((s) => isValidSessionId(agent, s.id));
+
+        // Merge tab list — prepend any server IDs we don't have locally.
+        setSessions((prev) => {
+          const seen = new Set(prev);
+          const mergedRemote = remoteValid.map((s) => s.id).filter((id) => !seen.has(id));
+          if (mergedRemote.length === 0) return prev;
+          return [...prev, ...mergedRemote].slice(0, MAX_SESSIONS);
+        });
+
+        // Merge titles — server wins if local has none; don't clobber local renames.
         setTitles((prev) => {
-          const next = { ...prev };
           let changed = false;
-          for (const s of list) {
-            if (s.title && next[s.id] !== s.title) {
+          const next = { ...prev };
+          for (const s of remoteValid) {
+            if (s.title && !next[s.id]) {
               next[s.id] = s.title;
               changed = true;
             }
           }
+          if (changed) writeTitles(agent, next);
           return changed ? next : prev;
         });
-      })
-      .catch(() => {});
-  }, [sessions]);
+      } catch {
+        // ignore
+      }
+    };
+
+    merge();
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
 
   // Ensure there's an active session
   useEffect(() => {
@@ -122,12 +145,6 @@ export function ChatTabs({
     window.localStorage.setItem(storageKey, JSON.stringify(sessions));
   }, [sessions, storageKey]);
 
-  // Persist titles
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(titlesKey, JSON.stringify(titles));
-  }, [titles, titlesKey]);
-
   useEffect(() => {
     if (renamingId) renameInputRef.current?.select();
   }, [renamingId]);
@@ -138,8 +155,21 @@ export function ChatTabs({
     onSessionChange(created);
   }, [agent, onSessionChange]);
 
+  const dropTitle = useCallback(
+    (id: string) => {
+      setTitles((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        writeTitles(agent, next);
+        return next;
+      });
+    },
+    [agent]
+  );
+
   const closeSession = useCallback(
-    (toClose: string) => {
+    (toClose: string, opts: { deleteRemote?: boolean } = {}) => {
       setSessions((prev) => {
         const idx = prev.indexOf(toClose);
         if (idx < 0) return prev;
@@ -160,14 +190,24 @@ export function ChatTabs({
         onSessionClose?.(toClose);
         return next;
       });
-      setTitles((prev) => {
-        if (!(toClose in prev)) return prev;
-        const next = { ...prev };
-        delete next[toClose];
-        return next;
-      });
+      dropTitle(toClose);
+      if (opts.deleteRemote) {
+        fetch(`/api/chat/sessions/${encodeURIComponent(toClose)}`, { method: 'DELETE' }).catch(() => {});
+      }
     },
-    [agent, onSessionChange, onSessionClose, sessionId]
+    [agent, dropTitle, onSessionChange, onSessionClose, sessionId]
+  );
+
+  const handleCloseClick = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      const destructive = e.shiftKey || e.altKey;
+      if (destructive) {
+        const name = titles[id] ?? 'this session';
+        if (!window.confirm(`Permanently delete "${name}" and all its messages?`)) return;
+      }
+      closeSession(id, { deleteRemote: destructive });
+    },
+    [closeSession, titles]
   );
 
   const beginRename = useCallback(
@@ -184,22 +224,20 @@ export function ChatTabs({
     const id = renamingId;
     setRenamingId(null);
     if (!trimmed) {
-      // Clear the title (revert to default label) — local only.
-      setTitles((prev) => {
-        if (!(id in prev)) return prev;
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      dropTitle(id);
       return;
     }
-    setTitles((prev) => ({ ...prev, [id]: trimmed }));
+    setTitles((prev) => {
+      const next = { ...prev, [id]: trimmed };
+      writeTitles(agent, next);
+      return next;
+    });
     fetch(`/api/chat/sessions/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: trimmed }),
     }).catch(() => {});
-  }, [renameValue, renamingId]);
+  }, [agent, dropTitle, renameValue, renamingId]);
 
   const cancelRename = useCallback(() => {
     setRenamingId(null);
@@ -317,7 +355,7 @@ export function ChatTabs({
               )}
               <button
                 type="button"
-                onClick={() => closeSession(id)}
+                onClick={(e) => handleCloseClick(id, e)}
                 style={{
                   border: 'none',
                   borderLeft: '1px solid rgba(255,255,255,0.14)',
@@ -329,7 +367,7 @@ export function ChatTabs({
                   fontSize: 14,
                 }}
                 aria-label={`Close ${label}`}
-                title={`Close ${label}`}
+                title={`Close ${label} (shift-click to delete permanently)`}
               >
                 ×
               </button>

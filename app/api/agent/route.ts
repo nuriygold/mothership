@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
+import { ensureSession } from '@/lib/chat/session-util';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -34,8 +35,7 @@ export async function POST(req: Request) {
   }
 
   if (sessionId) {
-    prisma.chatSession
-      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+    ensureSession(sessionId, { firstMessageText: text })
       .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
       .catch(() => {});
   }
