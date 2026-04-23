@@ -12,11 +12,10 @@ type TranscriptLine = { role: 'user' | 'assistant'; text: string };
 interface EphemeralTokenResponse {
   client_secret?: { value?: string; expires_at?: number };
   model?: string;
+  base_url?: string;
   error?: string;
   detail?: string;
 }
-
-const REALTIME_BASE = 'https://api.openai.com/v1/realtime';
 
 /**
  * Hotline Bling — real-time voice agent running the 6 God script.
@@ -107,6 +106,7 @@ export function HotlineBlingCard() {
 
     let token: string;
     let model: string;
+    let baseUrl: string;
     try {
       const res = await fetch('/api/realtime/session', { method: 'POST' });
       const body = (await res.json()) as EphemeralTokenResponse;
@@ -115,6 +115,7 @@ export function HotlineBlingCard() {
       }
       token = body.client_secret.value;
       model = body.model ?? 'gpt-4o-realtime-preview-2024-12-17';
+      baseUrl = body.base_url ?? 'https://api.openai.com/v1/realtime';
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -177,7 +178,7 @@ export function HotlineBlingCard() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpRes = await fetch(`${REALTIME_BASE}?model=${encodeURIComponent(model)}`, {
+      const sdpRes = await fetch(`${baseUrl}?model=${encodeURIComponent(model)}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

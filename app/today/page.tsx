@@ -571,23 +571,29 @@ export default function TodayPage() {
             <MessageSquare className="w-3.5 h-3.5" style={{ color: 'var(--ice2)' }} />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email</span>
           </Link>
-          <button
-            type="button"
-            onClick={() => setShowTrophy(true)}
-            className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95 relative"
-            style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
-          >
+          <div className="relative">
+            <Link
+              href="/trophy"
+              className="rounded-lg flex flex-col items-center justify-center gap-0.5 py-2 transition-opacity hover:opacity-80 active:scale-95"
+              style={{ background: 'var(--ice-bg2)', border: '1px solid var(--ice-border)' }}
+              aria-label="Open trophy collection"
+            >
+              <Trophy className="w-3.5 h-3.5" style={{ color: '#b8902a' }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophy</span>
+            </Link>
             {completedTitles.length > 0 && (
-              <span
-                className="absolute top-1 right-1 rounded-full w-3 h-3 flex items-center justify-center"
-                style={{ background: '#b8902a', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '7px', fontWeight: 700 }}
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTrophy(true); }}
+                aria-label={`View ${completedTitles.length} local win${completedTitles.length !== 1 ? 's' : ''}`}
+                title="Today's wins · click for quick view"
+                className="absolute top-1 right-1 rounded-full w-3.5 h-3.5 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+                style={{ background: '#b8902a', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '7px', fontWeight: 700, border: 'none', cursor: 'pointer' }}
               >
                 {completedTitles.length}
-              </span>
+              </button>
             )}
-            <Trophy className="w-3.5 h-3.5" style={{ color: '#b8902a' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophy</span>
-          </button>
+          </div>
         </div>
       </div>
 
