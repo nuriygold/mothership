@@ -1,14 +1,4 @@
-CREATE TABLE "RevenueStreamStatus" (
-    "id"          TEXT         NOT NULL,
-    "stream"      TEXT         NOT NULL,
-    "status"      TEXT         NOT NULL DEFAULT 'idle',
-    "note"        TEXT,
-    "requestedAt" TIMESTAMP(3),
-    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"   TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "RevenueStreamStatus_pkey" PRIMARY KEY ("id")
-);
-
-CREATE UNIQUE INDEX "RevenueStreamStatus_stream_key" ON "RevenueStreamStatus"("stream");
-CREATE INDEX "RevenueStreamStatus_stream_idx" ON "RevenueStreamStatus"("stream");
+-- RevenueStreamStatus and RevenueStreamStatusLog were fully created in
+-- 20260423000001_revenue_stream_models (complete schema with lastReportAt,
+-- lastReport, and the log table). This migration is intentionally a no-op to
+-- avoid a "relation already exists" error that blocked 000003 and 000004.
