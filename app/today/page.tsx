@@ -132,7 +132,7 @@ export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
   const { data: tasksData, mutate: mutateTasks } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
-  const { data: campaignsData } = useSWR<CampaignListItem[]>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
+  const { data: campaignsData } = useSWR<CampaignListResponse>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
   const { data: emailData } = useSWR<{ inbox: unknown[] }>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -392,6 +392,7 @@ export default function TodayPage() {
   }, []);
 
   const calEvents = calData?.events ?? [];
+  const campaigns = Array.isArray(campaignsData) ? campaignsData : [];
 
   return (
     <>
@@ -524,7 +525,7 @@ export default function TodayPage() {
         />
         <KpiBox
           label="Campaigns"
-          count={campaignsData?.filter((c) => c.status && c.status !== 'COMPLETED').length ?? null}
+          count={campaigns.filter((c) => c.status && c.status !== 'COMPLETED').length}
           sub="active"
           href="/dispatch"
         />
@@ -647,6 +648,13 @@ type CampaignListItem = {
   status: string | null;
 };
 
+type CampaignListError = {
+  ok: false;
+  message: string;
+};
+
+type CampaignListResponse = CampaignListItem[] | CampaignListError;
+
 function KpiBox({
   label,
   count,
@@ -740,4 +748,3 @@ function KpiBox({
     </Link>
   );
 }
-
