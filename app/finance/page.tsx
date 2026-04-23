@@ -2,7 +2,7 @@
 
 import useSWR, { mutate as globalMutate } from 'swr';
 import { useCallback, useMemo, useState } from 'react';
-import type { V2FinanceOverviewFeed, V2FinancePlan } from '@/lib/v2/types';
+import type { V2FinanceOverviewFeed, V2FinancePlan, V2RevenueStreamStatus } from '@/lib/v2/types';
 
 const fetcher = async (url: string): Promise<V2FinanceOverviewFeed> => {
   const res = await fetch(url);
@@ -31,12 +31,44 @@ function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+async function pingLead(stream: string) {
+  await fetch('/api/v2/revenue-streams/status', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stream }),
+  });
+  await globalMutate('/api/v2/revenue-streams/status');
+}
+
+const STREAM_STATUS_COLORS: Record<string, string> = {
+  active:           'green',
+  idle:             'blue',
+  paused:           'amber',
+  'needs-attention': 'red',
+};
+
 export default function FinancePage() {
   const { data, error, isLoading } = useSWR<V2FinanceOverviewFeed>(
     '/api/v2/finance/overview',
     fetcher,
     { refreshInterval: 30_000 }
   );
+
+  const { data: streamData } = useSWR<{ streams: V2RevenueStreamStatus[] }>(
+    '/api/v2/revenue-streams/status',
+    (url: string) => fetch(url).then((r) => r.json()),
+    { refreshInterval: 60_000 }
+  );
+
+  const streamStatusMap = useMemo(() => {
+    const map = new Map<string, V2RevenueStreamStatus>();
+    for (const s of streamData?.streams ?? []) {
+      map.set(s.stream.toLowerCase(), s);
+    }
+    return map;
+  }, [streamData]);
+
+  const [pinging, setPinging] = useState<string | null>(null);
 
   const metrics = useMemo(() => {
     if (!data) return null;
@@ -403,10 +435,23 @@ export default function FinancePage() {
             <div className="card-title">Income Streams</div>
             {allStreams.map((src) => {
               const isPlaceholder = src.id.startsWith('placeholder-');
+              const streamStatus = streamStatusMap.get(src.source.toLowerCase());
+              const statusLabel  = streamStatus?.status ?? (isPlaceholder ? 'idle' : 'active');
+              const badgeColor   = STREAM_STATUS_COLORS[statusLabel] ?? 'blue';
+              const isPinging    = pinging === src.source;
+              const wasPinged    = !!streamStatus?.requestedAt;
               return (
-                <div key={src.id} className="finance-row" style={isPlaceholder ? { opacity: 0.7 } : undefined}>
+                <div key={src.id} className="finance-row" style={isPlaceholder ? { opacity: 0.75 } : undefined}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="finance-name">{src.source}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span className="finance-name">{src.source}</span>
+                      <span className={`badge ${badgeColor}`}>{statusLabel}</span>
+                      {streamStatus?.note && (
+                        <span style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                          {streamStatus.note}
+                        </span>
+                      )}
+                    </div>
                     <div className="finance-meta">
                       {src.interval}
                       {src.nextPayday ? ` · next payday ${src.nextPayday}` : ''}
@@ -414,8 +459,19 @@ export default function FinancePage() {
                       {isPlaceholder ? ' · not wired yet' : src.confirmed ? '' : ' · unverified'}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
                     <div className="finance-amount in">{fmtSigned(Math.abs(src.amount))}</div>
+                    <button
+                      className={`btn-sm${wasPinged ? ' primary' : ''}`}
+                      disabled={isPinging}
+                      onClick={async () => {
+                        setPinging(src.source);
+                        await pingLead(src.source);
+                        setPinging(null);
+                      }}
+                    >
+                      {isPinging ? '…' : wasPinged ? 'pinged' : 'ping lead'}
+                    </button>
                   </div>
                 </div>
               );
