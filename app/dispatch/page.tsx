@@ -748,7 +748,7 @@ function DispatchPageInner() {
           {campaigns.map((campaign) => {
             const isSelected = selectedCampaignId === campaign.id;
             const failedCount = campaign.tasks.filter((t) => t.status === 'FAILED').length;
-            const isDeleting = deleteCampaignMutation.isPending && deleteCampaignMutation.variables?.campaignId === campaign.id;
+            const isDeleting = deleteCampaignMutation.isLoading && deleteCampaignMutation.variables?.campaignId === campaign.id;
             return (
               <div
                 key={campaign.id}
@@ -782,7 +782,7 @@ function DispatchPageInner() {
                         e.stopPropagation();
                         trophyCampaignMutation.mutate({ campaignId: campaign.id });
                       }}
-                      disabled={trophyCampaignMutation.isPending || campaign.status === 'COMPLETED'}
+                      disabled={trophyCampaignMutation.isLoading || campaign.status === 'COMPLETED'}
                       title={campaign.status === 'COMPLETED' ? 'Already in the Trophy Case' : 'Move to Trophy Case'}
                       aria-label="Move campaign to Trophy Case"
                       className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
