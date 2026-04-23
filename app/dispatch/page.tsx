@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Trash2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
@@ -115,6 +116,26 @@ async function fetchDispatchCampaigns(): Promise<DispatchCampaign[]> {
   const res = await fetch('/api/dispatch/campaigns', { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to load dispatch campaigns');
   return res.json();
+}
+
+async function deleteDispatchCampaign(payload: { campaignId: string; reason: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: payload.reason }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { message?: string })?.message ?? 'Failed to delete campaign');
+  return body;
+}
+
+async function trophyDispatchCampaign(payload: { campaignId: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/trophy`, {
+    method: 'POST',
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { message?: string })?.message ?? 'Failed to trophy campaign');
+  return body;
 }
 
 async function createDispatchCampaign(payload: { title: string; description?: string }) {
@@ -454,6 +475,21 @@ function DispatchPageInner() {
     },
   });
 
+  const deleteCampaignMutation = useMutation({
+    mutationFn: deleteDispatchCampaign,
+    onSuccess: async (_, vars) => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+      if (selectedCampaignId === vars.campaignId) setSelectedCampaignId('');
+    },
+  });
+
+  const trophyCampaignMutation = useMutation({
+    mutationFn: trophyDispatchCampaign,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+    },
+  });
+
   const createTaskMutation = useMutation({
     mutationFn: createDispatchTask,
     onSuccess: async () => {
@@ -712,24 +748,68 @@ function DispatchPageInner() {
           {campaigns.map((campaign) => {
             const isSelected = selectedCampaignId === campaign.id;
             const failedCount = campaign.tasks.filter((t) => t.status === 'FAILED').length;
+            const isDeleting = deleteCampaignMutation.isLoading && deleteCampaignMutation.variables?.campaignId === campaign.id;
             return (
-              <button
+              <div
                 key={campaign.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedCampaignId(isSelected ? '' : campaign.id)}
-                className="rounded-2xl p-4 text-left transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedCampaignId(isSelected ? '' : campaign.id);
+                  }
+                }}
+                className="rounded-2xl p-4 text-left transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1"
                 style={{
                   background: isSelected ? 'var(--card)' : 'var(--muted)',
                   border: isSelected ? '2px solid var(--color-cyan)' : '1px solid var(--card-border)',
+                  opacity: isDeleting ? 0.5 : 1,
                 }}
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold truncate" style={{ color: 'var(--foreground)' }}>
                     {campaign.title}
                   </p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold flex-shrink-0 ${statusTone(campaign.status)}`}>
-                    {campaign.status}
-                  </span>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(campaign.status)}`}>
+                      {campaign.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        trophyCampaignMutation.mutate({ campaignId: campaign.id });
+                      }}
+                      disabled={trophyCampaignMutation.isLoading || campaign.status === 'COMPLETED'}
+                      title={campaign.status === 'COMPLETED' ? 'Already in the Trophy Case' : 'Move to Trophy Case'}
+                      aria-label="Move campaign to Trophy Case"
+                      className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
+                      style={{ background: 'transparent', color: '#b8902a' }}
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const reason = window.prompt(
+                          `Delete campaign "${campaign.title}"?\n\nWhy are you deleting it? (leave blank to skip)`,
+                          '',
+                        );
+                        if (reason === null) return; // cancelled
+                        deleteCampaignMutation.mutate({ campaignId: campaign.id, reason });
+                      }}
+                      disabled={isDeleting}
+                      title="Delete campaign (logged to Activity)"
+                      aria-label="Delete campaign"
+                      className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
+                      style={{ background: 'transparent', color: 'var(--foreground)', opacity: 0.5 }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
                 {campaign.description && (
                   <p className="mt-1 text-xs line-clamp-1" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
@@ -753,7 +833,7 @@ function DispatchPageInner() {
                     </a>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

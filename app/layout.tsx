@@ -20,6 +20,8 @@ export const viewport: Viewport = {
 };
 
 const navItems = [
+  // Sidebar anchor — directly under the Mothership logo.
+  { label: 'Trophies', href: '/trophy' },
   { label: 'Today', href: '/today' },
   { label: 'Iceman', href: '/iceman' },
   { label: 'Tasks', href: '/tasks' },
@@ -27,12 +29,11 @@ const navItems = [
   { label: 'Email', href: '/email' },
   { label: 'Finance', href: '/finance' },
   { label: 'Activity (Log)', href: '/activity' },
-  { label: 'Ruby', href: '/ruby' },
+  { label: 'Drizzy', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
   { label: 'Dispatch', href: '/dispatch' },
   { label: "Marvin's Room", href: '/marvin' },
   { label: 'Projects', href: '/projects' },
-  { label: 'Trophies', href: '/trophy' },
   { label: 'Marco', href: '/marco' },
   { label: 'Claude', href: '/claude' },
 ];

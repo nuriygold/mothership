@@ -174,6 +174,13 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
         celebrateTimer.current = setTimeout(() => setCelebrate(false), 1800);
         if (!wasAllDone) {
           onAllComplete?.();
+          // Fire-and-forget: persists a trophy for today so it shows up on the Trophy page.
+          // Server endpoint is idempotent per date, so retries/re-renders are safe.
+          void fetch('/api/v2/trophy/anchor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: todayDate() }),
+          }).catch(() => { /* offline is fine — will retry on next flip if still all-done */ });
         }
       }
       return next;

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Trophy, ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Award } from 'lucide-react';
+import { Trophy, ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Award, Undo2, HeartPulse } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -11,6 +11,18 @@ type TrophyTask = {
   id: string;
   title: string;
   priority: string;
+  completedAt: string;
+};
+
+type AnchorTrophy = {
+  id: string;
+  date: string;       // YYYY-MM-DD
+  completedAt: string;
+};
+
+type CampaignTrophy = {
+  id: string;
+  title: string;
   completedAt: string;
 };
 
@@ -25,10 +37,12 @@ type TrophyData = {
   weekOffset: number;
   weekStart: string;
   weekEnd: string;
-  totals: { tasks: number; commands: number };
+  totals: { tasks: number; commands: number; anchors?: number; campaigns?: number };
   byDay: Record<string, TrophyTask[]>;
   tasks: TrophyTask[];
   commands: TrophyCommand[];
+  anchors?: AnchorTrophy[];
+  campaigns?: CampaignTrophy[];
 };
 
 const PRIORITY_BADGE: Record<string, { label: string; bg: string; color: string; bar: string }> = {
@@ -82,7 +96,7 @@ function Skeleton() {
 export default function TrophyPage() {
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const { data, isLoading } = useSWR<TrophyData>(
+  const { data, isLoading, mutate } = useSWR<TrophyData>(
     `/api/v2/trophy?week=${weekOffset}`,
     fetcher,
     { revalidateOnFocus: false }
@@ -94,26 +108,44 @@ export default function TrophyPage() {
   }, [data]);
 
   const weekLabel = data ? fmtWeekLabel(data.weekStart, data.weekEnd, weekOffset) : '…';
-  const total = (data?.totals.tasks ?? 0) + (data?.totals.commands ?? 0);
+  const anchors = data?.anchors ?? [];
+  const campaignTrophies = data?.campaigns ?? [];
+  const total = (data?.totals.tasks ?? 0) + (data?.totals.commands ?? 0) + anchors.length + campaignTrophies.length;
+
+  // ── Undo a task trophy (send it back to the pool) ────────────────────────────
+  const [undoing, setUndoing] = useState<Set<string>>(new Set());
+  const undoTask = async (taskId: string) => {
+    setUndoing((p) => new Set(p).add(taskId));
+    try {
+      await fetch(`/api/v2/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'defer' }),
+      });
+      await mutate();
+    } finally {
+      setUndoing((p) => { const n = new Set(p); n.delete(taskId); return n; });
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl mx-auto">
-      {/* Header */}
+      {/* Header — gold, matches the Trophy icon used elsewhere (Today/quick actions) */}
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: '#d0f0ff', border: '1px solid #90d8f0' }}
+              style={{ background: 'rgba(184,144,42,0.12)', border: '1px solid rgba(184,144,42,0.45)' }}
             >
-              <Trophy className="w-5 h-5" style={{ color: '#0470a0' }} />
+              <Trophy className="w-5 h-5" style={{ color: '#b8902a' }} />
             </div>
-            <h1 style={{ fontFamily: 'var(--font-rajdhani)', fontSize: '22px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text)' }}>
-              Trophy Collection
+            <h1 style={{ fontFamily: 'var(--font-rajdhani)', fontSize: '22px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#b8902a' }}>
+              Trophies
             </h1>
           </div>
           <p className="text-xs" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-            Your wins, week by week
+            The trophy case · every win, week by week
           </p>
         </div>
         <Link
@@ -123,22 +155,6 @@ export default function TrophyPage() {
         >
           ← Today
         </Link>
-      </div>
-
-      {/* Drake — Trophies */}
-      <div
-        className="rounded-xl px-5 py-4"
-        style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid #90c8e0' }}
-      >
-        <p style={{ fontFamily: 'var(--font-dancing, "Dancing Script", cursive)', fontSize: '15px', lineHeight: '1.75', color: '#2a7898', fontStyle: 'italic' }}>
-          If I was doing this for you<br />
-          Then I have nothing left to prove, nah<br />
-          This for me, though<br />
-          I&apos;m just tryna stay alive and take care of my people<br />
-          And they don&apos;t have no award for that<br />
-          Trophies, trophies
-        </p>
-        <p className="mt-2 text-[10px] tracking-widest uppercase" style={{ color: '#90c0d8', fontFamily: 'var(--font-mono)' }}>— Drake</p>
       </div>
 
       {/* Week navigator */}
@@ -209,55 +225,149 @@ export default function TrophyPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {sortedDays.map((day) => {
-            const dayTasks = data!.byDay[day];
-            return (
-              <div key={day}>
-                <div className="flex items-center gap-2 mb-2">
-                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    {fmtDayHeader(day)}
-                  </p>
-                  <span
-                    className="rounded px-2 py-0.5 text-[10px] font-semibold"
-                    style={{ background: '#d0f0ff', color: '#0470a0', border: '1px solid #90d8f0', fontFamily: 'var(--font-mono)' }}
-                  >
-                    {dayTasks.length}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #90c8e0', borderRadius: '12px', overflow: 'hidden' }}>
-                  {dayTasks.map((task, i) => {
-                    const badge = PRIORITY_BADGE[task.priority.toUpperCase()] ?? PRIORITY_BADGE.MEDIUM;
-                    return (
-                      <div
-                        key={task.id}
-                        className="flex items-center gap-3 px-4 py-3"
-                        style={{
-                          borderBottom: i < dayTasks.length - 1 ? '1px solid var(--bg3)' : 'none',
-                        }}
-                      >
-                        <div style={{ width: 3, borderRadius: 2, alignSelf: 'stretch', minHeight: 32, background: badge.bar, flexShrink: 0 }} />
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#0470a0' }} />
-                        <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--text)' }}>
-                          {task.title}
-                        </p>
-                        <span
-                          className="rounded px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
-                          style={{ background: badge.bg, color: badge.color, fontFamily: 'var(--font-mono)' }}
+          {/* ── Trophy Case — completed tasks by day ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#b8902a', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700 }}>
+                Trophy Case
+              </p>
+              <span
+                className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                style={{ background: 'rgba(184,144,42,0.12)', color: '#b8902a', border: '1px solid rgba(184,144,42,0.35)', fontFamily: 'var(--font-mono)' }}
+              >
+                {data?.totals.tasks ?? 0}
+              </span>
+            </div>
+            {sortedDays.map((day) => {
+              const dayTasks = data!.byDay[day];
+              return (
+                <div key={day} className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                      {fmtDayHeader(day)}
+                    </p>
+                    <span
+                      className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                      style={{ background: '#d0f0ff', color: '#0470a0', border: '1px solid #90d8f0', fontFamily: 'var(--font-mono)' }}
+                    >
+                      {dayTasks.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #90c8e0', borderRadius: '12px', overflow: 'hidden' }}>
+                    {dayTasks.map((task, i) => {
+                      const badge = PRIORITY_BADGE[task.priority.toUpperCase()] ?? PRIORITY_BADGE.MEDIUM;
+                      const isUndoing = undoing.has(task.id);
+                      return (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-3 px-4 py-3"
+                          style={{
+                            borderBottom: i < dayTasks.length - 1 ? '1px solid var(--bg3)' : 'none',
+                          }}
                         >
-                          {badge.label}
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', flexShrink: 0, color: 'var(--text3)' }}>
-                          {fmtTime(task.completedAt)}
-                        </span>
-                      </div>
-                    );
-                  })}
+                          <div style={{ width: 3, borderRadius: 2, alignSelf: 'stretch', minHeight: 32, background: badge.bar, flexShrink: 0 }} />
+                          <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#b8902a' }} />
+                          <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--text)' }}>
+                            {task.title}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => undoTask(task.id)}
+                            disabled={isUndoing}
+                            title="Put this back in the pool"
+                            aria-label="Undo — send this task back to the pool"
+                            className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
+                            style={{ background: 'transparent', border: '1px solid var(--border-c)', color: 'var(--text3)' }}
+                          >
+                            <Undo2 className="w-3 h-3" />
+                          </button>
+                          <span
+                            className="rounded px-2 py-0.5 text-[10px] font-medium flex-shrink-0"
+                            style={{ background: badge.bg, color: badge.color, fontFamily: 'var(--font-mono)' }}
+                          >
+                            {badge.label}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', flexShrink: 0, color: 'var(--text3)' }}>
+                            {fmtTime(task.completedAt)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
 
-          {/* Gateway commands */}
+          {/* ── Daily Anchors trophies — awarded when all 6 anchors complete in a day ── */}
+          {anchors.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#b8902a', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700 }}>
+                  Daily Anchors
+                </p>
+                <span
+                  className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                  style={{ background: 'rgba(184,144,42,0.12)', color: '#b8902a', border: '1px solid rgba(184,144,42,0.35)', fontFamily: 'var(--font-mono)' }}
+                >
+                  {anchors.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(184,144,42,0.35)', borderRadius: '12px', overflow: 'hidden' }}>
+                {anchors.map((a, i) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center gap-3 px-4 py-3"
+                    style={{ borderBottom: i < anchors.length - 1 ? '1px solid var(--bg3)' : 'none' }}
+                  >
+                    <HeartPulse className="w-4 h-4 flex-shrink-0" style={{ color: '#b8902a' }} />
+                    <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--text)' }}>
+                      All six daily anchors complete
+                    </p>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', flexShrink: 0, color: 'var(--text3)' }}>
+                      {fmtDayHeader(a.date)} · {fmtTime(a.completedAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Campaigns trophied from Dispatch ── */}
+          {campaignTrophies.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#b8902a', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700 }}>
+                  Campaigns
+                </p>
+                <span
+                  className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                  style={{ background: 'rgba(184,144,42,0.12)', color: '#b8902a', border: '1px solid rgba(184,144,42,0.35)', fontFamily: 'var(--font-mono)' }}
+                >
+                  {campaignTrophies.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(184,144,42,0.35)', borderRadius: '12px', overflow: 'hidden' }}>
+                {campaignTrophies.map((c, i) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 px-4 py-3"
+                    style={{ borderBottom: i < campaignTrophies.length - 1 ? '1px solid var(--bg3)' : 'none' }}
+                  >
+                    <Trophy className="w-4 h-4 flex-shrink-0" style={{ color: '#b8902a' }} />
+                    <p className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--text)' }}>
+                      {c.title}
+                    </p>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', flexShrink: 0, color: 'var(--text3)' }}>
+                      {fmtTime(c.completedAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Gateway commands ── */}
           {(data?.commands ?? []).length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -292,6 +402,39 @@ export default function TrophyPage() {
           )}
         </div>
       )}
+
+      {/* ── Drake — bottom of the case ── matches the Today page affirmation style. */}
+      <div
+        className="rounded-xl px-5 py-5 mt-2"
+        style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(184,144,42,0.35)' }}
+      >
+        <p
+          style={{
+            fontFamily: 'var(--font-script)',
+            fontSize: '29px',
+            fontWeight: 600,
+            lineHeight: 1.25,
+            color: 'var(--ice-gold)',
+            margin: 0,
+            textShadow: '0 1px 2px rgba(184,144,42,0.18)',
+          }}
+        >
+          Keep building the case. Add a win. Come back tomorrow.
+        </p>
+        <p
+          className="mt-3"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: 'var(--text3)',
+            opacity: 0.8,
+          }}
+        >
+          — Drake · 6 God energy
+        </p>
+      </div>
     </div>
   );
 }
