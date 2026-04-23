@@ -9,14 +9,16 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // ─── Category logic ────────────────────────────────────────────────────────────
 
-type Category = 'All' | 'Tasks' | 'Email' | 'Bots' | 'Campaigns' | 'Finance';
+type Category = 'All' | 'Tasks' | 'Email' | 'Bots' | 'Campaigns' | 'Finance' | 'Calendar' | 'Wellness';
 
-const CATEGORIES: Category[] = ['All', 'Tasks', 'Email', 'Bots', 'Campaigns', 'Finance'];
+const CATEGORIES: Category[] = ['All', 'Tasks', 'Email', 'Bots', 'Campaigns', 'Finance', 'Calendar', 'Wellness'];
 
 function categorise(evt: V2ActivityItem): Exclude<Category, 'All'> {
   const hay = `${evt.eventType} ${evt.description} ${evt.sourceIntegration}`.toLowerCase();
-  if (/payment|invoice|bill|charge|receipt|transaction|expense|payable|revenue|subscription/.test(hay)) return 'Finance';
-  if (/campaign|dispatch|execution|lane/.test(hay)) return 'Campaigns';
+  if (/wellness|anchor|water|steps|workout|prayer|journal|vitamin/.test(hay)) return 'Wellness';
+  if (/calendar|event|meeting|rsvp|invite|appointment/.test(hay)) return 'Calendar';
+  if (/payment|invoice|bill|charge|receipt|transaction|expense|payable|revenue|subscription|finance|plan/.test(hay)) return 'Finance';
+  if (/campaign|dispatch|execution|lane|trophied/.test(hay)) return 'Campaigns';
   if (/email|gmail|zoho|mail|inbox|draft|reply/.test(hay)) return 'Email';
   if (/task|issue|pr|pull.?request|ticket|linear/.test(hay)) return 'Tasks';
   if (evt.actor && evt.actor !== 'System' && evt.actor !== '') return 'Bots';
@@ -29,6 +31,8 @@ const DOT_COLOR: Record<Exclude<Category, 'All'>, string> = {
   Email:     '#035080',
   Tasks:     '#40c8f0',
   Bots:      '#0560a0',
+  Calendar:  '#6b46c1',
+  Wellness:  '#b8902a',
 };
 
 const BADGE_STYLE: Record<Exclude<Category, 'All'>, { bg: string; color: string }> = {
@@ -37,6 +41,8 @@ const BADGE_STYLE: Record<Exclude<Category, 'All'>, { bg: string; color: string 
   Email:     { bg: '#c8ecfa', color: '#035080' },
   Tasks:     { bg: '#e0f4fc', color: '#2a7898' },
   Bots:      { bg: '#b8e4f8', color: '#0560a0' },
+  Calendar:  { bg: '#ece4fa', color: '#6b46c1' },
+  Wellness:  { bg: 'rgba(184,144,42,0.15)', color: '#b8902a' },
 };
 
 // ─── Relative time ─────────────────────────────────────────────────────────────

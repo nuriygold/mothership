@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, Snowflake, Network, Brain, Globe, Trophy } from 'lucide-react';
+import { LogOut, Snowflake, Network, Brain, Globe, Gem } from 'lucide-react';
 import Link from 'next/link';
 
 /** Inline ice-cube logo — isometric cube with a frosty highlight. */
@@ -33,9 +33,9 @@ function IceCubeLogo({ size = 22 }: { size?: number }) {
 const HEADER_NAV: Array<{ href: string; label: string; icon: React.ElementType; gold?: boolean }> = [
   { href: '/iceman', label: 'Iceman', icon: Snowflake },
   { href: '/marvin', label: "Marvin's Room", icon: Network },
+  { href: '/ruby',   label: 'Drizzy', icon: Gem },
   { href: '/claude', label: 'Claude', icon: Brain },
-  { href: '/marco', label: 'Marco', icon: Globe },
-  { href: '/trophy', label: 'Trophies', icon: Trophy, gold: true },
+  { href: '/marco',  label: 'Marco', icon: Globe },
 ];
 
 export function Header() {

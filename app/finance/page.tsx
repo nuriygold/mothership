@@ -380,27 +380,46 @@ export default function FinancePage() {
         )}
       </div>
 
-      {/* Income sources */}
-      {data.incomeSources.length > 0 && (
-        <div className="card">
-          <div className="card-title">Income sources</div>
-          {data.incomeSources.map((src) => (
-            <div key={src.id} className="finance-row">
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="finance-name">{src.source}</div>
-                <div className="finance-meta">
-                  {src.interval}
-                  {src.nextPayday ? ` · next payday ${src.nextPayday}` : ''}
-                  {src.confirmed ? '' : ' · unverified'}
+      {/* Income Streams — live rows from incomeSources, plus these placeholder
+          rails so the streams are visible on the page and ready to wire. */}
+      {(() => {
+        const PLACEHOLDER_STREAMS = [
+          { id: 'placeholder-stubhub',   source: 'StubHub',        amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-wellstar',  source: 'Wellstar',       amount: 0, interval: 'monthly',  nextPayday: null, confirmed: false },
+          { id: 'placeholder-nuriy',     source: 'Nuriy',          amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-truckstop', source: 'truckstop.com',  amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+        ] as const;
+        const liveSourceNames = new Set(data.incomeSources.map((s) => s.source.toLowerCase()));
+        const unseen = PLACEHOLDER_STREAMS.filter((p) => !liveSourceNames.has(p.source.toLowerCase()));
+        const allStreams: Array<{ id: string; source: string; amount: number; interval: string; nextPayday: string | null; confirmed: boolean }> = [
+          ...data.incomeSources,
+          ...unseen,
+        ];
+        if (allStreams.length === 0) return null;
+        return (
+          <div className="card">
+            <div className="card-title">Income Streams</div>
+            {allStreams.map((src) => {
+              const isPlaceholder = src.id.startsWith('placeholder-');
+              return (
+                <div key={src.id} className="finance-row" style={isPlaceholder ? { opacity: 0.7 } : undefined}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="finance-name">{src.source}</div>
+                    <div className="finance-meta">
+                      {src.interval}
+                      {src.nextPayday ? ` · next payday ${src.nextPayday}` : ''}
+                      {isPlaceholder ? ' · not wired yet' : src.confirmed ? '' : ' · unverified'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="finance-amount in">{fmtSigned(Math.abs(src.amount))}</div>
+                  </div>
                 </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="finance-amount in">{fmtSigned(Math.abs(src.amount))}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* System status footer */}
       <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>

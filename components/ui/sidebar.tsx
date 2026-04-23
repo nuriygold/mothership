@@ -9,10 +9,10 @@ import {
   Mail,
   DollarSign,
   Activity,
-  Sparkles,
   Send,
   Telescope,
   FolderKanban,
+  Trophy,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -23,19 +23,21 @@ interface SidebarItem {
 
 const ICON_MAP: Record<string, React.ElementType> = {
   '/today':    Sun,
+  '/trophy':   Trophy,
   '/tasks':    ListChecks,
   '/bots':     Bot,
   '/email':    Mail,
   '/finance':  DollarSign,
   '/activity': Activity,
-  '/ruby':     Sparkles,
   '/vision':   Telescope,
   '/dispatch': Send,
   '/projects': FolderKanban,
 };
 
 // Routes that live in the top header instead of the desktop sidebar.
-const HEADER_ROUTES = new Set(['/iceman', '/marvin', '/claude', '/marco', '/trophy']);
+// Drizzy (Ruby) moved up here with the personas. Trophies moved out — it now
+// anchors the sidebar directly under the logo.
+const HEADER_ROUTES = new Set(['/iceman', '/marvin', '/ruby', '/claude', '/marco']);
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
   const pathname = usePathname();
