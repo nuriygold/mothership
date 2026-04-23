@@ -28,7 +28,7 @@ function LoginForm() {
       });
 
       if (res.ok) {
-        const from = params.get('from') ?? '/today';
+        const from = params?.get('from') ?? '/today';
         router.push(from as Parameters<typeof router.push>[0]);
         router.refresh();
       } else {
