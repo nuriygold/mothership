@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { REVENUE_STREAMS, streamByKey } from '@/lib/v2/revenue-streams';
+import { getStreamDefs } from '@/lib/v2/revenue-streams-server';
 import { publishV2Event } from '@/lib/v2/event-bus';
 import { sendTelegramMessage } from '@/lib/services/telegram';
 import { TaskPriority, TaskStatus } from '@prisma/client';
@@ -19,10 +19,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'title is required' }, { status: 400 });
   }
 
+  const defs = await getStreamDefs();
   const normalized = rawStream.toLowerCase().replace(/\s+/g, '-');
   const def =
-    streamByKey(normalized) ??
-    REVENUE_STREAMS.find((s) => s.displayName.toLowerCase() === rawStream.toLowerCase());
+    defs.find((s) => s.key === normalized) ??
+    defs.find((s) => s.displayName.toLowerCase() === rawStream.toLowerCase());
 
   if (!def) {
     return NextResponse.json({ error: `Unknown stream: ${rawStream}` }, { status: 404 });

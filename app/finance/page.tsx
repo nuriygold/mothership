@@ -719,6 +719,9 @@ type StreamStatus = {
   note: string | null;
   requestedAt: string | null;
   updatedAt: string | null;
+  mtd: string | null;
+  ytd: string | null;
+  snapshotUpdated: string | null;
 };
 
 const STATUS_URL = '/api/v2/revenue-streams/status';
@@ -816,6 +819,11 @@ function IncomeStreamsRail() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 5, flexShrink: 0, alignItems: 'center' }}>
+                {s.mtd && (
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', fontFamily: 'var(--font-rajdhani)', letterSpacing: 0.5 }}>
+                    {s.mtd}
+                  </span>
+                )}
                 <span
                   className="badge"
                   style={{
