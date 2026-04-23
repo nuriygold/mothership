@@ -412,6 +412,7 @@ function buildIssueBody(
 
 function routeTaskToBot(task: { title: string; description?: string | null }): string {
   const haystack = `${task.title} ${task.description ?? ''}`.toLowerCase();
+  if (haystack.match(/code|debug|bug|fix|refactor|implement|terminal|cli|shell|script|build|deploy|compile|test suite|stack trace|repo|pull request|pr /)) return 'iceman';
   if (haystack.match(/analyz|audit|verif|diagnos|investigat|pattern|architecture|dashboard|finance|financial|budget|cash.?flow|debt|invest|ledger|invoice|expense|payment|bill|liquidity|forecast|leverage|reconcil/)) return 'emerald';
   if (haystack.match(/email|reply|message|copy|comms|outreach|personal|social|relationship|schedule/)) return 'ruby';
   if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
@@ -465,6 +466,7 @@ export async function recommendBotForCampaign(campaignId: string) {
 
   const botNames: Record<string, string> = {
     main: 'Adrian',
+    iceman: 'Iceman',
     emerald: 'Emerald',
     ruby: 'Ruby',
     adobe: 'Adobe Pettaway',
