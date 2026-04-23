@@ -380,18 +380,20 @@ export default function FinancePage() {
         )}
       </div>
 
-      {/* Income Streams — live rows from incomeSources, plus these placeholder
-          rails so the streams are visible on the page and ready to wire. */}
+      {/* Income Streams — live rows from incomeSources, plus the Working Agency
+          revenue stream rails so each stream is visible and mapped to its lead. */}
       {(() => {
         const PLACEHOLDER_STREAMS = [
-          { id: 'placeholder-stubhub',   source: 'StubHub',        amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
-          { id: 'placeholder-wellstar',  source: 'Wellstar',       amount: 0, interval: 'monthly',  nextPayday: null, confirmed: false },
-          { id: 'placeholder-nuriy',     source: 'Nuriy',          amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
-          { id: 'placeholder-truckstop', source: 'truckstop.com',  amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-shopify',       source: 'Shopify',        lead: 'Adrian',                    amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-tiktok',        source: 'TikTok',         lead: 'Ruby',                      amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-nuriy-product', source: 'Nuriy Product',  lead: 'Iceman (Dev) · Emerald (Ops/QA)', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-truckstop',     source: 'Truckstop.com',  lead: 'Adrian',                    amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-notary',        source: 'Notary Services',lead: 'Ruby',                      amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
         ] as const;
         const liveSourceNames = new Set(data.incomeSources.map((s) => s.source.toLowerCase()));
         const unseen = PLACEHOLDER_STREAMS.filter((p) => !liveSourceNames.has(p.source.toLowerCase()));
-        const allStreams: Array<{ id: string; source: string; amount: number; interval: string; nextPayday: string | null; confirmed: boolean }> = [
+        type StreamRow = { id: string; source: string; amount: number; interval: string; nextPayday: string | null; confirmed: boolean; lead?: string };
+        const allStreams: StreamRow[] = [
           ...data.incomeSources,
           ...unseen,
         ];
@@ -408,6 +410,7 @@ export default function FinancePage() {
                     <div className="finance-meta">
                       {src.interval}
                       {src.nextPayday ? ` · next payday ${src.nextPayday}` : ''}
+                      {src.lead ? ` · lead ${src.lead}` : ''}
                       {isPlaceholder ? ' · not wired yet' : src.confirmed ? '' : ' · unverified'}
                     </div>
                   </div>
