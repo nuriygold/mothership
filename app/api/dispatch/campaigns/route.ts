@@ -7,8 +7,14 @@ export async function GET() {
   try {
     const campaigns = await listDispatchCampaigns();
     return NextResponse.json(campaigns);
-  } catch {
-    return NextResponse.json([]);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to load dispatch campaigns',
+      },
+      { status: 500 }
+    );
   }
 }
 
