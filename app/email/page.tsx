@@ -51,10 +51,10 @@ type AgentKey = 'adrian' | 'ruby' | 'emerald' | 'adobe' | 'anchor';
 
 const AGENTS: { key: AgentKey; name: string; tagline: string; color: string }[] = [
   { key: 'adrian',  name: 'Adrian',  tagline: 'Urgent triage, admin, marketing',  color: '#ef4444' },
-  { key: 'ruby',    name: 'Ruby',    tagline: 'People, replies, relationships',   color: '#a78bfa' },
-  { key: 'emerald', name: 'Emerald', tagline: 'Events, opportunities, calendar',  color: '#10b981' },
-  { key: 'adobe',   name: 'Adobe',   tagline: 'Bills, finance, receipts',         color: '#f59e0b' },
-  { key: 'anchor',  name: 'Anchor',  tagline: 'Deep research, long-form work',    color: '#0ea5e9' },
+  { key: 'ruby',    name: 'Ruby',    tagline: 'Events, opportunities, Calendar',  color: '#a78bfa' },
+  { key: 'emerald', name: 'Emerald', tagline: 'Bills, finances, receipts',        color: '#10b981' },
+  { key: 'anchor',  name: 'Anchor',  tagline: 'People, replies, relationships',   color: '#0ea5e9' },
+  { key: 'adobe',   name: 'Adobe',   tagline: 'Deep research, long-form work',    color: '#f59e0b' },
 ];
 
 type AgentPickerTarget = { emailIds: string[]; bucket: EmailBucket | null };
@@ -200,17 +200,16 @@ export default function EmailPage() {
           summaries,
         }),
       });
-      const json = res.ok ? await res.json() : null;
-      if (json?.ok) {
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.ok) {
         const agent = AGENTS.find(a => a.key === agentPickerKey)?.name ?? agentPickerKey;
         setAgentPickerResult(`Sent ${emailIds.length} email${emailIds.length !== 1 ? 's' : ''} to ${agent}.`);
         setTimeout(() => { setAgentPickerTarget(null); setAgentPickerResult(null); }, 900);
       } else {
-        const err = json?.error ?? 'Failed to send.';
-        setAgentPickerResult(err);
+        setAgentPickerResult(json?.error ?? `Failed to send (HTTP ${res.status}).`);
       }
-    } catch {
-      setAgentPickerResult('Network error — not sent.');
+    } catch (err) {
+      setAgentPickerResult(err instanceof Error ? `Network error — ${err.message}` : 'Network error — not sent.');
     } finally {
       setAgentPickerSending(false);
     }

@@ -28,7 +28,8 @@ const TASK_COMMANDS = [
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const COLUMN_ORDER: KanbanColumnKey[] = ['Active', 'Waiting', 'Blocked', 'Backlog', 'Done'];
+// Done tasks live in /trophy — they're archived, not shown in the main pool.
+const COLUMN_ORDER: KanbanColumnKey[] = ['Active', 'Waiting', 'Blocked', 'Backlog'];
 
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -134,6 +135,8 @@ export default function TasksPage() {
 
   const [timeFilter, setTimeFilter] = useState<TaskTimeFilter>('All');
   const [sort, setSort]             = useState<TaskSort>('Default');
+  // When set, only the matching status column is shown (hard filter from summary-bar chip click).
+  const [statusFilter, setStatusFilter] = useState<KanbanColumnKey | null>(null);
 
   // ── Search state ─────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -160,9 +163,15 @@ export default function TasksPage() {
     : 0;
   const grouped  = data ? groupIntoColumns(data, timeFilter, sort) : null;
 
+  // Columns visible right now. When statusFilter is set, narrow to that column.
+  // "Done" is only shown when explicitly requested via statusFilter (it's the archive).
+  const visibleColumns: KanbanColumnKey[] = statusFilter
+    ? [statusFilter]
+    : COLUMN_ORDER;
+
   // Flat list of all visible tasks for search
   const allTasks = grouped
-    ? COLUMN_ORDER.flatMap((col) => grouped[col])
+    ? visibleColumns.flatMap((col) => grouped[col])
     : [];
 
   const trimmedQuery  = searchQuery.trim().toLowerCase();
@@ -174,16 +183,15 @@ export default function TasksPage() {
   // Group search results by column for section headers
   const searchResultsByColumn: Partial<Record<KanbanColumnKey, V2TaskItem[]>> = {};
   if (searchActive && grouped) {
-    for (const col of COLUMN_ORDER) {
+    for (const col of visibleColumns) {
       const hits = grouped[col].filter((t) => t.title.toLowerCase().includes(trimmedQuery));
       if (hits.length > 0) searchResultsByColumn[col] = hits;
     }
   }
 
-  // ── Summary-bar column scroll ────────────────────────────────────────────────
+  // ── Summary-bar chip click → hard filter to that status (toggle off if same) ──
   const handleStatusClick = useCallback((col: KanbanColumnKey) => {
-    const el = boardRef.current?.querySelector(`[data-column="${col}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+    setStatusFilter((prev) => (prev === col ? null : col));
   }, []);
 
   // ── Modal callbacks ──────────────────────────────────────────────────────────
@@ -416,25 +424,42 @@ export default function TasksPage() {
         </div>
       ) : (
         /* ── Normal kanban board ── */
-        <div
-          ref={boardRef}
-          className="flex gap-4 overflow-x-auto pb-6 flex-1 min-h-0"
-          data-dnd-board="true"
-        >
-          {COLUMN_ORDER.map((col) => (
-            <KanbanColumn
-              key={col}
-              title={col}
-              tasks={grouped[col]}
-              visionLinkedIds={visionLinkedIds}
-              onTakeAction={setActionModalTask}
-              onCardClick={setDetailModalTask}
-              selectMode={selectMode}
-              selectedIds={selectedIds}
-              onToggleSelect={handleToggleSelect}
-            />
-          ))}
-        </div>
+        <>
+          {statusFilter && (
+            <div
+              className="flex items-center gap-2 text-xs -mt-2"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              <span>Showing only <strong style={{ color: 'var(--foreground)' }}>{statusFilter}</strong></span>
+              <button
+                onClick={() => setStatusFilter(null)}
+                className="rounded-full px-2 py-0.5 transition-opacity hover:opacity-70"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+          <div
+            ref={boardRef}
+            className="flex gap-4 overflow-x-auto pb-6 flex-1 min-h-0"
+            data-dnd-board="true"
+          >
+            {visibleColumns.map((col) => (
+              <KanbanColumn
+                key={col}
+                title={col}
+                tasks={grouped[col]}
+                visionLinkedIds={visionLinkedIds}
+                onTakeAction={setActionModalTask}
+                onCardClick={setDetailModalTask}
+                selectMode={selectMode}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {/* ── Floating bulk action bar ── */}
