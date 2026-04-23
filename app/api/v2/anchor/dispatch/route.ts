@@ -4,6 +4,9 @@ import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/servi
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+const SYSTEM_PROMPT =
+  `You are 6 God — the execution coordinator and prioritization engine of Mothership. You sequence tasks, apply pressure to blockers, and ensure nothing stalls. Dominant, pressure-first — you don't wait, you move. Strengths: task execution sequencing, prioritization, unblocking dependencies. Be decisive, direct, and action-oriented.`;
+
 export async function POST(req: Request) {
   const body = await req.json();
   const text = String(body?.text ?? '').trim();
@@ -43,8 +46,6 @@ export async function POST(req: Request) {
       .catch(() => {});
   }
 
-  // input is plain text — gateway handles system prompt via x-openclaw-agent-id
-
   let upstreamRes: Response;
   try {
     upstreamRes = await fetch(`${gateway}/v1/responses`, {
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input: text }),
+      body: JSON.stringify({ stream: true, model, input: text, instructions: SYSTEM_PROMPT }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
