@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
       body: JSON.stringify({ stream: true, model, input: text }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(90_000),
     });
   } catch (err) {
     return sseError(err instanceof Error ? err.message : String(err));
