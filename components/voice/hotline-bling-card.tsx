@@ -142,6 +142,12 @@ export function HotlineBlingCard() {
   // ── Azure VoiceLive WebSocket path ──────────────────────────────────────────
 
   const connectAzureWs = useCallback(async () => {
+    // Prime the pages/api handler so the server-side WebSocket upgrade hook is attached.
+    const relayBootstrap = await fetch('/api/voice/realtime');
+    if (!relayBootstrap.ok) {
+      throw new Error(`Voice relay unavailable (${relayBootstrap.status})`);
+    }
+
     let mic: MediaStream;
     try {
       mic = await navigator.mediaDevices.getUserMedia({
