@@ -19,6 +19,9 @@ type StreamStatus = {
   lastReportAt: string | null;
   lastReport: string | null;
   updatedAt: string | null;
+  mtd: string | null;
+  ytd: string | null;
+  snapshotUpdated: string | null;
 };
 
 type ActivityEntry = {
@@ -193,10 +196,28 @@ function StreamCard({ stream, onMutate }: { stream: StreamStatus; onMutate: () =
             </Link>
             <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
               lead: <span style={{ color: leadColor }}>{stream.leadDisplay}</span>
-              {stream.updatedAt
+              {stream.snapshotUpdated
+                ? ` · snapshot ${new Date(stream.snapshotUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                : stream.updatedAt
                 ? ` · updated ${new Date(stream.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
                 : null}
             </div>
+            {(stream.mtd || stream.ytd) && (
+              <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+                {stream.mtd && (
+                  <div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>MTD</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green)', fontFamily: 'var(--font-rajdhani)', letterSpacing: 0.5 }}>{stream.mtd}</div>
+                  </div>
+                )}
+                {stream.ytd && (
+                  <div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>YTD</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-rajdhani)', letterSpacing: 0.5 }}>{stream.ytd}</div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <span
             className="badge"
