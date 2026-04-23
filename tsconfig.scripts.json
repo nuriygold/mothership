@@ -5,5 +5,8 @@
     "moduleResolution": "node",
     "noEmit": false
   },
-  "include": ["scripts/**/*.ts", "prisma/**/*.ts"]
+  "include": [
+    "scripts/**/*.ts",
+    "drizzle/**/*.ts"
+  ]
 }
