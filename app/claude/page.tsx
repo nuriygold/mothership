@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatTabs } from '@/components/ui/chat-tabs';
 
-const TerminalView = dynamic(() => import('./terminal-view'), {
+const TerminalView = dynamic(() => import('@/components/ui/terminal-view'), {
   ssr: false,
   loading: () => <div style={{ flex: 1, background: '#0b0f17' }} />,
 });
@@ -482,8 +482,8 @@ export default function ClaudePage() {
           />
         )}
 
-        {/* API Key */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
+        {/* API Key — hidden for Azure (key is in Vercel env vars, handled server-side) */}
+        {cfg.provider !== 'azure' && <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 200 }}>
           <input
             type={showKey ? 'text' : 'password'}
             value={currentKey}
@@ -513,7 +513,7 @@ export default function ClaudePage() {
           >
             {showKey ? '○' : '●'}
           </button>
-        </div>
+        </div>}
 
         {/* Terminal config (only visible in terminal mode) */}
         {mode === 'terminal' && (
