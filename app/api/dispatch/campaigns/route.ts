@@ -34,6 +34,12 @@ export async function POST(req: Request) {
           : undefined,
       callbackUrl: body?.callbackUrl ? String(body.callbackUrl) : undefined,
       callbackSecret: body?.callbackSecret ? String(body.callbackSecret) : undefined,
+      projectId: body?.projectId ? String(body.projectId) : undefined,
+      visionItemId: body?.visionItemId ? String(body.visionItemId) : undefined,
+      outputFolder: body?.outputFolder ? String(body.outputFolder) : undefined,
+      assignedBotId: body?.assignedBotId ? String(body.assignedBotId) : undefined,
+      revenueStream: body?.revenueStream ? String(body.revenueStream) : undefined,
+      linkedTaskRef: body?.linkedTaskRef ? String(body.linkedTaskRef) : undefined,
     });
 
     return NextResponse.json({ campaign }, { status: 201 });

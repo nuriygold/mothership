@@ -4,6 +4,7 @@ import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { buildToolsBlock, getToolsForRequirements } from '@/lib/tools/registry';
+import { writeCampaignOutput, pingTelegramCampaignComplete } from '@/lib/services/campaign-output';
 
 type RawPlanTask = {
   id?: string;
@@ -92,6 +93,12 @@ export async function createDispatchCampaign(input: {
   timeBudgetSeconds?: number;
   callbackUrl?: string;
   callbackSecret?: string;
+  projectId?: string;
+  visionItemId?: string;
+  outputFolder?: string;
+  assignedBotId?: string;
+  revenueStream?: string;
+  linkedTaskRef?: string;
 }) {
   const campaign = await prisma.dispatchCampaign.create({
     data: {
@@ -101,6 +108,12 @@ export async function createDispatchCampaign(input: {
       timeBudgetSeconds: input.timeBudgetSeconds ?? null,
       callbackUrl: input.callbackUrl?.trim() || null,
       callbackSecret: input.callbackSecret?.trim() || null,
+      projectId: input.projectId || null,
+      visionItemId: input.visionItemId || null,
+      outputFolder: input.outputFolder?.trim() || null,
+      assignedBotId: input.assignedBotId?.trim() || null,
+      revenueStream: input.revenueStream?.trim() || null,
+      linkedTaskRef: input.linkedTaskRef?.trim() || null,
     },
   });
 
@@ -827,6 +840,17 @@ export async function runDispatchCampaign(campaignId: string) {
       metadata: { finalStatus, done: doneCnt, failed: failedCnt, canceled: canceledCnt },
     },
   });
+
+  // Write output files and Telegram ping on completion (non-fatal)
+  if (finalStatus === DispatchCampaignStatus.COMPLETED) {
+    writeCampaignOutput(campaignId).catch(() => { /* non-fatal */ });
+    pingTelegramCampaignComplete({
+      id: campaignId,
+      title: campaign.title,
+      status: finalStatus,
+      tasks: results.map((r) => ({ status: r.status })),
+    }).catch(() => { /* non-fatal */ });
+  }
 
   // Fire campaign-completion webhook (non-fatal)
   if (campaign.callbackUrl) {
