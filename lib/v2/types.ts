@@ -252,6 +252,15 @@ export type V2IncomeSource = {
   confirmed: boolean;
 };
 
+export type V2RevenueStreamStatus = {
+  id: string;
+  stream: string;
+  status: 'idle' | 'active' | 'paused' | 'needs-attention';
+  note: string | null;
+  requestedAt: string | null;
+  updatedAt: string;
+};
+
 export type V2NetWorthPoint = {
   date: string;
   assets: number;
