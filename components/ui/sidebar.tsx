@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Home,
+  Sun,
   ListChecks,
   Bot,
   Mail,
@@ -13,11 +13,6 @@ import {
   Send,
   Telescope,
   FolderKanban,
-  Trophy,
-  Snowflake,
-  Globe,
-  Network,
-  Brain,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -27,8 +22,7 @@ interface SidebarItem {
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  '/today':    Home,
-  '/iceman':   Snowflake,
+  '/today':    Sun,
   '/tasks':    ListChecks,
   '/bots':     Bot,
   '/email':    Mail,
@@ -37,15 +31,15 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/ruby':     Sparkles,
   '/vision':   Telescope,
   '/dispatch': Send,
-  '/marvin':   Network,
   '/projects': FolderKanban,
-  '/trophy':   Trophy,
-  '/marco':    Globe,
-  '/claude':   Brain,
 };
+
+// Routes that live in the top header instead of the desktop sidebar.
+const HEADER_ROUTES = new Set(['/iceman', '/marvin', '/claude', '/marco', '/trophy']);
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
   const pathname = usePathname();
+  const sidebarItems = items.filter((item) => !HEADER_ROUTES.has(item.href));
 
   return (
     <aside
@@ -58,9 +52,9 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
       </Link>
 
       {/* Nav items */}
-      {items.map((item) => {
+      {sidebarItems.map((item) => {
         const active = pathname?.startsWith(item.href);
-        const Icon = ICON_MAP[item.href] ?? Home;
+        const Icon = ICON_MAP[item.href] ?? Sun;
         const shortLabel = item.label.replace(' (Log)', '');
 
         return (
