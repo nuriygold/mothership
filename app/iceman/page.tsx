@@ -4,16 +4,18 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatTabs } from "@/components/ui/chat-tabs"
+import { GatewayTicker, useGatewayStatus } from "@/components/ui/gateway-ticker"
 
 type Message = { role: 'user' | 'assistant'; content: string }
 
 export default function Iceman() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [messagesBySession, setMessagesBySession] = useState<Record<string, Message[]>>({})
+  const [loadedSessions, setLoadedSessions] = useState<Set<string>>(new Set())
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [gateway, setGateway] = useState<'checking' | 'up' | 'down'>('checking')
+  const gateway = useGatewayStatus()
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -37,11 +39,37 @@ export default function Iceman() {
     }
   }, [messages, loading])
 
+  // Hydrate messages for any session we haven't loaded yet from the server.
   useEffect(() => {
-    fetch("https://mother.nuriy.com/v1/health")
-      .then(r => setGateway(r.ok ? 'up' : 'down'))
-      .catch(() => setGateway('down'))
-  }, [])
+    if (!sessionId) return
+    if (loadedSessions.has(sessionId)) return
+    let cancelled = false
+    setLoadedSessions((prev) => {
+      const next = new Set(prev)
+      next.add(sessionId)
+      return next
+    })
+    fetch(`/api/chat/messages?sessionId=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return
+        const msgs: Message[] = Array.isArray(data?.messages)
+          ? data.messages
+              .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+              .map((m: any) => ({ role: m.role, content: String(m.content ?? '') }))
+          : []
+        if (!msgs.length) return
+        setMessagesBySession((prev) => {
+          // Don't overwrite if we already have local messages newer than fetch.
+          if ((prev[sessionId] ?? []).length >= msgs.length) return prev
+          return { ...prev, [sessionId]: msgs }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, loadedSessions])
 
   const handleSessionChange = useCallback((sid: string) => {
     const url = new URL(window.location.href)
@@ -138,7 +166,7 @@ export default function Iceman() {
     }
   }
 
-  const robot = gateway === 'up' ? '🤖' : gateway === 'down' ? '⚠️' : '⏳'
+  const robot = gateway.status === 'up' ? '🤖' : gateway.status === 'down' ? '⚠️' : '⏳'
 
   return (
     <div style={{
@@ -152,7 +180,7 @@ export default function Iceman() {
         height: "60px",
         display: "flex",
         alignItems: "center",
-        paddingLeft: "24px",
+        padding: "0 20px 0 24px",
         gap: "12px",
         background: "rgba(20,25,35,0.9)",
         backdropFilter: "blur(12px)",
@@ -162,12 +190,8 @@ export default function Iceman() {
         <span style={{ fontSize: "20px", color: "white", fontWeight: 600 }}>
           {robot} 🧊 ICEMAN
         </span>
-        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)" }}>
-          {gateway === 'up' && 'Gateway online'}
-          {gateway === 'down' && 'Gateway offline'}
-          {gateway === 'checking' && 'Checking gateway…'}
-        </span>
         <div style={{ flex: 1 }} />
+        <GatewayTicker label="Gateway" />
       </div>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e2235", background: "rgba(20,25,35,0.7)" }}>
         <ChatTabs

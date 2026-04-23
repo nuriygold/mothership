@@ -1,8 +1,18 @@
+import { prisma } from '@/lib/prisma';
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type Provider = 'anthropic' | 'openai' | 'groq' | 'together' | 'azure';
 type Message = { role: 'user' | 'assistant'; content: string };
+
+function persistMessage(sessionId: string, role: 'user' | 'assistant', content: string) {
+  if (!sessionId || !content) return;
+  prisma.chatSession
+    .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
+    .then(() => prisma.chatMessage.create({ data: { sessionId, role, content } }))
+    .catch(() => {});
+}
 
 const OPENAI_BASE: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
@@ -27,7 +37,7 @@ function sseHeaders() {
   return { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' };
 }
 
-async function pipeAnthropic(upstream: Response): Promise<Response> {
+async function pipeAnthropic(upstream: Response, onDone?: (text: string) => void): Promise<Response> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -36,6 +46,15 @@ async function pipeAnthropic(upstream: Response): Promise<Response> {
       const enqueue = (s: string) => controller.enqueue(encoder.encode(s));
       const reader = upstream.body!.getReader();
       let buf = '';
+      let accumulated = '';
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        enqueue('data: [DONE]\n\n');
+        controller.close();
+        onDone?.(accumulated);
+      };
 
       try {
         while (true) {
@@ -51,15 +70,14 @@ async function pipeAnthropic(upstream: Response): Promise<Response> {
             try {
               const evt = JSON.parse(raw);
               if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+                accumulated += evt.delta.text;
                 enqueue(`data: ${JSON.stringify({ delta: evt.delta.text })}\n\n`);
               } else if (evt.type === 'message_stop') {
-                enqueue('data: [DONE]\n\n');
-                controller.close();
+                finish();
                 return;
               } else if (evt.type === 'error') {
                 enqueue(`data: ${JSON.stringify({ error: evt.error?.message ?? 'Anthropic error' })}\n\n`);
-                enqueue('data: [DONE]\n\n');
-                controller.close();
+                finish();
                 return;
               }
             } catch {}
@@ -68,15 +86,14 @@ async function pipeAnthropic(upstream: Response): Promise<Response> {
       } catch (err) {
         enqueue(`data: ${JSON.stringify({ error: err instanceof Error ? err.message : String(err) })}\n\n`);
       }
-      enqueue('data: [DONE]\n\n');
-      controller.close();
+      finish();
     },
   });
 
   return new Response(body, { headers: sseHeaders() });
 }
 
-async function pipeOpenAICompat(upstream: Response): Promise<Response> {
+async function pipeOpenAICompat(upstream: Response, onDone?: (text: string) => void): Promise<Response> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -85,6 +102,15 @@ async function pipeOpenAICompat(upstream: Response): Promise<Response> {
       const enqueue = (s: string) => controller.enqueue(encoder.encode(s));
       const reader = upstream.body!.getReader();
       let buf = '';
+      let accumulated = '';
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        enqueue('data: [DONE]\n\n');
+        controller.close();
+        onDone?.(accumulated);
+      };
 
       try {
         while (true) {
@@ -98,17 +124,18 @@ async function pipeOpenAICompat(upstream: Response): Promise<Response> {
             if (!line.startsWith('data:')) continue;
             const raw = line.slice(5).trim();
             if (raw === '[DONE]') {
-              enqueue('data: [DONE]\n\n');
-              controller.close();
+              finish();
               return;
             }
             try {
               const evt = JSON.parse(raw);
               const delta = evt.choices?.[0]?.delta?.content;
-              if (delta) enqueue(`data: ${JSON.stringify({ delta })}\n\n`);
+              if (delta) {
+                accumulated += delta;
+                enqueue(`data: ${JSON.stringify({ delta })}\n\n`);
+              }
               if (evt.choices?.[0]?.finish_reason === 'stop') {
-                enqueue('data: [DONE]\n\n');
-                controller.close();
+                finish();
                 return;
               }
             } catch {}
@@ -117,8 +144,7 @@ async function pipeOpenAICompat(upstream: Response): Promise<Response> {
       } catch (err) {
         enqueue(`data: ${JSON.stringify({ error: err instanceof Error ? err.message : String(err) })}\n\n`);
       }
-      enqueue('data: [DONE]\n\n');
-      controller.close();
+      finish();
     },
   });
 
@@ -133,9 +159,18 @@ export async function POST(req: Request) {
   const messages: Message[] = Array.isArray(body?.messages) ? body.messages : [];
   const system: string = String(body?.system ?? '');
   const azureEndpoint: string = String(body?.azureEndpoint ?? '').replace(/\/$/, '');
+  const sessionId: string = body?.sessionId ? String(body.sessionId).trim() : '';
 
   if (!model) return errSSE('Model required');
   if (!messages.length) return errSSE('No messages');
+
+  if (sessionId) {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (lastUser?.content) persistMessage(sessionId, 'user', lastUser.content);
+  }
+  const onAssistantDone = (text: string) => {
+    if (sessionId && text) persistMessage(sessionId, 'assistant', text);
+  };
 
   if (provider === 'azure') {
     const endpoint = (process.env.AZURE_OPENAI_ENDPOINT ?? azureEndpoint).replace(/\/$/, '');
@@ -161,7 +196,7 @@ export async function POST(req: Request) {
       const text = await upstream.text().catch(() => '');
       return errSSE(`Azure ${upstream.status}: ${text.slice(0, 200)}`);
     }
-    return pipeOpenAICompat(upstream);
+    return pipeOpenAICompat(upstream, onAssistantDone);
   }
 
   if (!apiKey) return errSSE('API key required');
@@ -194,7 +229,7 @@ export async function POST(req: Request) {
       return errSSE(`Anthropic ${upstream.status}: ${text.slice(0, 200)}`);
     }
 
-    return pipeAnthropic(upstream);
+    return pipeAnthropic(upstream, onAssistantDone);
   }
 
   const baseUrl = OPENAI_BASE[provider];
@@ -222,5 +257,5 @@ export async function POST(req: Request) {
     return errSSE(`${provider} ${upstream.status}: ${text.slice(0, 200)}`);
   }
 
-  return pipeOpenAICompat(upstream);
+  return pipeOpenAICompat(upstream, onAssistantDone);
 }
