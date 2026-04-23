@@ -411,7 +411,7 @@ function DispatchPageInner() {
   const [campaignRevenueStream, setCampaignRevenueStream] = useState('');
   const [campaignLinkedTaskRef, setCampaignLinkedTaskRef] = useState('');
   const [sendToBotTarget, setSendToBotTarget] = useState<string | null>(null);
-  const [sendToBotBotId, setSendToBotBotId] = useState('adrian');
+  const [sendToBotBotId, setSendToBotBotId] = useState('main');
   const [sendToBotNote, setSendToBotNote] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
@@ -805,11 +805,12 @@ function DispatchPageInner() {
                         required={Boolean(campaignOutputFolder)}
                       >
                         <option value="">Auto-route</option>
-                        <option value="adrian">Adrian · main</option>
+                        <option value="main">Adrian (Operator) · main</option>
+                        <option value="iceman">Iceman · iceman</option>
                         <option value="ruby">Ruby · ruby</option>
                         <option value="emerald">Emerald · emerald</option>
                         <option value="adobe">Adobe Pettaway · adobe</option>
-                        <option value="anchor">Anchor · anchor</option>
+                        <option value="anchor">Anchor (Command) · anchor</option>
                       </select>
                     </div>
                   </div>
@@ -1006,7 +1007,7 @@ function DispatchPageInner() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setSendToBotTarget(campaign.id);
-                        setSendToBotBotId(campaign.assignedBotId ?? 'adrian');
+                        setSendToBotBotId(campaign.assignedBotId ?? 'main');
                         setSendToBotNote('');
                       }}
                       title="Send campaign output to a bot"
@@ -1095,11 +1096,12 @@ function DispatchPageInner() {
                 value={sendToBotBotId}
                 onChange={(e) => setSendToBotBotId(e.target.value)}
               >
-                <option value="adrian">Adrian · main</option>
+                <option value="main">Adrian (Operator) · main</option>
+                <option value="iceman">Iceman · iceman</option>
                 <option value="ruby">Ruby · ruby</option>
                 <option value="emerald">Emerald · emerald</option>
                 <option value="adobe">Adobe Pettaway · adobe</option>
-                <option value="anchor">Anchor · anchor</option>
+                <option value="anchor">Anchor (Command) · anchor</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -1761,6 +1763,7 @@ function DispatchPageInner() {
                   onChange={(e) => setOcAgent(e.target.value)}
                 >
                   <option value="main">Adrian · main</option>
+                  <option value="iceman">Iceman · iceman</option>
                   <option value="ruby">Ruby · ruby</option>
                   <option value="emerald">Emerald · emerald</option>
                   <option value="adobe">Adobe Pettaway · adobe</option>

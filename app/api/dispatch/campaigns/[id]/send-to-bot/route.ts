@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 const BOT_DISPLAY: Record<string, string> = {
   adrian: 'Adrian',
+  main: 'Adrian',
+  iceman: 'Iceman',
   ruby: 'Ruby',
   emerald: 'Emerald',
   adobe: 'Adobe Pettaway',
