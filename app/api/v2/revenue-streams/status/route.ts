@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { REVENUE_STREAMS } from '@/lib/v2/revenue-streams';
+import { getStreamDefs, readSnapshot } from '@/lib/v2/revenue-streams-server';
 import { ensureV2Authorized } from '@/lib/v2/auth';
 import { publishV2Event } from '@/lib/v2/event-bus';
 
@@ -8,24 +8,37 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const rows = await prisma.revenueStreamStatus.findMany();
+  const [defs, rows] = await Promise.all([
+    getStreamDefs(),
+    prisma.revenueStreamStatus.findMany(),
+  ]);
+
   const statusMap = new Map(rows.map((r) => [r.stream, r]));
 
-  const streams = REVENUE_STREAMS.map((def) => {
-    const row = statusMap.get(def.key);
-    return {
-      key: def.key,
-      displayName: def.displayName,
-      leadBotKey: def.leadBotKey,
-      leadDisplay: def.leadDisplay,
-      status: row?.status ?? 'unknown',
-      note: row?.note ?? null,
-      requestedAt: row?.requestedAt?.toISOString() ?? null,
-      lastReportAt: row?.lastReportAt?.toISOString() ?? null,
-      lastReport: row?.lastReport ?? null,
-      updatedAt: row?.updatedAt?.toISOString() ?? null,
-    };
-  });
+  const streams = await Promise.all(
+    defs.map(async (def) => {
+      const row = statusMap.get(def.key);
+      const snap = await readSnapshot(def.folderName);
+      return {
+        key: def.key,
+        displayName: def.displayName,
+        leadBotKey: def.leadBotKey,
+        leadDisplay: def.leadDisplay,
+        // DB status takes priority; fall back to snapshot; then 'unknown'
+        status: row?.status ?? snap.status ?? 'unknown',
+        // DB note takes priority; fall back to snapshot note
+        note: row?.note ?? snap.note ?? null,
+        requestedAt: row?.requestedAt?.toISOString() ?? null,
+        lastReportAt: row?.lastReportAt?.toISOString() ?? null,
+        lastReport: row?.lastReport ?? null,
+        updatedAt: row?.updatedAt?.toISOString() ?? null,
+        // Live snapshot fields
+        mtd: snap.mtd ?? null,
+        ytd: snap.ytd ?? null,
+        snapshotUpdated: snap.updated ?? null,
+      };
+    })
+  );
 
   return NextResponse.json({ streams });
 }
