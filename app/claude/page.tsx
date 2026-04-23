@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatTabs } from '@/components/ui/chat-tabs';
 
-const TerminalView = dynamic(() => import('@/components/ui/terminal-view'), {
+const TerminalView = dynamic(() => import('./terminal-view'), {
   ssr: false,
   loading: () => <div style={{ flex: 1, background: '#0b0f17' }} />,
 });
