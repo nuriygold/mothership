@@ -41,6 +41,8 @@ export type V2TodayFeed = {
     userName: string;
     greeting: string;
     affirmation: string;
+    /** Attribution for the affirmation — e.g. "Drake · Marvin's Room" or an author / scripture reference. */
+    affirmationSource: string | null;
   };
   timeline: V2DashboardTimelineItem[];
 };

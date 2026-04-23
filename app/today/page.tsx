@@ -242,6 +242,19 @@ export default function TodayPage() {
   }, [feed]);
 
   const affirmation = feed?.userContext?.affirmation ?? '';
+  const affirmationSource = feed?.userContext?.affirmationSource ?? null;
+
+  // Count emails received today (local time), by timestamp field.
+  const emailsToday = useMemo(() => {
+    const inbox = (emailData?.inbox ?? []) as Array<{ timestamp?: string }>;
+    if (inbox.length === 0) return 0;
+    const today = new Date().toDateString();
+    return inbox.reduce((n, item) => {
+      if (!item?.timestamp) return n;
+      const d = new Date(item.timestamp);
+      return isNaN(d.getTime()) || d.toDateString() !== today ? n : n + 1;
+    }, 0);
+  }, [emailData]);
 
   // ── Done → Trophy ──
   const handleComplete = useCallback(async (taskId?: string) => {
@@ -461,35 +474,52 @@ export default function TodayPage() {
         >
           {greeting}
         </h1>
-        <p
-          style={{
-            fontFamily: 'var(--font-script)',
-            fontWeight: 600,
-            fontSize: '22px',
-            color: 'var(--ice-gold)',
-            lineHeight: 1.3,
-            margin: 0,
-            textAlign: 'right',
-            maxWidth: '55%',
-            textShadow: '0 1px 2px rgba(184,144,42,0.18)',
-          }}
-        >
-          {affirmation || 'You move with intention and grace.'}
-        </p>
+        <div style={{ textAlign: 'right', maxWidth: '55%' }}>
+          <p
+            style={{
+              fontFamily: 'var(--font-script)',
+              fontWeight: 600,
+              fontSize: '29px',
+              color: 'var(--ice-gold)',
+              lineHeight: 1.25,
+              margin: 0,
+              textShadow: '0 1px 2px rgba(184,144,42,0.18)',
+            }}
+          >
+            {affirmation || 'You move with intention and grace.'}
+          </p>
+          {affirmationSource && (
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--ice-text3)',
+                opacity: 0.8,
+                marginTop: 4,
+              }}
+            >
+              — {affirmationSource}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── KPI Row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
         <KpiBox
           label="Tasks"
-          count={tasksData?.counters.active ?? null}
-          sub={tasksData?.today?.length ? `${tasksData.today.length} due today` : 'active'}
+          count={tasksData?.today?.length ?? null}
+          sub={tasksData?.counters ? `${tasksData.counters.tracked} total` : 'due today'}
+          subLabel="due today"
           href="/tasks"
         />
         <KpiBox
           label="Emails"
-          count={emailData?.inbox?.length ?? null}
-          sub="in inbox"
+          count={emailData ? emailsToday : null}
+          sub={emailData?.inbox?.length ? `${emailData.inbox.length} in inbox` : 'new today'}
+          subLabel="new today"
           href="/email"
         />
         <KpiBox
@@ -579,7 +609,7 @@ export default function TodayPage() {
               aria-label="Open trophy collection"
             >
               <Trophy className="w-3.5 h-3.5" style={{ color: '#b8902a' }} />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophy</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'var(--ice-text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trophies</span>
             </Link>
             {completedTitles.length > 0 && (
               <button
@@ -617,7 +647,20 @@ type CampaignListItem = {
   status: string | null;
 };
 
-function KpiBox({ label, count, sub, href }: { label: string; count: number | null; sub: string; href: string }) {
+function KpiBox({
+  label,
+  count,
+  sub,
+  subLabel,
+  href,
+}: {
+  label: string;
+  count: number | null;
+  sub: string;
+  /** Optional small caption shown above the big number — used when the count's unit differs from the label. */
+  subLabel?: string;
+  href: string;
+}) {
   return (
     <Link href={href as any} style={{ textDecoration: 'none' }}>
       <div
@@ -641,6 +684,22 @@ function KpiBox({ label, count, sub, href }: { label: string; count: number | nu
           (e.currentTarget as HTMLDivElement).style.borderColor = '#b8d8e8';
         }}
       >
+        {subLabel && (
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: 'var(--ice2)',
+              opacity: 0.85,
+              marginBottom: '2px',
+            }}
+          >
+            {subLabel}
+          </div>
+        )}
         <div
           style={{
             fontFamily: 'var(--font-rajdhani)',

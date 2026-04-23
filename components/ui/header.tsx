@@ -32,10 +32,10 @@ function IceCubeLogo({ size = 22 }: { size?: number }) {
 
 const HEADER_NAV: Array<{ href: string; label: string; icon: React.ElementType; gold?: boolean }> = [
   { href: '/iceman', label: 'Iceman', icon: Snowflake },
-  { href: '/marvin', label: 'Marvin', icon: Network },
+  { href: '/marvin', label: "Marvin's Room", icon: Network },
   { href: '/claude', label: 'Claude', icon: Brain },
   { href: '/marco', label: 'Marco', icon: Globe },
-  { href: '/trophy', label: 'Trophy', icon: Trophy, gold: true },
+  { href: '/trophy', label: 'Trophies', icon: Trophy, gold: true },
 ];
 
 export function Header() {
@@ -67,7 +67,8 @@ export function Header() {
         WebkitBackdropFilter: 'blur(8px)',
         borderColor: '#b8e0f5',
         overflow: 'visible',
-        position: 'relative',
+        position: 'sticky',
+        top: 0,
         zIndex: 40,
       }}
     >
