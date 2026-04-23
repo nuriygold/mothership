@@ -59,26 +59,32 @@ export async function POST(req: NextRequest) {
       }));
   }
 
-  const item = await prisma.agentInboxItem.create({
-    data: {
-      agentKey,
-      note,
-      source: String(body.source ?? 'email'),
-      bucket: body.bucket ? String(body.bucket) : null,
-      emailIds,
-      emailSummaries: summaries,
-    },
-  });
+  try {
+    const item = await prisma.agentInboxItem.create({
+      data: {
+        agentKey,
+        note,
+        source: String(body.source ?? 'email'),
+        bucket: body.bucket ? String(body.bucket) : null,
+        emailIds,
+        emailSummaries: summaries,
+      },
+    });
 
-  return NextResponse.json({
-    ok: true,
-    item: {
-      id: item.id,
-      agentKey: item.agentKey,
-      resolvedAgent: agentForKey(agentKey),
-      emailCount: emailIds.length,
-    },
-  });
+    return NextResponse.json({
+      ok: true,
+      item: {
+        id: item.id,
+        agentKey: item.agentKey,
+        resolvedAgent: agentForKey(agentKey),
+        emailCount: emailIds.length,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown database error';
+    console.error(JSON.stringify({ scope: 'agent_inbox', action: 'create_failed', error: message, agentKey }));
+    return NextResponse.json({ ok: false, error: `Could not queue for ${agentKey}: ${message}` }, { status: 500 });
+  }
 }
 
 export async function GET(req: NextRequest) {

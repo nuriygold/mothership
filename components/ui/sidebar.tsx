@@ -43,11 +43,16 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
 
   return (
     <aside
-      className="hidden md:flex flex-shrink-0 w-20 flex-col items-center py-5 gap-1 border-r"
-      style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)', minHeight: '100vh' }}
+      className="hidden md:flex flex-shrink-0 w-20 flex-col items-center py-5 gap-1 border-r sticky self-start overflow-y-auto"
+      style={{
+        background: 'var(--sidebar)',
+        borderColor: 'var(--sidebar-border)',
+        top: 'var(--header-h)',
+        height: 'calc(100vh - var(--header-h))',
+      }}
     >
-      {/* Logo at top — links to Dispatch */}
-      <Link href="/dispatch" className="mb-5 mt-1 transition-opacity hover:opacity-85">
+      {/* Logo at top — links Home (Today) */}
+      <Link href="/today" className="mb-5 mt-1 transition-opacity hover:opacity-85">
         <MothershipLogo size={44} />
       </Link>
 
