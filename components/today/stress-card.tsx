@@ -133,7 +133,7 @@ export function StressCard({ summary, stressHighMinutes: _stressHighMinutes, use
           color: '#2d2a24',
           lineHeight: 1.6,
           margin: 0,
-          fontFamily: 'var(--font-script), "Brush Script MT", "Segoe Script", cursive',
+          fontFamily: '"Brush Script MT", "Segoe Script", cursive',
         }}
       >
         {message}

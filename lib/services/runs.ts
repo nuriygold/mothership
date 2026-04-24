@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { RunStatus, Prisma } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
+import { RunStatus } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
 import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 
 export async function listRuns() {
@@ -31,7 +33,7 @@ export async function createRun(input: {
   type: string;
   sourceSystem: string;
   status?: RunStatus;
-  metadata?: Prisma.InputJsonValue;
+  metadata?: InputJsonValue;
 }) {
   return prisma.run.create({
     data: {
@@ -41,7 +43,7 @@ export async function createRun(input: {
       type: input.type,
       sourceSystem: input.sourceSystem,
       status: input.status ?? RunStatus.QUEUED,
-      metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+      metadata: (input.metadata ?? {}) as InputJsonValue,
       startedAt: new Date(),
     },
   });
