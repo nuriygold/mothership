@@ -127,7 +127,7 @@ export async function createWorkflow(input: {
   type?: WorkflowType;
   ownerId: string;
   status?: WorkflowStatus;
-  schemaJson?: Prisma.InputJsonValue;
+  schemaJson?: InputJsonValue;
 }) {
   const [workflow] = await db
     .insert(workflows)

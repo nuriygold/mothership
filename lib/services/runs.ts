@@ -105,7 +105,7 @@ export async function createRun(input: {
   type: string;
   sourceSystem: string;
   status?: RunStatus;
-  metadata?: Prisma.InputJsonValue;
+  metadata?: InputJsonValue;
 }) {
   const [created] = await db
     .insert(runs)

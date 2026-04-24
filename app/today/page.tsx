@@ -248,8 +248,9 @@ export default function TodayPage() {
     return `${feed.userContext.greeting}, ${feed.userContext.userName}`;
   }, [feed]);
 
-  const affirmationSource = feed?.userContext?.affirmationSource ?? 'Daily affirmation';
-  const affirmation = useMemo(() => pickRandomAffirmationBar(), []);
+  const randomAffirmation = useMemo(() => pickRandomAffirmationBar(), []);
+  const affirmation = randomAffirmation.text;
+  const affirmationSource = `Song: ${randomAffirmation.song}`;
 
   // Count emails received today (local time), by timestamp field.
   const emailsToday = useMemo(() => {

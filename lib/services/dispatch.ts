@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@/lib/db/prisma-types';
+import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/prisma-types';
+import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { buildToolsBlock, getToolsForRequirements } from '@/lib/tools/registry';
@@ -31,7 +32,7 @@ function extractJson(text: string) {
   return fenced?.[1] || text;
 }
 
-function asStringArray(value: Prisma.JsonValue | null | undefined) {
+function asStringArray(value: JsonValue | null | undefined) {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
 }
@@ -261,20 +262,20 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
     throw new Error('Campaign not found');
   }
 
-  const latestPlan = campaign.latestPlan as Prisma.JsonObject | null;
-  const plans = Array.isArray(latestPlan?.plans) ? (latestPlan?.plans as Prisma.JsonArray) : [];
+  const latestPlan = campaign.latestPlan as JsonObject | null;
+  const plans = Array.isArray(latestPlan?.plans) ? (latestPlan?.plans as JsonArray) : [];
   const selected = plans.find((plan) => {
     if (!plan || typeof plan !== 'object') return false;
-    const name = (plan as Prisma.JsonObject).name;
+    const name = (plan as JsonObject).name;
     return planName ? name === planName : true;
-  }) as Prisma.JsonObject | undefined;
+  }) as JsonObject | undefined;
 
   if (!selected) {
     throw new Error('No matching plan available');
   }
 
   const selectedPlanName = typeof selected.name === 'string' ? selected.name : 'Plan A';
-  const selectedTasks = Array.isArray(selected.tasks) ? (selected.tasks as Prisma.JsonArray) : [];
+  const selectedTasks = Array.isArray(selected.tasks) ? (selected.tasks as JsonArray) : [];
 
   const createdTaskIds: string[] = [];
 
@@ -283,7 +284,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
 
     for (const rawTask of selectedTasks) {
       if (!rawTask || typeof rawTask !== 'object') continue;
-      const task = rawTask as Prisma.JsonObject;
+      const task = rawTask as JsonObject;
       const title = typeof task.title === 'string' ? task.title.trim() : '';
       if (!title) continue;
       const created = await tx.dispatchTask.create({
@@ -422,7 +423,7 @@ function routeTaskToBot(task: { title: string; description?: string | null }): s
 }
 
 function buildTaskPrompt(
-  task: { title: string; description?: string | null; toolRequirements?: Prisma.JsonValue | null },
+  task: { title: string; description?: string | null; toolRequirements?: JsonValue | null },
   campaign: { title: string; description?: string | null }
 ): string {
   const requirements = Array.isArray(task.toolRequirements)
