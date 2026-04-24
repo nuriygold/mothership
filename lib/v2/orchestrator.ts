@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { TaskPriority, TaskStatus } from '@prisma/client';
+import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
 import { listTasks, updateTask } from '@/lib/services/tasks';
 import { isTaskPoolRepositorySource, addVisionBoardLabelToIssue } from '@/lib/integrations/task-pool';
 import { listFinancePlans } from '@/lib/services/finance';

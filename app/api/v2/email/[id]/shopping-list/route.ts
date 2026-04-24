@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createTask } from '@/lib/services/tasks';
 import { getV2EmailFeed } from '@/lib/v2/orchestrator';
-import { TaskPriority } from '@prisma/client';
+import { TaskPriority } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 

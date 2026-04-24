@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { TaskPriority, TaskStatus } from '@prisma/client';
+import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
 import { updateTask } from '@/lib/services/tasks';
 
 interface Params {

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { CommandStatus } from '@prisma/client';
+import { CommandStatus } from '@/lib/db/prisma-types';
 
 export async function listCommands(limit = 20) {
   return prisma.command.findMany({

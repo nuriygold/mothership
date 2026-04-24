@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { FinancePlanStatus, FinancePlanType } from '@prisma/client';
+import { FinancePlanStatus, FinancePlanType } from '@/lib/db/prisma-types';
 
 export async function listFinancePlans(statusFilter?: FinancePlanStatus) {
   return prisma.financePlan.findMany({

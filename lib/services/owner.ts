@@ -1,5 +1,7 @@
 import { cookies } from 'next/headers';
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { users } from '@/lib/db/schema';
 
 export const OWNER_COOKIE = 'mothership-owner-id';
 export const DEVICE_COOKIE = 'mothership-device-id';
@@ -10,7 +12,7 @@ export async function getOwnerId(): Promise<string | null> {
   const ownerId = jar.get(OWNER_COOKIE)?.value?.trim();
   if (!ownerId) return null;
   // Quick existence check — don't trust stale cookies for deleted users
-  const exists = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+  const [exists] = await db.select({ id: users.id }).from(users).where(eq(users.id, ownerId)).limit(1);
   return exists?.id ?? null;
 }
 

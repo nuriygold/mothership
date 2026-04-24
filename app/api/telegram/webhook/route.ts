@@ -9,7 +9,7 @@ import { createDispatchCampaign } from '@/lib/services/dispatch';
 import { createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { createVisionItem, getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
 import { prisma } from '@/lib/prisma';
-import { TaskStatus, TaskPriority } from '@prisma/client';
+import { TaskStatus, TaskPriority } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 

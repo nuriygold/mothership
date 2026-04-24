@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createTaskPoolIssue } from '@/lib/integrations/task-pool';
-import { TaskPriority } from '@prisma/client';
+import { TaskPriority } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 

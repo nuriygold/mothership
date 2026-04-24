@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { chatSessions } from '@/lib/db/schema';
 import { titleFromText } from '@/lib/chat/title';
 
 export { titleFromText };
@@ -19,11 +21,14 @@ export async function ensureSession(
       : titleFromText(opts.firstMessageText ?? '');
 
   try {
-    await prisma.chatSession.upsert({
-      where: { id: sessionId },
-      create: { id: sessionId, title },
-      update: { updatedAt: new Date() },
-    });
+    const now = new Date();
+    await db
+      .insert(chatSessions)
+      .values({ id: sessionId, title, updatedAt: now })
+      .onConflictDoUpdate({
+        target: chatSessions.id,
+        set: { updatedAt: now },
+      });
   } catch {
     // Swallow — persistence is best-effort for chat.
   }

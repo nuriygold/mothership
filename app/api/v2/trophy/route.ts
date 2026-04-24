@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@/lib/db/prisma-types';
 import { isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
 
 export const dynamic = 'force-dynamic';
