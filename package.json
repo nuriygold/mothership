@@ -23,7 +23,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "migrate:deploy": "drizzle-kit migrate"
+    "migrate:deploy": "drizzle-kit migrate",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
@@ -55,7 +56,8 @@
     "tailwindcss-animate": "1.0.7",
     "zustand": "4.4.7",
     "drizzle-orm": "^0.44.2",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
     "@types/node": "20.11.30",
@@ -70,6 +72,7 @@
     "ts-node": "10.9.2",
     "typescript": "5.9.3",
     "drizzle-kit": "^0.31.5",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "prisma": "^5.22.0"
   }
 }
