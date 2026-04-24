@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import type { InputJsonValue } from '@/lib/db/json';
 import { RunStatus } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
 import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 
 export async function listRuns() {
