@@ -1,4 +1,5 @@
 import { desc } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db/client';
 import { auditEvents } from '@/lib/db/schema';
 import { isTaskPoolRepositorySource, listTaskPoolActivityEvents } from '@/lib/integrations/task-pool';
@@ -23,6 +24,7 @@ export async function createAuditEvent(input: {
   const [created] = await db
     .insert(auditEvents)
     .values({
+      id: randomUUID(),
       entityType: input.entityType,
       entityId: input.entityId,
       eventType: input.eventType,

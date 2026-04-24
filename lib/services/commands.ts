@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { auditEvents, commands, runs, users } from '@/lib/db/schema';
@@ -48,6 +49,7 @@ export async function createCommand(input: {
   const [command] = await db
     .insert(commands)
     .values({
+      id: randomUUID(),
       input: input.input,
       sourceChannel: input.sourceChannel,
       requestedById: input.requestedById ?? null,
@@ -56,6 +58,7 @@ export async function createCommand(input: {
     .returning();
 
   await db.insert(auditEvents).values({
+    id: randomUUID(),
     entityType: 'command',
     entityId: command.id,
     eventType: 'received',

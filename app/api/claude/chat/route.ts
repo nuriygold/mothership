@@ -1,6 +1,7 @@
 import { ensureSession } from '@/lib/chat/session-util';
 import { db } from '@/lib/db/client';
 import { chatMessages } from '@/lib/db/schema';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,7 +17,7 @@ function persistMessage(
 ) {
   if (!sessionId || !content) return;
   ensureSession(sessionId, { firstMessageText })
-    .then(() => db.insert(chatMessages).values({ sessionId, role, content }))
+    .then(() => db.insert(chatMessages).values({ id: randomUUID(), sessionId, role, content }))
     .catch(() => {});
 }
 

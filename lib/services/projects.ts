@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { dispatchCampaigns, dispatchTasks, projects } from '@/lib/db/schema';
@@ -13,7 +14,7 @@ export const DEFAULT_PROJECTS = [
 export async function ensureDefaultProjects() {
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(projects);
   if (Number(count) > 0) return;
-  await db.insert(projects).values(DEFAULT_PROJECTS);
+  await db.insert(projects).values(DEFAULT_PROJECTS.map((project) => ({ id: randomUUID(), ...project })));
 }
 
 export async function listProjects() {
@@ -69,6 +70,7 @@ export async function createProject(input: { title: string; description?: string
   const [created] = await db
     .insert(projects)
     .values({
+      id: randomUUID(),
       title: input.title,
       description: input.description,
       color: input.color ?? 'lavender',

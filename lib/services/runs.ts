@@ -4,6 +4,7 @@ import { commands, runs, submissions, tasks, workflows } from '@/lib/db/schema';
 import { Prisma, RunStatus } from '@/lib/db/prisma-types';
 import type { InputJsonValue } from '@/lib/db/json';
 import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
+import { randomUUID } from 'node:crypto';
 
 export async function listRuns() {
   if (isTaskPoolRepositorySource()) {
@@ -111,6 +112,7 @@ export async function createRun(input: {
   const [created] = await db
     .insert(runs)
     .values({
+      id: randomUUID(),
       workflowId: input.workflowId ?? null,
       taskId: input.taskId ?? null,
       submissionId: input.submissionId ?? null,
