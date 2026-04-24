@@ -1,10 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/enums';
+import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/prisma-types';
 import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { buildToolsBlock, getToolsForRequirements } from '@/lib/tools/registry';
+import { writeCampaignOutput, pingTelegramCampaignComplete } from '@/lib/services/campaign-output';
 
 type RawPlanTask = {
   id?: string;
@@ -93,6 +94,12 @@ export async function createDispatchCampaign(input: {
   timeBudgetSeconds?: number;
   callbackUrl?: string;
   callbackSecret?: string;
+  projectId?: string;
+  visionItemId?: string;
+  outputFolder?: string;
+  assignedBotId?: string;
+  revenueStream?: string;
+  linkedTaskRef?: string;
 }) {
   const campaign = await prisma.dispatchCampaign.create({
     data: {
@@ -102,6 +109,12 @@ export async function createDispatchCampaign(input: {
       timeBudgetSeconds: input.timeBudgetSeconds ?? null,
       callbackUrl: input.callbackUrl?.trim() || null,
       callbackSecret: input.callbackSecret?.trim() || null,
+      projectId: input.projectId || null,
+      visionItemId: input.visionItemId || null,
+      outputFolder: input.outputFolder?.trim() || null,
+      assignedBotId: input.assignedBotId?.trim() || null,
+      revenueStream: input.revenueStream?.trim() || null,
+      linkedTaskRef: input.linkedTaskRef?.trim() || null,
     },
   });
 
@@ -400,6 +413,7 @@ function buildIssueBody(
 
 function routeTaskToBot(task: { title: string; description?: string | null }): string {
   const haystack = `${task.title} ${task.description ?? ''}`.toLowerCase();
+  if (haystack.match(/code|debug|bug|fix|refactor|implement|terminal|cli|shell|script|build|deploy|compile|test suite|stack trace|repo|pull request|pr /)) return 'iceman';
   if (haystack.match(/analyz|audit|verif|diagnos|investigat|pattern|architecture|dashboard|finance|financial|budget|cash.?flow|debt|invest|ledger|invoice|expense|payment|bill|liquidity|forecast|leverage|reconcil/)) return 'emerald';
   if (haystack.match(/email|reply|message|copy|comms|outreach|personal|social|relationship|schedule/)) return 'ruby';
   if (haystack.match(/doc|contract|pdf|form|extract|intake/)) return 'adobe';
@@ -453,6 +467,7 @@ export async function recommendBotForCampaign(campaignId: string) {
 
   const botNames: Record<string, string> = {
     main: 'Adrian',
+    iceman: 'Iceman',
     emerald: 'Emerald',
     ruby: 'Ruby',
     adobe: 'Adobe Pettaway',
@@ -828,6 +843,17 @@ export async function runDispatchCampaign(campaignId: string) {
       metadata: { finalStatus, done: doneCnt, failed: failedCnt, canceled: canceledCnt },
     },
   });
+
+  // Write output files and Telegram ping on completion (non-fatal)
+  if (finalStatus === DispatchCampaignStatus.COMPLETED) {
+    writeCampaignOutput(campaignId).catch(() => { /* non-fatal */ });
+    pingTelegramCampaignComplete({
+      id: campaignId,
+      title: campaign.title,
+      status: finalStatus,
+      tasks: results.map((r) => ({ status: r.status })),
+    }).catch(() => { /* non-fatal */ });
+  }
 
   // Fire campaign-completion webhook (non-fatal)
   if (campaign.callbackUrl) {

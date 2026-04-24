@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getStreamDefs } from '@/lib/v2/revenue-streams-server';
 import { publishV2Event } from '@/lib/v2/event-bus';
 import { sendTelegramMessage } from '@/lib/services/telegram';
-import { TaskPriority, TaskStatus } from '@/lib/db/enums';
+import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

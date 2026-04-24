@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { TaskPriority, TaskStatus, WorkflowStatus, WorkflowType } from '@/lib/db/enums';
+import { TaskPriority, TaskStatus, WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
 
 const DEFAULT_OWNER = 'nuriygold';
 const DEFAULT_REPO = 'task-pool';

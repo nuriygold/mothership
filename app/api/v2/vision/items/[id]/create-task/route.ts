@@ -1,15 +1,16 @@
-import { linkTaskToItem } from '@/lib/services/vision';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import { tasks } from '@/lib/db/schema';
+import { createTask } from '@/lib/services/tasks';
+import { getVisionItem, linkTaskToItem } from '@/lib/services/vision';
 import { createTaskPoolIssue, isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
-import { TaskPriority } from '@/lib/db/enums';
+import { TaskPriority } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 
 const VISION_LABEL = 'domain: vision board';
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-
-  const item = await prisma.visionItem.findUnique({ where: { id: params.id } });
+  const item = await getVisionItem(params.id);
   if (!item) return Response.json({ error: { message: 'Vision item not found' } }, { status: 404 });
 
   const body = await req.json();
@@ -31,18 +32,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (!poolTask) {
         return Response.json({ error: { message: 'Task pool unavailable' } }, { status: 503 });
       }
-      // Mirror into Prisma so the vision link can be stored
-      const task = await prisma.task.create({
-        data: { title, priority, visionItemId: params.id },
-      });
+      const [task] = await db.insert(tasks).values({ title, priority, visionItemId: params.id }).returning();
       await linkTaskToItem(params.id, task.id);
       return Response.json({ task: poolTask }, { status: 201 });
     }
 
     // Database-only mode
-    const task = await prisma.task.create({
-      data: { title, priority, visionItemId: params.id },
-    });
+    const task = await createTask({ title, priority, visionItemId: params.id });
     await linkTaskToItem(params.id, task.id);
     return Response.json({ task }, { status: 201 });
   } catch (error) {

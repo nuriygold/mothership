@@ -1,6 +1,6 @@
 import { getV2TasksFeed } from '@/lib/v2/orchestrator';
 import { createTask } from '@/lib/services/tasks';
-import { TaskPriority, TaskStatus } from '@/lib/db/enums';
+import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,4 +53,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

@@ -62,6 +62,7 @@ type Config = {
   model: string;
   keys: Partial<Record<Provider, string>>;
   terminalUrl: string;
+  terminalToken: string;
   azureEndpoint: string;
 };
 
@@ -70,6 +71,7 @@ const DEFAULTS: Config = {
   model: 'gpt-5.3-codex',
   keys: {},
   terminalUrl: 'ws://localhost:3001',
+  terminalToken: '',
   azureEndpoint: '',
 };
 
@@ -569,6 +571,13 @@ export default function ClaudePage() {
               placeholder="ws://localhost:3001"
               style={{ ...sel, width: 240, fontSize: 12, fontFamily: 'monospace' }}
             />
+            <input
+              type="password"
+              value={cfg.terminalToken}
+              onChange={(e) => patchCfg({ terminalToken: e.target.value })}
+              placeholder="TERMINAL_SECRET (optional)"
+              style={{ ...sel, width: 240, fontSize: 12, fontFamily: 'monospace' }}
+            />
           </>
         )}
       </div>
@@ -665,7 +674,7 @@ export default function ClaudePage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <TerminalView
             serverUrl={cfg.terminalUrl}
-            token=""
+            token={cfg.terminalToken}
             sessionId={sessionId}
           />
         </div>

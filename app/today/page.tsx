@@ -19,7 +19,14 @@ import { NewTaskModal } from '@/components/today/new-task-modal';
 import { FinanceAlerts } from '@/components/today/finance-alerts';
 import { StatusTicker } from '@/components/today/status-ticker';
 import { ThreeDayGrid } from '@/components/today/three-day-grid';
-import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
+import {
+  BOT_TELEGRAM_KEY,
+  BOT_COLORS,
+  BOT_BORDER,
+  BOT_OWNER_LOGIN,
+  normalizeBotName,
+  pickRandomAffirmationBar,
+} from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
@@ -132,7 +139,7 @@ export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
   const { data: tasksData, mutate: mutateTasks } = useSWR<V2TasksFeed>('/api/v2/tasks', fetcher, { refreshInterval: 30000 });
-  const { data: campaignsData } = useSWR<CampaignListItem[]>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
+  const { data: campaignsData } = useSWR<CampaignListResponse>('/api/dispatch/campaigns', fetcher, { refreshInterval: 120000 });
   const { data: emailData } = useSWR<{ inbox: unknown[] }>('/api/v2/email', fetcher, { refreshInterval: 60000 });
   const [streamStatus, setStreamStatus] = useState<'live' | 'fallback'>('fallback');
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -241,8 +248,8 @@ export default function TodayPage() {
     return `${feed.userContext.greeting}, ${feed.userContext.userName}`;
   }, [feed]);
 
-  const affirmation = feed?.userContext?.affirmation ?? '';
-  const affirmationSource = feed?.userContext?.affirmationSource ?? null;
+  const affirmationSource = feed?.userContext?.affirmationSource ?? 'Daily affirmation';
+  const affirmation = useMemo(() => pickRandomAffirmationBar(), []);
 
   // Count emails received today (local time), by timestamp field.
   const emailsToday = useMemo(() => {
@@ -392,6 +399,7 @@ export default function TodayPage() {
   }, []);
 
   const calEvents = calData?.events ?? [];
+  const campaigns = Array.isArray(campaignsData) ? campaignsData : [];
 
   return (
     <>
@@ -486,23 +494,21 @@ export default function TodayPage() {
               textShadow: '0 1px 2px rgba(184,144,42,0.18)',
             }}
           >
-            {affirmation || 'You move with intention and grace.'}
+            {affirmation}
           </p>
-          {affirmationSource && (
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '10px',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--ice-text3)',
-                opacity: 0.8,
-                marginTop: 4,
-              }}
-            >
-              — {affirmationSource}
-            </div>
-          )}
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--ice-text3)',
+              opacity: 0.8,
+              marginTop: 4,
+            }}
+          >
+            — {affirmationSource}
+          </div>
         </div>
       </div>
 
@@ -524,7 +530,7 @@ export default function TodayPage() {
         />
         <KpiBox
           label="Campaigns"
-          count={campaignsData?.filter((c) => c.status && c.status !== 'COMPLETED').length ?? null}
+          count={campaigns.filter((c) => c.status && c.status !== 'COMPLETED').length}
           sub="active"
           href="/dispatch"
         />
@@ -647,6 +653,13 @@ type CampaignListItem = {
   status: string | null;
 };
 
+type CampaignListError = {
+  ok: false;
+  message: string;
+};
+
+type CampaignListResponse = CampaignListItem[] | CampaignListError;
+
 function KpiBox({
   label,
   count,
@@ -740,4 +753,3 @@ function KpiBox({
     </Link>
   );
 }
-

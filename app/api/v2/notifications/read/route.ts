@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { notifications } from '@/lib/db/schema';
 import { publishV2Event } from '@/lib/v2/event-bus';
 
 export const dynamic = 'force-dynamic';
@@ -10,9 +12,9 @@ export async function PATCH(req: Request) {
   const id = typeof body?.id === 'string' ? body.id.trim() : null;
 
   if (id) {
-    await prisma.notification.update({ where: { id }, data: { read: true } });
+    await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
   } else {
-    await prisma.notification.updateMany({ where: { read: false }, data: { read: true } });
+    await db.update(notifications).set({ read: true }).where(eq(notifications.read, false));
   }
 
   publishV2Event('notifications', 'read', { id: id ?? 'all' });

@@ -92,7 +92,7 @@ function RubyPageContent() {
   }, []);
 
   useEffect(() => {
-    const sessionFromQuery = searchParams?.get('session');
+    const sessionFromQuery = searchParams?.get('session') ?? null;
     if (isRubySessionId(sessionFromQuery)) {
       ensureRubySession(sessionFromQuery);
       setSessionId(sessionFromQuery);

@@ -1,5 +1,5 @@
 import { createVisionItem } from '@/lib/services/vision';
-import { VisionItemStatus } from '@/lib/db/enums';
+import { VisionItemStatus } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 

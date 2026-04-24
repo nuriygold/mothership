@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { DispatchCampaignStatus } from '@/lib/db/enums';
+import { DispatchCampaignStatus } from '@/lib/db/prisma-types';
 import { setDispatchCampaignStatus } from '@/lib/services/dispatch';
 
 export const dynamic = 'force-dynamic';

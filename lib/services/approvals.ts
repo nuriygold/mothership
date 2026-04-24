@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { ApprovalDecision } from '@/lib/db/enums';
+import { ApprovalDecision } from '@/lib/db/prisma-types';
 
 export async function listApprovals() {
   return prisma.approval.findMany({

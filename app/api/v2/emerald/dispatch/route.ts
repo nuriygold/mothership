@@ -149,7 +149,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input: text }),
+      body: JSON.stringify({ stream: true, model, input: text, instructions: buildSystemPrompt(finance) }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {

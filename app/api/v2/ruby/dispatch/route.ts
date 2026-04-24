@@ -43,8 +43,6 @@ export async function POST(req: Request) {
       .catch(() => {});
   }
 
-  // input is plain text — gateway handles system prompt via x-openclaw-agent-id
-
   let upstreamRes: Response;
   try {
     upstreamRes = await fetch(`${gateway}/v1/responses`, {
@@ -55,7 +53,7 @@ export async function POST(req: Request) {
         'x-openclaw-agent-id': resolvedAgent,
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
-      body: JSON.stringify({ stream: true, model, input: text }),
+      body: JSON.stringify({ stream: true, model, input: text, instructions: SYSTEM_PROMPT }),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {

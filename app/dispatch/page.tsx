@@ -3,10 +3,11 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Trophy } from 'lucide-react';
+import { Download, Send, Trash2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+import { REVENUE_STREAMS } from '@/lib/v2/revenue-streams';
 
 const DISPATCH_COMMANDS = [
   { cmd: '/dispatch', args: '<title>', desc: 'Create a new dispatch campaign' },
@@ -58,6 +59,11 @@ type DispatchCampaign = {
   latestPlan?: { plans?: DispatchPlan[] } | null;
   tasks: DispatchTask[];
   visionItemId?: string | null;
+  projectId?: string | null;
+  outputFolder?: string | null;
+  assignedBotId?: string | null;
+  revenueStream?: string | null;
+  linkedTaskRef?: string | null;
 };
 
 async function fetchCommands(): Promise<CommandItem[]> {
@@ -138,7 +144,16 @@ async function trophyDispatchCampaign(payload: { campaignId: string }) {
   return body;
 }
 
-async function createDispatchCampaign(payload: { title: string; description?: string }) {
+async function createDispatchCampaign(payload: {
+  title: string;
+  description?: string;
+  projectId?: string;
+  visionItemId?: string;
+  outputFolder?: string;
+  assignedBotId?: string;
+  revenueStream?: string;
+  linkedTaskRef?: string;
+}) {
   const res = await fetch('/api/dispatch/campaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -147,6 +162,38 @@ async function createDispatchCampaign(payload: { title: string; description?: st
   const body = await res.json();
   if (!res.ok) throw new Error(body?.message ?? 'Failed to create campaign');
   return body;
+}
+
+async function sendCampaignToBot(payload: { campaignId: string; botId: string; note?: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/send-to-bot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ botId: payload.botId, note: payload.note }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to send to bot');
+  return body;
+}
+
+async function fetchProjects() {
+  const res = await fetch('/api/projects', { cache: 'no-store' });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data as { id: string; title: string; color: string }[] : [];
+}
+
+async function fetchVisionPillars() {
+  const res = await fetch('/api/v2/vision/pillars', { cache: 'no-store' });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data?.pillars ?? []) as { id: string; label: string; emoji?: string; items: { id: string; title: string }[] }[];
+}
+
+async function fetchOutputFolders() {
+  const res = await fetch('/api/dispatch/output-folders', { cache: 'no-store' });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data?.folders ?? []) as string[];
 }
 
 async function createDispatchTask(payload: {
@@ -341,6 +388,9 @@ function DispatchPageInner() {
       return hasPlanning ? 3_000 : 15_000;
     },
   });
+  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: fetchProjects, staleTime: 60_000 });
+  const visionPillarsQuery = useQuery({ queryKey: ['vision-pillars'], queryFn: fetchVisionPillars, staleTime: 60_000 });
+  const outputFoldersQuery = useQuery({ queryKey: ['output-folders'], queryFn: fetchOutputFolders, staleTime: 30_000 });
 
   const [input, setInput] = useState('');
   const [source, setSource] = useState('web');
@@ -353,6 +403,16 @@ function DispatchPageInner() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [campaignTitle, setCampaignTitle] = useState('');
   const [campaignDescription, setCampaignDescription] = useState('');
+  const [showCampaignExtras, setShowCampaignExtras] = useState(false);
+  const [campaignProjectId, setCampaignProjectId] = useState('');
+  const [campaignVisionItemId, setCampaignVisionItemId] = useState('');
+  const [campaignOutputFolder, setCampaignOutputFolder] = useState('');
+  const [campaignAssignedBotId, setCampaignAssignedBotId] = useState('');
+  const [campaignRevenueStream, setCampaignRevenueStream] = useState('');
+  const [campaignLinkedTaskRef, setCampaignLinkedTaskRef] = useState('');
+  const [sendToBotTarget, setSendToBotTarget] = useState<string | null>(null);
+  const [sendToBotBotId, setSendToBotBotId] = useState('main');
+  const [sendToBotNote, setSendToBotNote] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskPriority, setTaskPriority] = useState('3');
@@ -469,6 +529,13 @@ function DispatchPageInner() {
       await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
       setCampaignTitle('');
       setCampaignDescription('');
+      setCampaignProjectId('');
+      setCampaignVisionItemId('');
+      setCampaignOutputFolder('');
+      setCampaignAssignedBotId('');
+      setCampaignRevenueStream('');
+      setCampaignLinkedTaskRef('');
+      setShowCampaignExtras(false);
       if (payload?.campaign?.id) {
         setSelectedCampaignId(payload.campaign.id);
       }
@@ -565,6 +632,14 @@ function DispatchPageInner() {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
       await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
+    },
+  });
+
+  const sendToBotMutation = useMutation({
+    mutationFn: sendCampaignToBot,
+    onSuccess: () => {
+      setSendToBotTarget(null);
+      setSendToBotNote('');
     },
   });
 
@@ -668,8 +743,8 @@ function DispatchPageInner() {
                 value={campaignTitle}
                 onChange={(e) => setCampaignTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && campaignTitle) {
-                    createCampaignMutation.mutate({ title: campaignTitle, description: campaignDescription || undefined });
+                  if (e.key === 'Enter' && campaignTitle && !campaignOutputFolder) {
+                    createCampaignMutation.mutate({ title: campaignTitle, description: campaignDescription || undefined, projectId: campaignProjectId || undefined, visionItemId: campaignVisionItemId || undefined, outputFolder: campaignOutputFolder || undefined, assignedBotId: campaignAssignedBotId || undefined, revenueStream: campaignRevenueStream || undefined, linkedTaskRef: campaignLinkedTaskRef || undefined });
                   }
                 }}
               />
@@ -680,12 +755,149 @@ function DispatchPageInner() {
                 value={campaignDescription}
                 onChange={(e) => setCampaignDescription(e.target.value)}
               />
+
+              {/* Optional settings toggle */}
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs"
+                style={{ color: 'var(--foreground)', opacity: 0.5 }}
+                onClick={() => setShowCampaignExtras((v) => !v)}
+              >
+                <span>{showCampaignExtras ? '▲' : '▼'}</span>
+                <span>Optional settings</span>
+                {(campaignProjectId || campaignVisionItemId || campaignOutputFolder || campaignRevenueStream || campaignLinkedTaskRef) && (
+                  <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-sky-900/60 text-sky-300">
+                    {[campaignProjectId, campaignVisionItemId, campaignOutputFolder, campaignRevenueStream, campaignLinkedTaskRef].filter(Boolean).length} set
+                  </span>
+                )}
+              </button>
+
+              {showCampaignExtras && (
+                <div className="rounded-lg p-3 space-y-3" style={{ border: '1px solid var(--card-border)', background: 'var(--muted)' }}>
+                  {/* Row 1: Output folder + Assigned bot */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium" style={{ color: 'var(--foreground)', opacity: 0.6 }}>
+                        Output folder
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-border bg-[var(--input-background)] px-2 py-2 text-sm text-slate-900"
+                        value={campaignOutputFolder}
+                        onChange={(e) => {
+                          setCampaignOutputFolder(e.target.value);
+                          if (!e.target.value) setCampaignAssignedBotId('');
+                        }}
+                      >
+                        <option value="">None</option>
+                        {(outputFoldersQuery.data ?? []).map((f) => (
+                          <option key={f} value={f}>{f.split('/').slice(-2).join('/')}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium" style={{ color: 'var(--foreground)', opacity: 0.6 }}>
+                        Assigned bot{campaignOutputFolder ? ' *' : ''}
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-border bg-[var(--input-background)] px-2 py-2 text-sm text-slate-900"
+                        value={campaignAssignedBotId}
+                        onChange={(e) => setCampaignAssignedBotId(e.target.value)}
+                        required={Boolean(campaignOutputFolder)}
+                      >
+                        <option value="">Auto-route</option>
+                        <option value="main">Adrian (Operator) · main</option>
+                        <option value="iceman">Iceman · iceman</option>
+                        <option value="ruby">Ruby · ruby</option>
+                        <option value="emerald">Emerald · emerald</option>
+                        <option value="adobe">Adobe Pettaway · adobe</option>
+                        <option value="anchor">Anchor (Command) · anchor</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Revenue stream + Project */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium" style={{ color: 'var(--foreground)', opacity: 0.6 }}>Revenue stream</label>
+                      <select
+                        className="w-full rounded-md border border-border bg-[var(--input-background)] px-2 py-2 text-sm text-slate-900"
+                        value={campaignRevenueStream}
+                        onChange={(e) => setCampaignRevenueStream(e.target.value)}
+                      >
+                        <option value="">None</option>
+                        {REVENUE_STREAMS.map((s) => (
+                          <option key={s.key} value={s.key}>{s.displayName}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium" style={{ color: 'var(--foreground)', opacity: 0.6 }}>Project</label>
+                      <select
+                        className="w-full rounded-md border border-border bg-[var(--input-background)] px-2 py-2 text-sm text-slate-900"
+                        value={campaignProjectId}
+                        onChange={(e) => setCampaignProjectId(e.target.value)}
+                      >
+                        <option value="">None</option>
+                        {(projectsQuery.data ?? []).map((p) => (
+                          <option key={p.id} value={p.id}>{p.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Vision item */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium" style={{ color: 'var(--foreground)', opacity: 0.6 }}>Vision board item</label>
+                    <select
+                      className="w-full rounded-md border border-border bg-[var(--input-background)] px-2 py-2 text-sm text-slate-900"
+                      value={campaignVisionItemId}
+                      onChange={(e) => setCampaignVisionItemId(e.target.value)}
+                    >
+                      <option value="">None</option>
+                      {(visionPillarsQuery.data ?? []).map((pillar) =>
+                        pillar.items.length > 0 ? (
+                          <optgroup key={pillar.id} label={`${pillar.emoji ?? ''} ${pillar.label}`}>
+                            {pillar.items.map((item) => (
+                              <option key={item.id} value={item.id}>{item.title}</option>
+                            ))}
+                          </optgroup>
+                        ) : null
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Row 4: Linked task ref */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium" style={{ color: 'var(--foreground)', opacity: 0.6 }}>Linked task</label>
+                    <input
+                      className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
+                      placeholder="Task ID, title, or reference"
+                      value={campaignLinkedTaskRef}
+                      onChange={(e) => setCampaignLinkedTaskRef(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {campaignOutputFolder && !campaignAssignedBotId && (
+                <p className="text-xs text-amber-400">An assigned bot is required when an output folder is set.</p>
+              )}
+
               <div className="flex items-center gap-2">
                 <Button
                   onClick={() =>
-                    createCampaignMutation.mutate({ title: campaignTitle, description: campaignDescription || undefined })
+                    createCampaignMutation.mutate({
+                      title: campaignTitle,
+                      description: campaignDescription || undefined,
+                      projectId: campaignProjectId || undefined,
+                      visionItemId: campaignVisionItemId || undefined,
+                      outputFolder: campaignOutputFolder || undefined,
+                      assignedBotId: campaignAssignedBotId || undefined,
+                      revenueStream: campaignRevenueStream || undefined,
+                      linkedTaskRef: campaignLinkedTaskRef || undefined,
+                    })
                   }
-                  disabled={!campaignTitle || createCampaignMutation.isLoading}
+                  disabled={!campaignTitle || (Boolean(campaignOutputFolder) && !campaignAssignedBotId) || createCampaignMutation.isLoading}
                 >
                   {createCampaignMutation.isLoading ? 'Creating...' : 'Create campaign'}
                 </Button>
@@ -794,6 +1006,21 @@ function DispatchPageInner() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
+                        setSendToBotTarget(campaign.id);
+                        setSendToBotBotId(campaign.assignedBotId ?? 'main');
+                        setSendToBotNote('');
+                      }}
+                      title="Send campaign output to a bot"
+                      aria-label="Send to bot"
+                      className="rounded-md p-1 transition-opacity hover:opacity-70"
+                      style={{ background: 'transparent', color: 'var(--foreground)', opacity: 0.5 }}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         const reason = window.prompt(
                           `Delete campaign "${campaign.title}"?\n\nWhy are you deleting it? (leave blank to skip)`,
                           '',
@@ -822,6 +1049,11 @@ function DispatchPageInner() {
                   {failedCount > 0 && (
                     <span className="text-rose-400 opacity-100">{failedCount} failed</span>
                   )}
+                  {campaign.revenueStream && (
+                    <span className="rounded-full px-1.5 py-0.5 opacity-100" style={{ background: 'rgba(0,217,255,0.1)', color: 'var(--color-cyan)' }}>
+                      {REVENUE_STREAMS.find((s) => s.key === campaign.revenueStream)?.displayName ?? campaign.revenueStream}
+                    </span>
+                  )}
                   {campaign.visionItemId && (
                     <a
                       href="/vision"
@@ -832,10 +1064,74 @@ function DispatchPageInner() {
                       Vision ↗
                     </a>
                   )}
+                  {campaign.outputFolder && (
+                    <span className="rounded-full px-1.5 py-0.5 opacity-100" style={{ background: 'rgba(16,185,129,0.1)', color: '#6ee7b7' }}>
+                      📁 {campaign.outputFolder.split('/').pop()}
+                    </span>
+                  )}
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Send to Bot modal ── */}
+      {sendToBotTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setSendToBotTarget(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            style={{ background: 'var(--card)', border: '1px solid var(--card-border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Send campaign to bot</p>
+            <div className="space-y-1">
+              <label className="text-[11px]" style={{ color: 'var(--foreground)', opacity: 0.55 }}>Bot</label>
+              <select
+                className="w-full rounded-md border border-border bg-[var(--input-background)] px-2 py-2 text-sm text-slate-900"
+                value={sendToBotBotId}
+                onChange={(e) => setSendToBotBotId(e.target.value)}
+              >
+                <option value="main">Adrian (Operator) · main</option>
+                <option value="iceman">Iceman · iceman</option>
+                <option value="ruby">Ruby · ruby</option>
+                <option value="emerald">Emerald · emerald</option>
+                <option value="adobe">Adobe Pettaway · adobe</option>
+                <option value="anchor">Anchor (Command) · anchor</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px]" style={{ color: 'var(--foreground)', opacity: 0.55 }}>Assignment note (optional)</label>
+              <textarea
+                className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
+                rows={3}
+                placeholder="Instructions, context, or what to do with this output…"
+                value={sendToBotNote}
+                onChange={(e) => setSendToBotNote(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() =>
+                  sendToBotMutation.mutate({ campaignId: sendToBotTarget, botId: sendToBotBotId, note: sendToBotNote || undefined })
+                }
+                disabled={sendToBotMutation.isLoading}
+              >
+                {sendToBotMutation.isLoading ? 'Sending…' : 'Send to bot'}
+              </Button>
+              <Button variant="outline" onClick={() => setSendToBotTarget(null)}>Cancel</Button>
+            </div>
+            {sendToBotMutation.isSuccess && (
+              <p className="text-xs text-emerald-400">Dispatched to {sendToBotMutation.data?.botName ?? sendToBotBotId}.</p>
+            )}
+            {sendToBotMutation.isError && (
+              <p className="text-xs text-rose-400">{(sendToBotMutation.error as Error).message}</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -877,6 +1173,16 @@ function DispatchPageInner() {
                 >
                   {selectedCampaign.status === 'PAUSED' ? 'Resume' : 'Pause'}
                 </Button>
+                {selectedCampaign.tasks.some((t) => t.status === 'DONE') && (
+                  <a
+                    href={`/api/dispatch/campaigns/${selectedCampaign.id}/download`}
+                    download
+                    className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--card-border)', color: 'var(--foreground)', opacity: 0.65 }}
+                  >
+                    <Download className="w-3 h-3" /> Download
+                  </a>
+                )}
               </div>
             </div>
             {planMutation.isError && (
@@ -1205,8 +1511,17 @@ function DispatchPageInner() {
 
                       {task.output && (
                         <details className="mt-2">
-                          <summary className="cursor-pointer text-[11px] text-slate-400 hover:text-slate-300">
-                            View agent output
+                          <summary className="flex items-center justify-between cursor-pointer text-[11px] text-slate-400 hover:text-slate-300">
+                            <span>View agent output</span>
+                            <a
+                              href={`/api/dispatch/campaigns/${selectedCampaign.id}/download?task=${task.id}`}
+                              download
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] hover:opacity-80"
+                              style={{ background: 'var(--muted)', color: 'var(--foreground)', opacity: 0.6 }}
+                            >
+                              <Download className="w-2.5 h-2.5" /> .md
+                            </a>
                           </summary>
                           <pre className="mt-2 whitespace-pre-wrap rounded-lg p-2 text-[11px] text-slate-300" style={{ border: '1px solid var(--card-border)', background: 'var(--background)' }}>
                             {task.output}
@@ -1448,6 +1763,7 @@ function DispatchPageInner() {
                   onChange={(e) => setOcAgent(e.target.value)}
                 >
                   <option value="main">Adrian · main</option>
+                  <option value="iceman">Iceman · iceman</option>
                   <option value="ruby">Ruby · ruby</option>
                   <option value="emerald">Emerald · emerald</option>
                   <option value="adobe">Adobe Pettaway · adobe</option>

@@ -240,10 +240,10 @@ export async function dispatchWithTools(input: {
 }
 
 export async function checkGateway(): Promise<{ ok: boolean; reason: string }> {
-  const gateway = process.env.OPENCLAW_GATEWAY;
+  const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
   if (!gateway || !token) {
-    return { ok: false, reason: 'Missing OPENCLAW_GATEWAY or OPENCLAW_TOKEN' };
+    return { ok: false, reason: 'Missing OPENCLAW_INFERENCE_GATEWAY (or OPENCLAW_GATEWAY) or OPENCLAW_TOKEN' };
   }
   try {
     const res = await fetch(`${gateway.replace(/\/$/, '')}/health`, {
@@ -259,8 +259,8 @@ export async function checkGateway(): Promise<{ ok: boolean; reason: string }> {
     const msg = error instanceof Error ? error.message : String(error);
     const isTimeout = error instanceof Error && error.name === 'TimeoutError';
     const reason = isTimeout
-      ? `Gateway timed out after 10s (${gateway})`
-      : `Gateway unreachable: ${msg} (${gateway})`;
+      ? `Inference gateway timed out after 10s (${gateway})`
+      : `Inference gateway unreachable: ${msg} (${gateway})`;
     return { ok: false, reason };
   }
 }

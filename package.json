@@ -8,10 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "mcp": "node mcp/server.js",
-    "postinstall": "prisma generate",
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
-    "migrate:deploy": "prisma migrate deploy",
-    "db:seed:staging": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
+    "seed": "tsx drizzle/seed.ts",
+    "db:seed:staging": "tsx drizzle/seed.ts",
     "finance:ingest": "ts-node --project tsconfig.scripts.json scripts/ingest-finance-plan.ts",
     "finance:seed": "ts-node --project tsconfig.scripts.json scripts/seed-finance.ts",
     "finance:update-balance": "ts-node --project tsconfig.scripts.json scripts/update-account-balance.ts",
@@ -21,7 +19,11 @@
     "test:v2:contracts": "node scripts/v2-contract-check.mjs",
     "test:v2:sse": "node scripts/v2-sse-load.mjs",
     "test:v2:idempotency": "node scripts/v2-idempotency-auth-check.mjs",
-    "smoke:dispatch": "node scripts/smoke-dispatch.mjs"
+    "smoke:dispatch": "node scripts/smoke-dispatch.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "migrate:deploy": "drizzle-kit migrate"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
@@ -37,6 +39,7 @@
     "axios": "1.6.7",
     "class-variance-authority": "0.7.0",
     "clsx": "2.1.0",
+    "drizzle-orm": "^0.44.2",
     "googleapis": "^171.4.0",
     "imapflow": "^1.0.136",
     "lucide-react": "0.356.0",
@@ -44,6 +47,7 @@
     "nodemailer": "^8.0.5",
     "pg": "8.11.3",
     "plaid": "^42.0.0",
+    "postgres": "^3.4.7",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-markdown": "^10.1.0",
@@ -60,12 +64,14 @@
     "@types/react": "18.2.68",
     "@types/react-dom": "18.2.22",
     "autoprefixer": "10.4.18",
+    "drizzle-kit": "^0.31.5",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.1.4",
     "postcss": "8.4.35",
     "prisma": "^5.22.0",
     "tailwindcss": "3.4.1",
     "ts-node": "10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "5.9.3"
   }
 }

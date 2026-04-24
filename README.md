@@ -99,6 +99,16 @@ OPENCLAW_TOKEN             # Gateway auth token
 OPENCLAW_AGENT_EMERALD     # Emerald agent ID (required — others fall back to this)
 ```
 
+### Database URL precedence (important)
+```
+PRISMA_DATABASE_URL        # Optional explicit runtime DB URL (highest priority)
+DATABASE_URL               # Primary DB URL for app + Prisma CLI
+DATABASE_POOLER_URL        # Legacy fallback only when DATABASE_URL is not set
+```
+
+Use the **same database** for all three values (or leave unused values blank). Mixing different hosts/databases causes
+data drift symptoms like items showing in one surface but missing in Vision/Dispatch.
+
 ### Owner Auth
 ```
 OWNER_PASSPHRASE           # Secret passphrase for /login (cross-browser memory)
@@ -173,6 +183,12 @@ npm run dev
 ```
 
 Open [http://localhost:3000/today](http://localhost:3000/today).
+
+## Claude Terminal Server (WebSocket backend)
+
+The `/claude` terminal mode requires a separate WebSocket server (`terminal-server/`) and cannot run on Vercel serverless functions.
+
+DigitalOcean Droplet deployment guide: `terminal-server/README.md`.
 
 ---
 

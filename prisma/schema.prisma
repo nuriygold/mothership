@@ -293,6 +293,10 @@ model DispatchCampaign {
   approvedPlanAt      DateTime?
   visionItemId        String?
   projectId           String?
+  outputFolder        String?
+  assignedBotId       String?
+  revenueStream       String?
+  linkedTaskRef       String?
   queuedAt            DateTime?
   scheduledAt         DateTime?
   createdAt           DateTime               @default(now())

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import { RunStatus } from '@/lib/db/enums';
+import type { InputJsonValue } from '@/lib/db/json';
+import { RunStatus } from '@/lib/db/prisma-types';
 import type { InputJsonValue } from '@/lib/db/json';
 import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 
