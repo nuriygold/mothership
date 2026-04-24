@@ -355,6 +355,19 @@ export async function POST(req: Request) {
     if (!message?.text) return NextResponse.json({ ok: true });
 
     const chatId = message.chat.id;
+
+    await createAuditEvent({
+      entityType: 'telegram',
+      entityId: String(body.update_id),
+      eventType: 'telegram_inbound',
+      metadata: {
+        text: message.text,
+        chatId: String(chatId),
+        username: message.from?.username ?? message.from?.first_name ?? 'unknown',
+        botKey: 'webhook',
+      },
+    });
+
     const command = parseCommand(message.text);
 
     if (!command) {
