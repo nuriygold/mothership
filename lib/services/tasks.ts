@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { and, desc, eq, ilike, or } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { tasks, users, workflows } from '@/lib/db/schema';
 import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
 import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks, updateTaskPoolIssue } from '@/lib/integrations/task-pool';
 
@@ -10,20 +12,57 @@ async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: str
   if (!ownerLogin) throw new Error('ownerLogin cannot be empty');
   const canUseEmailPrefixLookup = !ownerLogin.includes('@') && /^[a-zA-Z0-9._-]+$/.test(ownerLogin);
 
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { name: { equals: ownerLogin, mode: 'insensitive' } },
-        { email: { equals: ownerLogin, mode: 'insensitive' } },
-        ...(canUseEmailPrefixLookup ? [{ email: { startsWith: `${ownerLogin}@`, mode: 'insensitive' as const } }] : []),
-      ],
-    },
-    select: { id: true },
-  });
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      or(
+        ilike(users.name, ownerLogin),
+        ilike(users.email, ownerLogin),
+        ...(canUseEmailPrefixLookup ? [ilike(users.email, `${ownerLogin}@%`)] : [])
+      )!
+    )
+    .limit(1);
 
   if (user) return user.id;
 
   throw new Error(`User not found for login "${ownerLogin}". Provide a valid username, email, or email prefix.`);
+}
+
+async function selectTaskRows(where?: ReturnType<typeof eq>) {
+  return db
+    .select({
+      id: tasks.id,
+      workflowId: tasks.workflowId,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      ownerId: tasks.ownerId,
+      assignee: tasks.assignee,
+      dueAt: tasks.dueAt,
+      visionItemId: tasks.visionItemId,
+      completedAt: tasks.completedAt,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      owner: {
+        id: users.id,
+        email: users.email,
+        name: users.name,
+      },
+      workflow: {
+        id: workflows.id,
+        name: workflows.name,
+        description: workflows.description,
+        status: workflows.status,
+        type: workflows.type,
+      },
+    })
+    .from(tasks)
+    .leftJoin(users, eq(tasks.ownerId, users.id))
+    .leftJoin(workflows, eq(tasks.workflowId, workflows.id))
+    .where(where)
+    .orderBy(desc(tasks.createdAt));
 }
 
 export async function listTasks() {
@@ -34,10 +73,7 @@ export async function listTasks() {
   }
 
   try {
-    return await prisma.task.findMany({
-      include: { workflow: true, owner: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    return await selectTaskRows();
   } catch (err) {
     console.warn('[listTasks] DB query failed:', err instanceof Error ? err.message : String(err));
     return [];
@@ -52,6 +88,7 @@ export async function createTask(input: {
   status?: TaskStatus;
   priority?: TaskPriority;
   dueAt?: Date | null;
+  visionItemId?: string | null;
 }) {
   if (isTaskPoolRepositorySource()) {
     const repositoryTask = await createTaskPoolIssue(input);
@@ -59,8 +96,9 @@ export async function createTask(input: {
     throw new Error('Task-pool repository unavailable. Task creation is disabled in source-controlled mode.');
   }
 
-  return prisma.task.create({
-    data: {
+  const [created] = await db
+    .insert(tasks)
+    .values({
       title: input.title,
       description: input.description,
       workflowId: input.workflowId ?? null,
@@ -68,8 +106,12 @@ export async function createTask(input: {
       status: input.status ?? TaskStatus.TODO,
       priority: input.priority ?? TaskPriority.MEDIUM,
       dueAt: input.dueAt ?? null,
-    },
-  });
+      visionItemId: input.visionItemId ?? null,
+    })
+    .returning({ id: tasks.id });
+
+  const [task] = await selectTaskRows(eq(tasks.id, created.id));
+  return task;
 }
 
 export async function updateTask(input: {
@@ -93,14 +135,15 @@ export async function updateTask(input: {
 
   const resolvedOwnerId = await resolveOwnerId({ ownerId: input.ownerId, ownerLogin: input.ownerLogin });
 
-  return prisma.task.update({
-    where: { id: input.id },
-    data: {
-      status: input.status,
-      priority: input.priority,
-      ownerId: resolvedOwnerId,
-      dueAt: input.dueAt,
-    },
-    include: { workflow: true, owner: true },
-  });
+  const updates: Partial<typeof tasks.$inferInsert> = {};
+  if (input.status !== undefined) updates.status = input.status;
+  if (input.priority !== undefined) updates.priority = input.priority;
+  if (resolvedOwnerId !== undefined) updates.ownerId = resolvedOwnerId;
+  if (input.dueAt !== undefined) updates.dueAt = input.dueAt;
+  updates.updatedAt = new Date();
+
+  await db.update(tasks).set(updates).where(eq(tasks.id, input.id));
+
+  const [task] = await selectTaskRows(eq(tasks.id, input.id));
+  return task;
 }

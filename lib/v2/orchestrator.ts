@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
+import { TaskPriority, TaskStatus, VisionItemStatus, VisionPillarColor } from '@/lib/db/prisma-types';
 import { listTasks, updateTask } from '@/lib/services/tasks';
 import { isTaskPoolRepositorySource, addVisionBoardLabelToIssue } from '@/lib/integrations/task-pool';
 import { listFinancePlans } from '@/lib/services/finance';
@@ -1157,7 +1157,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
         id: item.id,
         title: item.title,
         description: item.description,
-        status: item.status,
+        status: item.status as VisionItemStatus,
         targetDate: item.targetDate ? item.targetDate.toISOString() : null,
         imageEmoji: item.imageEmoji,
         imageUrl: item.imageUrl ?? null,
@@ -1175,7 +1175,7 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
       id: pillar.id,
       label: pillar.label,
       emoji: pillar.emoji,
-      color: pillar.color,
+      color: pillar.color as VisionPillarColor,
       sortOrder: pillar.sortOrder,
       items,
       itemCount: items.length,
