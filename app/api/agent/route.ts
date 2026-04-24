@@ -1,6 +1,7 @@
-import { prisma } from '@/lib/prisma';
 import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 import { ensureSession } from '@/lib/chat/session-util';
+import { db } from '@/lib/db/client';
+import { chatMessages } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -51,7 +52,7 @@ Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not
 
   if (sessionId) {
     ensureSession(sessionId, { firstMessageText: text })
-      .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
+      .then(() => db.insert(chatMessages).values({ sessionId, role: 'user', content: text }))
       .catch(() => {});
   }
 
@@ -93,9 +94,9 @@ Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
         if (accumulated && sessionId) {
-          prisma.chatMessage
-            .create({ data: { sessionId, role: 'assistant', content: accumulated } })
-            .then(() => prisma.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }))
+          db.insert(chatMessages)
+            .values({ sessionId, role: 'assistant', content: accumulated })
+            .then(() => ensureSession(sessionId, { firstMessageText: text }))
             .catch(() => {});
         }
       }

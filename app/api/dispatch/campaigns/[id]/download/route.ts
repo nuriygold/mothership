@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { prisma } from '@/lib/prisma';
+import { asc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
 import { writeCampaignOutput, getCampaignOutputDir, zipCampaignOutputDir, campaignOutputDirName } from '@/lib/services/campaign-output';
 
 export const dynamic = 'force-dynamic';
@@ -16,13 +18,20 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const { searchParams } = new URL(req.url);
     const taskId = searchParams.get('task');
 
-    const campaign = await prisma.dispatchCampaign.findUnique({
-      where: { id: params.id },
-      include: { tasks: { orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }] } },
-    });
+    const [campaign] = await db
+      .select()
+      .from(dispatchCampaigns)
+      .where(eq(dispatchCampaigns.id, params.id))
+      .limit(1);
     if (!campaign) {
       return NextResponse.json({ ok: false, message: 'Campaign not found' }, { status: 404 });
     }
+
+    const tasks = await db
+      .select()
+      .from(dispatchTasks)
+      .where(eq(dispatchTasks.campaignId, campaign.id))
+      .orderBy(asc(dispatchTasks.priority), asc(dispatchTasks.createdAt));
 
     // Ensure the output dir is written
     let outputDir = await getCampaignOutputDir(params.id);
@@ -35,11 +44,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     // Single task .md download
     if (taskId) {
-      const taskIndex = campaign.tasks.findIndex((t) => t.id === taskId);
+      const taskIndex = tasks.findIndex((t) => t.id === taskId);
       if (taskIndex === -1) {
         return NextResponse.json({ ok: false, message: 'Task not found' }, { status: 404 });
       }
-      const task = campaign.tasks[taskIndex];
+      const task = tasks[taskIndex];
       const slug = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
       const filename = `${String(taskIndex + 1).padStart(2, '0')}-${slug}.md`;
       const filePath = path.join(outputDir, filename);

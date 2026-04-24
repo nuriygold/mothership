@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { desc } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { auditEvents } from '@/lib/db/schema';
 import { isTaskPoolRepositorySource, listTaskPoolActivityEvents } from '@/lib/integrations/task-pool';
 
 export async function listAuditEvents(limit = 50) {
@@ -8,10 +10,7 @@ export async function listAuditEvents(limit = 50) {
     return [];
   }
 
-  return prisma.auditEvent.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
+  return db.select().from(auditEvents).orderBy(desc(auditEvents.createdAt)).limit(limit);
 }
 
 export async function createAuditEvent(input: {
@@ -21,13 +20,16 @@ export async function createAuditEvent(input: {
   actorId?: string | null;
   metadata?: Record<string, any>;
 }) {
-  return prisma.auditEvent.create({
-    data: {
+  const [created] = await db
+    .insert(auditEvents)
+    .values({
       entityType: input.entityType,
       entityId: input.entityId,
       eventType: input.eventType,
       actorId: input.actorId ?? null,
-      metadata: (input.metadata ?? {}) as any,
-    },
-  });
+      metadata: input.metadata ?? {},
+    })
+    .returning();
+
+  return created;
 }

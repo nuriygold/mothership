@@ -8,8 +8,9 @@ import { getV2FinanceOverview } from '@/lib/v2/orchestrator';
 import { createDispatchCampaign } from '@/lib/services/dispatch';
 import { createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { createVisionItem, getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
-import { prisma } from '@/lib/prisma';
 import { TaskStatus, TaskPriority } from '@/lib/db/prisma-types';
+import { db } from '@/lib/db/client';
+import { payables } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -238,14 +239,12 @@ async function handleBill(rest: string) {
   const vendor = vendorParts.join(' ').trim() || 'Unknown vendor';
   const amount = parseFloat(amountStr);
 
-  await prisma.payable.create({
-    data: {
-      vendor,
-      amount,
-      currency: 'USD',
-      dueDate,
-      status: 'pending',
-    },
+  await db.insert(payables).values({
+    vendor,
+    amount,
+    currency: 'USD',
+    dueDate,
+    status: 'pending',
   });
 
   const dueLine = dueDate ? ` due ${dueDate.toISOString().slice(0, 10)}` : '';

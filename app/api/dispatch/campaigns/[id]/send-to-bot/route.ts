@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { asc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { createAuditEvent } from '@/lib/services/audit';
 
@@ -31,17 +33,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ ok: false, message: 'botId is required' }, { status: 400 });
     }
 
-    const campaign = await prisma.dispatchCampaign.findUnique({
-      where: { id: params.id },
-      include: { tasks: { orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }] } },
-    });
+    const [campaign] = await db
+      .select()
+      .from(dispatchCampaigns)
+      .where(eq(dispatchCampaigns.id, params.id))
+      .limit(1);
     if (!campaign) {
       return NextResponse.json({ ok: false, message: 'Campaign not found' }, { status: 404 });
     }
 
+    const tasks = await db
+      .select()
+      .from(dispatchTasks)
+      .where(eq(dispatchTasks.campaignId, campaign.id))
+      .orderBy(asc(dispatchTasks.priority), asc(dispatchTasks.createdAt));
+
     const botName = BOT_DISPLAY[botId] ?? botId;
 
-    const taskSummary = campaign.tasks
+    const taskSummary = tasks
       .map((t, i) => {
         const icon = t.status === 'DONE' ? '✅' : t.status === 'FAILED' ? '❌' : '⏳';
         const output = t.output ? `\n\n${t.output}` : '';

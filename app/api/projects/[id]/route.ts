@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { updateProject, assignCampaignToProject } from '@/lib/services/projects';
-import { prisma } from '@/lib/prisma';
+import { updateProject, assignCampaignToProject, deleteProject } from '@/lib/services/projects';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +25,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   try {
-    await prisma.project.delete({ where: { id: params.id } });
-    return NextResponse.json({ ok: true });
+    const result = await deleteProject(params.id);
+    return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

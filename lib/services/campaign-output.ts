@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync } from 'child_process';
-import { prisma } from '@/lib/prisma';
+import { asc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
 import { sendTelegramMessage } from '@/lib/services/telegram';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 
@@ -77,13 +79,22 @@ function buildTaskMd(task: {
 }
 
 export async function writeCampaignOutput(campaignId: string): Promise<string | null> {
-  const campaign = await prisma.dispatchCampaign.findUnique({
-    where: { id: campaignId },
-    include: { tasks: { orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }] } },
-  });
+  const [campaign] = await db
+    .select()
+    .from(dispatchCampaigns)
+    .where(eq(dispatchCampaigns.id, campaignId))
+    .limit(1);
   if (!campaign) return null;
 
-  const dirName = campaignOutputDirName(campaign.title, campaign.createdAt);
+  const tasks = await db
+    .select()
+    .from(dispatchTasks)
+    .where(eq(dispatchTasks.campaignId, campaignId))
+    .orderBy(asc(dispatchTasks.priority), asc(dispatchTasks.createdAt));
+
+  const campaignWithTasks = { ...campaign, tasks };
+
+  const dirName = campaignOutputDirName(campaignWithTasks.title, campaignWithTasks.createdAt);
   const outputDir = path.join(WORKSPACE_DISPATCH, dirName);
 
   try {
@@ -92,25 +103,25 @@ export async function writeCampaignOutput(campaignId: string): Promise<string | 
     return null;
   }
 
-  fs.writeFileSync(path.join(outputDir, 'summary.md'), buildSummaryMd(campaign));
+  fs.writeFileSync(path.join(outputDir, 'summary.md'), buildSummaryMd(campaignWithTasks));
 
-  for (let i = 0; i < campaign.tasks.length; i++) {
-    const task = campaign.tasks[i];
+  for (let i = 0; i < campaignWithTasks.tasks.length; i++) {
+    const task = campaignWithTasks.tasks[i];
     fs.writeFileSync(path.join(outputDir, taskFilename(i, task.title)), buildTaskMd(task));
   }
 
   // If outputFolder + assignedBotId are set, dispatch a write-files job to that bot
-  if (campaign.outputFolder && campaign.assignedBotId) {
-    const fileContents = campaign.tasks
+  if (campaignWithTasks.outputFolder && campaignWithTasks.assignedBotId) {
+    const fileContents = campaignWithTasks.tasks
       .map((t, i) => `### ${taskFilename(i, t.title)}\n\n${t.output ?? '_No output._'}`)
       .join('\n\n---\n\n');
     const prompt = [
-      `Campaign complete: **${campaign.title}**`,
+      `Campaign complete: **${campaignWithTasks.title}**`,
       ``,
-      `Please write the following campaign output files to: \`${campaign.outputFolder}\``,
+      `Please write the following campaign output files to: \`${campaignWithTasks.outputFolder}\``,
       ``,
       `**summary.md**`,
-      buildSummaryMd(campaign),
+      buildSummaryMd(campaignWithTasks),
       ``,
       `---`,
       ``,
@@ -119,7 +130,7 @@ export async function writeCampaignOutput(campaignId: string): Promise<string | 
 
     dispatchToOpenClaw({
       text: prompt,
-      agentId: campaign.assignedBotId,
+      agentId: campaignWithTasks.assignedBotId,
       sessionKey: `campaign-output:${campaignId}`,
     }).catch(() => { /* non-fatal */ });
   }
@@ -152,10 +163,11 @@ export async function pingTelegramCampaignComplete(campaign: {
 }
 
 export async function getCampaignOutputDir(campaignId: string): Promise<string | null> {
-  const campaign = await prisma.dispatchCampaign.findUnique({
-    where: { id: campaignId },
-    select: { title: true, createdAt: true },
-  });
+  const [campaign] = await db
+    .select({ title: dispatchCampaigns.title, createdAt: dispatchCampaigns.createdAt })
+    .from(dispatchCampaigns)
+    .where(eq(dispatchCampaigns.id, campaignId))
+    .limit(1);
   if (!campaign) return null;
   const dirName = campaignOutputDirName(campaign.title, campaign.createdAt);
   const dir = path.join(WORKSPACE_DISPATCH, dirName);
