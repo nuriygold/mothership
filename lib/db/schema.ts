@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import type { JsonValue } from '@/lib/db/json';
 
 // Transitional Drizzle schema. Expand this file while migrating each Prisma model.
@@ -313,4 +313,18 @@ export const financeEvents = pgTable('FinanceEvent', {
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   resolvedCreatedAtIdx: index('FinanceEvent_resolved_createdAt_idx').on(table.resolved, table.createdAt),
+}));
+
+export const payables = pgTable('Payable', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  vendor: text('vendor').notNull(),
+  amount: doublePrecision('amount').notNull(),
+  currency: text('currency').default('USD').notNull(),
+  dueDate: timestamp('dueDate', { withTimezone: true }),
+  status: text('status').default('pending').notNull(),
+  description: text('description'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  statusDueIdx: index('Payable_status_dueDate_idx').on(table.status, table.dueDate),
 }));
