@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 // Transitional Drizzle schema. Expand this file while migrating each Prisma model.
 export const users = pgTable('User', {
@@ -52,6 +52,32 @@ export const workflows = pgTable('Workflow', {
   updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const workflowSchemaVersions = pgTable('WorkflowSchemaVersion', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workflowId: uuid('workflowId').notNull(),
+  version: integer('version').notNull(),
+  schemaJson: jsonb('schemaJson').notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  workflowVersionIdx: uniqueIndex('WorkflowSchemaVersion_workflowId_version_key').on(table.workflowId, table.version),
+}));
+
+export const submissions = pgTable('Submission', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workflowId: uuid('workflowId').notNull(),
+  submittedById: uuid('submittedById'),
+  sourceChannel: text('sourceChannel').notNull(),
+  fileName: text('fileName'),
+  rawPayload: jsonb('rawPayload').notNull(),
+  normalizedPayload: jsonb('normalizedPayload'),
+  validationStatus: text('validationStatus').default('PENDING').notNull(),
+  validationSummary: jsonb('validationSummary'),
+  submittedAt: timestamp('submittedAt', { withTimezone: true }).defaultNow().notNull(),
+  processedAt: timestamp('processedAt', { withTimezone: true }),
+}, (table) => ({
+  workflowSubmittedAtIdx: index('Submission_workflowId_submittedAt_idx').on(table.workflowId, table.submittedAt),
+}));
+
 export const auditEvents = pgTable('AuditEvent', {
   id: uuid('id').defaultRandom().primaryKey(),
   entityType: text('entityType').notNull(),
@@ -61,6 +87,49 @@ export const auditEvents = pgTable('AuditEvent', {
   metadata: text('metadata'),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const runs = pgTable('Run', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workflowId: uuid('workflowId'),
+  taskId: uuid('taskId').unique(),
+  type: text('type').notNull(),
+  sourceSystem: text('sourceSystem').notNull(),
+  status: text('status').default('QUEUED').notNull(),
+  startedAt: timestamp('startedAt', { withTimezone: true }),
+  completedAt: timestamp('completedAt', { withTimezone: true }),
+  metadata: jsonb('metadata'),
+  errorMessage: text('errorMessage'),
+  submissionId: uuid('submissionId'),
+}, (table) => ({
+  startedAtIdx: index('Run_startedAt_idx').on(table.startedAt),
+}));
+
+export const approvals = pgTable('Approval', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workflowId: uuid('workflowId'),
+  taskId: uuid('taskId'),
+  requestedById: uuid('requestedById'),
+  decidedById: uuid('decidedById'),
+  status: text('status').default('REQUESTED').notNull(),
+  reason: text('reason'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  decidedAt: timestamp('decidedAt', { withTimezone: true }),
+}, (table) => ({
+  workflowCreatedAtIdx: index('Approval_workflowId_createdAt_idx').on(table.workflowId, table.createdAt),
+}));
+
+export const commands = pgTable('Command', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  input: text('input').notNull(),
+  sourceChannel: text('sourceChannel').notNull(),
+  requestedById: uuid('requestedById'),
+  status: text('status').default('RECEIVED').notNull(),
+  runId: uuid('runId'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completedAt', { withTimezone: true }),
+}, (table) => ({
+  runCreatedAtIdx: index('Command_runId_createdAt_idx').on(table.runId, table.createdAt),
+}));
 
 export const visionBoards = pgTable('VisionBoard', {
   id: uuid('id').defaultRandom().primaryKey(),
