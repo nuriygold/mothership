@@ -6,7 +6,7 @@
  * Events that survive processing stay in the Action Feed.
  */
 
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/lib/db/prisma-types';
 import { resolveFinanceEvent } from '@/lib/finance/events';
 import { touchMerchant } from '@/lib/finance/merchantProfile';
 import { runAnomalyDetection } from '@/lib/finance/anomalyDetector';

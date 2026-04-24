@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import { revenueStreamStatusLogs, revenueStreamStatuses } from '@/lib/db/schema';
 import { getStreamDefs, readSnapshot } from '@/lib/v2/revenue-streams-server';
 import { ensureV2Authorized } from '@/lib/v2/auth';
 import { publishV2Event } from '@/lib/v2/event-bus';
@@ -10,7 +11,7 @@ export const runtime = 'nodejs';
 export async function GET() {
   const [defs, rows] = await Promise.all([
     getStreamDefs(),
-    prisma.revenueStreamStatus.findMany(),
+    db.select().from(revenueStreamStatuses),
   ]);
 
   const statusMap = new Map(rows.map((r) => [r.stream, r]));
@@ -57,14 +58,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'stream and status are required' }, { status: 400 });
   }
 
-  const row = await prisma.revenueStreamStatus.upsert({
-    where: { stream },
-    create: { stream, status, note: note ?? null, requestedAt: null },
-    update: { status, ...(note !== undefined ? { note } : {}), requestedAt: null },
-  });
+  const [row] = await db
+    .insert(revenueStreamStatuses)
+    .values({ stream, status, note: note ?? null, requestedAt: null })
+    .onConflictDoUpdate({
+      target: revenueStreamStatuses.stream,
+      set: {
+        status,
+        ...(note !== undefined ? { note } : {}),
+        requestedAt: null,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
 
-  await prisma.revenueStreamStatusLog.create({
-    data: { stream, status, note: note ?? null, action: 'agent-update' },
+  await db.insert(revenueStreamStatusLogs).values({
+    stream,
+    status,
+    note: note ?? null,
+    action: 'agent-update',
   });
 
   publishV2Event('revenue-streams', 'status', { stream, status, note: row.note });
@@ -81,14 +93,20 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'stream is required' }, { status: 400 });
   }
 
-  const row = await prisma.revenueStreamStatus.upsert({
-    where: { stream },
-    create: { stream, status: 'unknown', requestedAt: new Date() },
-    update: { requestedAt: new Date() },
-  });
+  const requestedAt = new Date();
+  const [row] = await db
+    .insert(revenueStreamStatuses)
+    .values({ stream, status: 'unknown', requestedAt })
+    .onConflictDoUpdate({
+      target: revenueStreamStatuses.stream,
+      set: { requestedAt, updatedAt: requestedAt },
+    })
+    .returning();
 
-  await prisma.revenueStreamStatusLog.create({
-    data: { stream, status: row.status, action: 'ping' },
+  await db.insert(revenueStreamStatusLogs).values({
+    stream,
+    status: row.status,
+    action: 'ping',
   });
 
   publishV2Event('revenue-streams', 'status', {

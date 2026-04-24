@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/lib/db/prisma-types';
 import { processFinanceEvent } from '@/lib/finance/eventProcessor';
 
 export type FinanceEventPriority = 'low' | 'normal' | 'high' | 'critical';

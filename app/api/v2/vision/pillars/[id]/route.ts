@@ -1,5 +1,5 @@
 import { updateVisionPillar, deleteVisionPillar } from '@/lib/services/vision';
-import { VisionPillarColor } from '@prisma/client';
+import { VisionPillarColor } from '@/lib/db/prisma-types';
 
 export const dynamic = 'force-dynamic';
 

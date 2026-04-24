@@ -1,4 +1,4 @@
-import { TaskPriority } from '@prisma/client';
+import { TaskPriority } from '@/lib/db/prisma-types';
 import { prisma } from '@/lib/prisma';
 import {
   deleteGmailMessage,

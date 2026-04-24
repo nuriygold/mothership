@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { RunStatus, Prisma } from '@prisma/client';
+import { RunStatus, Prisma } from '@/lib/db/prisma-types';
 import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 
 export async function listRuns() {

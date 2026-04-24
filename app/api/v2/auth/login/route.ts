@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { users } from '@/lib/db/schema';
 import { OWNER_COOKIE } from '@/lib/services/owner';
 
 export const dynamic = 'force-dynamic';
@@ -21,12 +23,20 @@ export async function POST(req: Request) {
 
   // Find or create the owner user by email
   const email = String(process.env.OWNER_EMAIL ?? 'hello@nuriy.com').trim();
-  const user = await prisma.user.upsert({
-    where: { email },
-    create: { email, name: 'Nuriy' },
-    update: {},
-    select: { id: true, email: true, name: true },
-  });
+  await db
+    .insert(users)
+    .values({ email, name: 'Nuriy' })
+    .onConflictDoNothing({ target: users.email });
+
+  const [user] = await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (!user) {
+    return NextResponse.json({ error: 'Failed to resolve owner user' }, { status: 500 });
+  }
 
   const res = NextResponse.json({ ok: true, userId: user.id, name: user.name });
   res.cookies.set(OWNER_COOKIE, user.id, {
