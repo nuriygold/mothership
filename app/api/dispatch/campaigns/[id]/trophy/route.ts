@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus } from '@prisma/client';
+import { DispatchCampaignStatus } from '@/lib/db/enums';
 import { createAuditEvent } from '@/lib/services/audit';
 
 export const dynamic = 'force-dynamic';

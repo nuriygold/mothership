@@ -1,5 +1,5 @@
 import { listFinancePlans, createFinancePlan } from '@/lib/services/finance';
-import { FinancePlanType, FinancePlanStatus } from '@prisma/client';
+import { FinancePlanStatus, FinancePlanType } from '@/lib/db/enums';
 
 export const dynamic = 'force-dynamic';
 

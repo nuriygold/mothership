@@ -1,10 +1,7 @@
 'use client';
 
-import { Style_Script } from 'next/font/google';
 import { useEffect, useState } from 'react';
 import type { StressSummary } from '@/lib/oura';
-
-const styleScript = Style_Script({ weight: '400', subsets: ['latin'] });
 
 type TimeOfDay = 'morning' | 'afternoon' | 'evening';
 
@@ -131,8 +128,13 @@ export function StressCard({ summary, stressHighMinutes: _stressHighMinutes, use
       }}
     >
       <p
-        className={styleScript.className}
-        style={{ fontSize: 26, color: '#2d2a24', lineHeight: 1.6, margin: 0 }}
+        style={{
+          fontSize: 26,
+          color: '#2d2a24',
+          lineHeight: 1.6,
+          margin: 0,
+          fontFamily: '"Brush Script MT", "Segoe Script", cursive',
+        }}
       >
         {message}
       </p>

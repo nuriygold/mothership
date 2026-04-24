@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { TaskPriority, TaskStatus } from '@prisma/client';
+import { TaskPriority, TaskStatus } from '@/lib/db/enums';
 import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks, updateTaskPoolIssue } from '@/lib/integrations/task-pool';
 
 async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: string }) {

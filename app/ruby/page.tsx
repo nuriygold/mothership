@@ -15,7 +15,7 @@ type LocalRubySession = {
   updatedAt: string;
 };
 
-function isRubySessionId(value: string | null): value is string {
+function isRubySessionId(value: string | null | undefined): value is string {
   if (!value) return false;
   return /^agent:ruby:[0-9a-fA-F-]{36}$/.test(value);
 }

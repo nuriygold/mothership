@@ -50,8 +50,9 @@ function actionLabel(action: string | null) {
 }
 
 export default function StreamDrilldown() {
-  const { stream: streamKey } = useParams<{ stream: string }>();
-  const def = streamByKey(streamKey);
+  const params = useParams<{ stream: string }>();
+  const streamKey = params?.stream ?? null;
+  const def = streamKey ? streamByKey(streamKey) : null;
 
   const { data: statusData, mutate } = useSWR<{ streams: StreamStatus[] }>(
     '/api/v2/revenue-streams/status',

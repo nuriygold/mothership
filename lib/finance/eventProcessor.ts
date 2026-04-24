@@ -6,7 +6,7 @@
  * Events that survive processing stay in the Action Feed.
  */
 
-import type { Prisma } from '@prisma/client';
+import type { JsonValue } from '@/lib/db/json';
 import { resolveFinanceEvent } from '@/lib/finance/events';
 import { touchMerchant } from '@/lib/finance/merchantProfile';
 import { runAnomalyDetection } from '@/lib/finance/anomalyDetector';
@@ -18,7 +18,7 @@ type FinanceEventRow = {
   id: string;
   type: string;
   source: string;
-  payload: Prisma.JsonValue;
+  payload: JsonValue;
   priority: string;
   resolved: boolean;
   createdAt: Date;

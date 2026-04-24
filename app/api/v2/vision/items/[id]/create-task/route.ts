@@ -1,7 +1,7 @@
 import { linkTaskToItem } from '@/lib/services/vision';
 import { prisma } from '@/lib/prisma';
 import { createTaskPoolIssue, isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
-import { TaskPriority } from '@prisma/client';
+import { TaskPriority } from '@/lib/db/enums';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { VisionPillarColor, VisionItemStatus } from '@prisma/client';
+import { VisionPillarColor, VisionItemStatus } from '@/lib/db/enums';
 
 const DEFAULT_PILLARS: Array<{
   label: string;
