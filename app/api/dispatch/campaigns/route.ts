@@ -3,6 +3,19 @@ import { createDispatchCampaign, listDispatchCampaigns } from '@/lib/services/di
 
 export const dynamic = 'force-dynamic';
 
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const s = String(value).trim();
+  return s ? s : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string' && value.trim() === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export async function GET() {
   try {
     const campaigns = await listDispatchCampaigns();
@@ -29,27 +42,41 @@ export async function POST(req: Request) {
 
     const campaign = await createDispatchCampaign({
       title,
-      description: body?.description ? String(body.description) : undefined,
-      costBudgetCents:
-        body?.costBudgetCents !== undefined && body.costBudgetCents !== null
-          ? Number(body.costBudgetCents)
-          : undefined,
-      timeBudgetSeconds:
-        body?.timeBudgetSeconds !== undefined && body.timeBudgetSeconds !== null
-          ? Number(body.timeBudgetSeconds)
-          : undefined,
-      callbackUrl: body?.callbackUrl ? String(body.callbackUrl) : undefined,
-      callbackSecret: body?.callbackSecret ? String(body.callbackSecret) : undefined,
-      projectId: body?.projectId ? String(body.projectId) : undefined,
-      visionItemId: body?.visionItemId ? String(body.visionItemId) : undefined,
-      outputFolder: body?.outputFolder ? String(body.outputFolder) : undefined,
-      assignedBotId: body?.assignedBotId ? String(body.assignedBotId) : undefined,
-      revenueStream: body?.revenueStream ? String(body.revenueStream) : undefined,
-      linkedTaskRef: body?.linkedTaskRef ? String(body.linkedTaskRef) : undefined,
+      description: optionalString(body?.description),
+      costBudgetCents: optionalNumber(body?.costBudgetCents),
+      timeBudgetSeconds: optionalNumber(body?.timeBudgetSeconds),
+      callbackUrl: optionalString(body?.callbackUrl),
+      callbackSecret: optionalString(body?.callbackSecret),
+      projectId: optionalString(body?.projectId),
+      visionItemId: optionalString(body?.visionItemId),
+      outputFolder: optionalString(body?.outputFolder),
+      assignedBotId: optionalString(body?.assignedBotId),
+      revenueStream: optionalString(body?.revenueStream),
+      linkedTaskRef: optionalString(body?.linkedTaskRef),
     });
 
     return NextResponse.json({ campaign }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ ok: false, message: String(error) }, { status: 500 });
+    const err = error as any;
+    console.error('[dispatch] create campaign failed', {
+      message: err?.message ?? String(error),
+      code: err?.code,
+      detail: err?.detail,
+      constraint: err?.constraint,
+      table: err?.table_name ?? err?.table,
+      column: err?.column_name ?? err?.column,
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        message: err?.message ?? String(error),
+        code: err?.code,
+        detail: err?.detail,
+        constraint: err?.constraint,
+        table: err?.table_name ?? err?.table,
+        column: err?.column_name ?? err?.column,
+      },
+      { status: 500 }
+    );
   }
 }
