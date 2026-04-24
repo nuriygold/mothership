@@ -34,6 +34,32 @@ function extractJson(text: string) {
   return fenced?.[1] || text;
 }
 
+function tryParsePlanEnvelope(output: string): RawPlanEnvelope | null {
+  const trimmed = String(output ?? '').trim();
+  if (!trimmed) return null;
+
+  const attempts: string[] = [];
+  attempts.push(extractJson(trimmed).trim());
+
+  // Fallback: try to grab the first {...} block if the model included chatter.
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    attempts.push(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const candidate of attempts) {
+    try {
+      const parsed = JSON.parse(candidate) as RawPlanEnvelope;
+      if (parsed && Array.isArray(parsed.plans) && parsed.plans.length > 0) return parsed;
+    } catch {
+      // keep trying
+    }
+  }
+
+  return null;
+}
+
 function asStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
@@ -212,18 +238,56 @@ export async function generateDispatchPlans(campaignId: string) {
       timeoutMs: 90_000,
     });
 
-    const rawJson = extractJson(result.output || '');
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawJson);
-    } catch {
-      throw new Error(`Planner returned invalid JSON: ${result.output?.slice(0, 200)}`);
-    }
-    if (!parsed || !Array.isArray((parsed as RawPlanEnvelope).plans) || (parsed as RawPlanEnvelope).plans.length === 0) {
-      throw new Error(`Planner did not return a usable plan. Got: ${result.output?.slice(0, 200)}`);
+    let parsed = tryParsePlanEnvelope(result.output || '');
+    if (!parsed) {
+      console.warn(
+        JSON.stringify({
+          service: 'dispatch',
+          event: 'planner_invalid_json_first_attempt',
+          campaignId,
+          agentId: result.agentId,
+          sample: String(result.output ?? '').slice(0, 300),
+          timestamp: new Date().toISOString(),
+        })
+      );
+
+      // Retry once with stricter formatting instructions.
+      const retryPrompt = [
+        prompt,
+        '',
+        'IMPORTANT: Your previous response was invalid.',
+        'Return STRICT JSON only.',
+        'Output must start with `{` and end with `}`.',
+        'Do not include markdown, code fences, comments, or any other text.',
+      ].join('\n');
+
+      const retry = await dispatchToOpenClaw({
+        text: retryPrompt,
+        agentId: 'adrian',
+        timeoutMs: 90_000,
+      });
+
+      parsed = tryParsePlanEnvelope(retry.output || '');
+      if (!parsed) {
+        console.error(
+          JSON.stringify({
+            service: 'dispatch',
+            event: 'planner_invalid_json_second_attempt',
+            campaignId,
+            agentId: retry.agentId,
+            sample: String(retry.output ?? '').slice(0, 300),
+            timestamp: new Date().toISOString(),
+          })
+        );
+        throw new Error(
+          `Planner returned invalid JSON. ` +
+            `First: ${(result.output ?? '').slice(0, 200)} ` +
+            `Second: ${(retry.output ?? '').slice(0, 200)}`
+        );
+      }
     }
 
-    const latestPlan = normalizePlanEnvelope(parsed as RawPlanEnvelope);
+    const latestPlan = normalizePlanEnvelope(parsed);
 
     const [updatedCampaign] = await db
       .update(dispatchCampaigns)
