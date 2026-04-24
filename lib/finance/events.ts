@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@/lib/db/prisma-types';
+import type { InputJsonObject } from '@/lib/db/json';
 import { processFinanceEvent } from '@/lib/finance/eventProcessor';
 
 export type FinanceEventPriority = 'low' | 'normal' | 'high' | 'critical';
@@ -24,7 +24,7 @@ export async function createFinanceEvent(
     data: {
       type,
       source,
-      payload: rest as Prisma.InputJsonObject,
+      payload: rest as InputJsonObject,
       priority,
     },
   });

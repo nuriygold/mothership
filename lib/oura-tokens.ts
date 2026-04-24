@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabase } from './supabase';
 
 export type OuraTokens = {
   access_token: string;
@@ -7,6 +7,7 @@ export type OuraTokens = {
 };
 
 export async function readTokens(): Promise<OuraTokens | null> {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('oura_tokens')
     .select('access_token, refresh_token, expires_at')
@@ -17,6 +18,7 @@ export async function readTokens(): Promise<OuraTokens | null> {
 }
 
 export async function writeTokens(tokens: OuraTokens): Promise<void> {
+  const supabase = getSupabase();
   await supabase
     .from('oura_tokens')
     .upsert({ id: true, ...tokens }, { onConflict: 'id' });

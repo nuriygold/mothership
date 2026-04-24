@@ -11,7 +11,10 @@ export const config = { api: { bodyParser: false } };
 
 function buildAzureWsUrl(endpoint: string, deployment: string) {
   const base = endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  return `wss://${base}/openai/realtime?api-version=2024-10-01-preview&deployment=${encodeURIComponent(deployment)}`;
+  // AZURE_OPENAI_REALTIME_WS_PATH overrides the path if VoiceLive uses a different URL structure.
+  // Default matches Azure AI Speech VoiceLive (cognitiveservices.azure.com) and Azure OpenAI Realtime.
+  const path = (process.env.AZURE_OPENAI_REALTIME_WS_PATH ?? 'openai/realtime').replace(/^\//, '');
+  return `wss://${base}/${path}?api-version=2024-10-01-preview&deployment=${encodeURIComponent(deployment)}`;
 }
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {

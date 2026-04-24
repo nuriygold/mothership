@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { WorkflowStatus, WorkflowType, Prisma } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
+import { WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 export async function listWorkflows() {
@@ -49,7 +51,7 @@ export async function createWorkflow(input: {
   type?: WorkflowType;
   ownerId: string;
   status?: WorkflowStatus;
-  schemaJson?: Prisma.InputJsonValue;
+  schemaJson?: InputJsonValue;
 }) {
   const workflow = await prisma.workflow.create({
     data: {
