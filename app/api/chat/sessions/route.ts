@@ -1,7 +1,40 @@
-import { prisma } from '@/lib/prisma';
+import { desc, eq, inArray, like } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { chatMessages, chatSessions } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+async function attachLastMessages(
+  sessions: Array<{ id: string; title: string | null; updatedAt: Date; createdAt: Date }>
+) {
+  if (!sessions.length) return [];
+
+  const messages = await db
+    .select({
+      sessionId: chatMessages.sessionId,
+      content: chatMessages.content,
+      createdAt: chatMessages.createdAt,
+    })
+    .from(chatMessages)
+    .where(inArray(chatMessages.sessionId, sessions.map((session) => session.id)))
+    .orderBy(desc(chatMessages.createdAt));
+
+  const latestBySession = new Map<string, string | null>();
+  for (const message of messages) {
+    if (!latestBySession.has(message.sessionId)) {
+      latestBySession.set(message.sessionId, message.content);
+    }
+  }
+
+  return sessions.map((session) => ({
+    id: session.id,
+    title: session.title,
+    lastMessage: latestBySession.get(session.id)?.slice(0, 120) ?? null,
+    updatedAt: session.updatedAt,
+    createdAt: session.createdAt,
+  }));
+}
 
 // GET /api/chat/sessions?ids=id1,id2,...&agent=iceman
 // Returns metadata for the given session IDs (title + last message preview).
@@ -12,41 +45,46 @@ export async function GET(req: Request) {
   const agent = searchParams.get('agent')?.trim();
 
   if (!idsParam) {
-    const where = agent ? { id: { startsWith: `agent:${agent}:` } } : {};
-    const all = await prisma.chatSession.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
-      take: 100,
-      include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 } },
-    });
-    return Response.json({
-      sessions: all.map((s) => ({
-        id: s.id,
-        title: s.title,
-        lastMessage: s.messages[0]?.content?.slice(0, 120) ?? null,
-        updatedAt: s.updatedAt,
-        createdAt: s.createdAt,
-      })),
-    });
+    const all = agent
+      ? await db
+          .select({
+            id: chatSessions.id,
+            title: chatSessions.title,
+            updatedAt: chatSessions.updatedAt,
+            createdAt: chatSessions.createdAt,
+          })
+          .from(chatSessions)
+          .where(like(chatSessions.id, `agent:${agent}:%`))
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(100)
+      : await db
+          .select({
+            id: chatSessions.id,
+            title: chatSessions.title,
+            updatedAt: chatSessions.updatedAt,
+            createdAt: chatSessions.createdAt,
+          })
+          .from(chatSessions)
+          .orderBy(desc(chatSessions.updatedAt))
+          .limit(100);
+
+    return Response.json({ sessions: await attachLastMessages(all) });
   }
 
-  const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+  const ids = idsParam.split(',').map((id) => id.trim()).filter(Boolean).slice(0, 50);
 
-  const sessions = await prisma.chatSession.findMany({
-    where: { id: { in: ids } },
-    include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 } },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const sessions = await db
+    .select({
+      id: chatSessions.id,
+      title: chatSessions.title,
+      updatedAt: chatSessions.updatedAt,
+      createdAt: chatSessions.createdAt,
+    })
+    .from(chatSessions)
+    .where(inArray(chatSessions.id, ids))
+    .orderBy(desc(chatSessions.updatedAt));
 
-  return Response.json({
-    sessions: sessions.map((s) => ({
-      id: s.id,
-      title: s.title,
-      lastMessage: s.messages[0]?.content?.slice(0, 120) ?? null,
-      updatedAt: s.updatedAt,
-      createdAt: s.createdAt,
-    })),
-  });
+  return Response.json({ sessions: await attachLastMessages(sessions) });
 }
 
 // POST /api/chat/sessions  Body: { id?: string, title?: string }
@@ -55,11 +93,15 @@ export async function POST(req: Request) {
   const id: string = body?.id ? String(body.id).trim() : crypto.randomUUID();
   const title: string | null = body?.title ? String(body.title).trim() : null;
 
-  const session = await prisma.chatSession.upsert({
-    where: { id },
-    create: { id, title },
-    update: title ? { title } : {},
-  });
+  const now = new Date();
+  const [session] = await db
+    .insert(chatSessions)
+    .values({ id, title, updatedAt: now })
+    .onConflictDoUpdate({
+      target: chatSessions.id,
+      set: title ? { title, updatedAt: now } : { updatedAt: now },
+    })
+    .returning();
 
   return Response.json({ session });
 }

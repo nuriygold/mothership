@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { WorkflowStatus, WorkflowType, Prisma } from '@prisma/client';
+import { WorkflowStatus, WorkflowType, Prisma } from '@/lib/db/prisma-types';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 export async function listWorkflows() {

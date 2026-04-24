@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { chatMessages, chatSessions } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,11 +19,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return Response.json({ error: 'title is required' }, { status: 400 });
   }
 
-  const session = await prisma.chatSession.upsert({
-    where: { id: sessionId },
-    create: { id: sessionId, title },
-    update: { title },
-  });
+  const [session] = await db
+    .insert(chatSessions)
+    .values({ id: sessionId, title, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: chatSessions.id,
+      set: { title, updatedAt: new Date() },
+    })
+    .returning();
 
   return Response.json({ session });
 }
@@ -33,9 +38,8 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     return Response.json({ error: 'id is required' }, { status: 400 });
   }
 
-  await prisma.chatSession.delete({ where: { id: sessionId } }).catch(() => {
-    return prisma.chatMessage.deleteMany({ where: { sessionId } });
-  });
+  await db.delete(chatMessages).where(eq(chatMessages.sessionId, sessionId));
+  await db.delete(chatSessions).where(eq(chatSessions.id, sessionId));
 
   return Response.json({ ok: true });
 }

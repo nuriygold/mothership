@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { asc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { chatMessages } from '@/lib/db/schema';
 import { ensureSession } from '@/lib/chat/session-util';
 
 export const dynamic = 'force-dynamic';
@@ -17,12 +19,17 @@ export async function GET(req: Request) {
   }
 
   try {
-    const messages = await prisma.chatMessage.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: 'asc' },
-      take: 200,
-      select: { id: true, role: true, content: true, createdAt: true },
-    });
+    const messages = await db
+      .select({
+        id: chatMessages.id,
+        role: chatMessages.role,
+        content: chatMessages.content,
+        createdAt: chatMessages.createdAt,
+      })
+      .from(chatMessages)
+      .where(eq(chatMessages.sessionId, sessionId))
+      .orderBy(asc(chatMessages.createdAt))
+      .limit(200);
     return Response.json({ messages });
   } catch (error) {
     return Response.json(
@@ -51,10 +58,15 @@ export async function POST(req: Request) {
 
   try {
     await ensureSession(sessionId, { firstMessageText: role === 'user' ? content : undefined });
-    const message = await prisma.chatMessage.create({
-      data: { sessionId, role, content },
-      select: { id: true, role: true, content: true, createdAt: true },
-    });
+    const [message] = await db
+      .insert(chatMessages)
+      .values({ sessionId, role, content })
+      .returning({
+        id: chatMessages.id,
+        role: chatMessages.role,
+        content: chatMessages.content,
+        createdAt: chatMessages.createdAt,
+      });
     return Response.json({ message });
   } catch (error) {
     return Response.json(

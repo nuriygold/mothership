@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@prisma/client';
+import { DispatchCampaignStatus, DispatchTaskStatus, Prisma, TaskPriority } from '@/lib/db/prisma-types';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { buildToolsBlock, getToolsForRequirements } from '@/lib/tools/registry';

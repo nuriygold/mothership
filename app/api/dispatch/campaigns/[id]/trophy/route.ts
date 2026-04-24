@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { DispatchCampaignStatus } from '@prisma/client';
+import { DispatchCampaignStatus } from '@/lib/db/prisma-types';
 import { createAuditEvent } from '@/lib/services/audit';
 import { writeCampaignOutput, pingTelegramCampaignComplete } from '@/lib/services/campaign-output';
 

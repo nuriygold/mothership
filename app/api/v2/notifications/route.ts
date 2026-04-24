@@ -1,15 +1,21 @@
-import { prisma } from '@/lib/prisma';
+import { desc, eq, sql } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { notifications } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const notifications = await prisma.notification.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  const rows = await db
+    .select()
+    .from(notifications)
+    .orderBy(desc(notifications.createdAt))
+    .limit(50);
 
-  const unread = notifications.filter((n) => !n.read).length;
+  const [{ count: unread }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(notifications)
+    .where(eq(notifications.read, false));
 
-  return Response.json({ notifications, unread });
+  return Response.json({ notifications: rows, unread: Number(unread) });
 }

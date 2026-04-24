@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import { db } from '@/lib/db/client';
+import { chatSessions } from '@/lib/db/schema';
 import { OWNER_COOKIE, DEVICE_COOKIE } from '@/lib/services/owner';
 
 export const dynamic = 'force-dynamic';
@@ -32,16 +34,19 @@ export async function GET(req: Request) {
     ? `${identityPrefix}:bot:${bot}`
     : `device:${deviceId}:bot:${bot}`;
 
-  let session = await prisma.chatSession.findFirst({
-    where: { title: sessionTitle },
-    select: { id: true },
-  });
+  const [existing] = await db
+    .select({ id: chatSessions.id })
+    .from(chatSessions)
+    .where(eq(chatSessions.title, sessionTitle))
+    .limit(1);
+
+  let session = existing;
 
   if (!session) {
-    session = await prisma.chatSession.create({
-      data: { title: sessionTitle },
-      select: { id: true },
-    });
+    [session] = await db
+      .insert(chatSessions)
+      .values({ title: sessionTitle })
+      .returning({ id: chatSessions.id });
   }
 
   const res = NextResponse.json({

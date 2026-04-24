@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { SubmissionValidationStatus } from '@prisma/client';
+import { SubmissionValidationStatus } from '@/lib/db/prisma-types';
 
 export async function listSubmissions(workflowId: string) {
   return prisma.submission.findMany({
