@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { InputJsonValue } from '@/lib/db/json';
 import { WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
-import type { InputJsonValue } from '@/lib/db/json';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 export async function listWorkflows() {
