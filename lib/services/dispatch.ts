@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { asc, and, desc, eq, inArray, lte } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { auditEvents, dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
@@ -109,9 +110,11 @@ export async function createDispatchCampaign(input: {
   revenueStream?: string;
   linkedTaskRef?: string;
 }) {
+  const now = new Date();
   const [campaign] = await db
     .insert(dispatchCampaigns)
     .values({
+      id: randomUUID(),
       title: input.title.trim(),
       description: input.description?.trim() || null,
       costBudgetCents: input.costBudgetCents ?? null,
@@ -124,10 +127,12 @@ export async function createDispatchCampaign(input: {
       assignedBotId: input.assignedBotId?.trim() || null,
       revenueStream: input.revenueStream?.trim() || null,
       linkedTaskRef: input.linkedTaskRef?.trim() || null,
+      updatedAt: now,
     })
     .returning();
 
   await db.insert(auditEvents).values({
+    id: randomUUID(),
     entityType: 'dispatch_campaign',
     entityId: campaign.id,
     eventType: 'created',
@@ -147,19 +152,23 @@ export async function createDispatchTask(
     toolRequirements?: string[];
   }
 ) {
+  const now = new Date();
   const [task] = await db
     .insert(dispatchTasks)
     .values({
+      id: randomUUID(),
       campaignId,
       title: input.title.trim(),
       description: input.description?.trim() || null,
       priority: input.priority ?? 5,
       dependencies: input.dependencies?.length ? input.dependencies : [],
       toolRequirements: input.toolRequirements?.length ? input.toolRequirements : [],
+      updatedAt: now,
     })
     .returning();
 
   await db.insert(auditEvents).values({
+    id: randomUUID(),
     entityType: 'dispatch_task',
     entityId: task.id,
     eventType: 'created',
@@ -228,12 +237,13 @@ export async function generateDispatchPlans(campaignId: string) {
       .where(eq(dispatchCampaigns.id, campaignId))
       .returning();
 
-    await db.insert(auditEvents).values({
-      entityType: 'dispatch_campaign',
-      entityId: campaignId,
-      eventType: 'plan.generated',
-      metadata: { planCount: latestPlan.plans.length, agentId: result.agentId },
-    });
+	    await db.insert(auditEvents).values({
+	      id: randomUUID(),
+	      entityType: 'dispatch_campaign',
+	      entityId: campaignId,
+	      eventType: 'plan.generated',
+	      metadata: { planCount: latestPlan.plans.length, agentId: result.agentId },
+	    });
 
     return {
       campaign: updatedCampaign,
@@ -280,17 +290,20 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
       const task = rawTask as JsonObject;
       const title = typeof task.title === 'string' ? task.title.trim() : '';
       if (!title) continue;
-      const [created] = await tx
-        .insert(dispatchTasks)
-        .values({
-          campaignId,
-          title,
-          key: typeof task.key === 'string' ? task.key.trim() : null,
-          description: typeof task.description === 'string' ? task.description.trim() : null,
-          dependencies: asStringArray(task.dependencies),
-          status: DispatchTaskStatus.PLANNED,
-        })
-        .returning({ id: dispatchTasks.id });
+	      const now = new Date();
+	      const [created] = await tx
+	        .insert(dispatchTasks)
+	        .values({
+	          id: randomUUID(),
+	          campaignId,
+	          title,
+	          key: typeof task.key === 'string' ? task.key.trim() : null,
+	          description: typeof task.description === 'string' ? task.description.trim() : null,
+	          dependencies: asStringArray(task.dependencies),
+	          status: DispatchTaskStatus.PLANNED,
+	          updatedAt: now,
+	        })
+	        .returning({ id: dispatchTasks.id });
       createdTaskIds.push(created.id);
     }
 
@@ -304,15 +317,16 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
       })
       .where(eq(dispatchCampaigns.id, campaignId));
 
-    await tx.insert(auditEvents).values({
-      entityType: 'dispatch_campaign',
-      entityId: campaignId,
-      eventType: 'plan.approved',
-      metadata: {
-        planName: selectedPlanName,
-        taskCount: selectedTasks.length,
-      },
-    });
+	    await tx.insert(auditEvents).values({
+	      id: randomUUID(),
+	      entityType: 'dispatch_campaign',
+	      entityId: campaignId,
+	      eventType: 'plan.approved',
+	      metadata: {
+	        planName: selectedPlanName,
+	        taskCount: selectedTasks.length,
+	      },
+	    });
   });
 
   // After transaction: publish each task to the GitHub task-pool
@@ -370,11 +384,12 @@ export async function setDispatchCampaignStatus(campaignId: string, status: Disp
     .where(eq(dispatchCampaigns.id, campaignId))
     .returning();
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_campaign',
-    entityId: campaignId,
-    eventType: `status.${status.toLowerCase()}`,
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_campaign',
+	  entityId: campaignId,
+	  eventType: `status.${status.toLowerCase()}`,
+	});
 
   return campaign;
 }
@@ -530,24 +545,28 @@ export async function replanDispatchTask(campaignId: string, taskId: string) {
       .set({ status: DispatchTaskStatus.CANCELED, updatedAt: new Date() })
       .where(eq(dispatchTasks.id, taskId));
 
-    const [created] = await tx
-      .insert(dispatchTasks)
-      .values({
-        campaignId,
-        title: newTitle,
-        description: typeof parsed.description === 'string' ? parsed.description.trim() : null,
-        priority: failedTask.priority,
-        dependencies: asStringArray(failedTask.dependencies),
-        status: DispatchTaskStatus.PLANNED,
-      })
-      .returning();
+	    const now = new Date();
+	    const [created] = await tx
+	      .insert(dispatchTasks)
+	      .values({
+	        id: randomUUID(),
+	        campaignId,
+	        title: newTitle,
+	        description: typeof parsed.description === 'string' ? parsed.description.trim() : null,
+	        priority: failedTask.priority,
+	        dependencies: asStringArray(failedTask.dependencies),
+	        status: DispatchTaskStatus.PLANNED,
+	        updatedAt: now,
+	      })
+	      .returning();
 
-    await tx.insert(auditEvents).values({
-      entityType: 'dispatch_task',
-      entityId: taskId,
-      eventType: 'task.replanned',
-      metadata: { replacedBy: created.id, newTitle },
-    });
+	    await tx.insert(auditEvents).values({
+	      id: randomUUID(),
+	      entityType: 'dispatch_task',
+	      entityId: taskId,
+	      eventType: 'task.replanned',
+	      metadata: { replacedBy: created.id, newTitle },
+	    });
 
     return created;
   });
@@ -625,12 +644,13 @@ export async function reviewDispatchTask(taskId: string): Promise<string | null>
     .set({ reviewOutput: review.output, updatedAt: new Date() })
     .where(eq(dispatchTasks.id, taskId));
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_task',
-    entityId: taskId,
-    eventType: 'task.reviewed',
-    metadata: { triggered: 'manual' },
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_task',
+	  entityId: taskId,
+	  eventType: 'task.reviewed',
+	  metadata: { triggered: 'manual' },
+	});
 
   return review.output;
 }
@@ -685,12 +705,13 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
       })
       .where(eq(dispatchTasks.id, taskId));
 
-    await db.insert(auditEvents).values({
-      entityType: 'dispatch_task',
-      entityId: taskId,
-      eventType: 'task.done',
-      metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0, toolTurns: result.turns },
-    });
+	    await db.insert(auditEvents).values({
+	      id: randomUUID(),
+	      entityType: 'dispatch_task',
+	      entityId: taskId,
+	      eventType: 'task.done',
+	      metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0, toolTurns: result.turns },
+	    });
 
     // Peer-review pass — Emerald checks the primary bot's work
     if (agentId !== 'emerald') {
@@ -720,12 +741,13 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
       .set({ status: DispatchTaskStatus.FAILED, completedAt: new Date(), errorMessage, updatedAt: new Date() })
       .where(eq(dispatchTasks.id, taskId));
 
-    await db.insert(auditEvents).values({
-      entityType: 'dispatch_task',
-      entityId: taskId,
-      eventType: 'task.failed',
-      metadata: { error: errorMessage },
-    });
+	    await db.insert(auditEvents).values({
+	      id: randomUUID(),
+	      entityType: 'dispatch_task',
+	      entityId: taskId,
+	      eventType: 'task.failed',
+	      metadata: { error: errorMessage },
+	    });
 
     throw error;
   }
@@ -746,12 +768,13 @@ export async function retryDispatchTask(taskId: string, agentIdOverride?: string
     })
     .where(eq(dispatchTasks.id, taskId));
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_task',
-    entityId: taskId,
-    eventType: 'task.retry',
-    metadata: { agentIdOverride: agentIdOverride ?? null },
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_task',
+	  entityId: taskId,
+	  eventType: 'task.retry',
+	  metadata: { agentIdOverride: agentIdOverride ?? null },
+	});
 
   return executeDispatchTask(taskId, agentIdOverride);
 }
@@ -783,12 +806,13 @@ export async function runDispatchCampaign(campaignId: string) {
     .set({ status: DispatchTaskStatus.QUEUED, updatedAt: new Date() })
     .where(and(eq(dispatchTasks.campaignId, campaignId), eq(dispatchTasks.status, DispatchTaskStatus.PLANNED)));
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_campaign',
-    entityId: campaignId,
-    eventType: 'campaign.run.started',
-    metadata: { taskCount: pending.length },
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_campaign',
+	  entityId: campaignId,
+	  eventType: 'campaign.run.started',
+	  metadata: { taskCount: pending.length },
+	});
 
   const results: Array<{ taskId: string; status: string; error?: string }> = [];
 
@@ -837,12 +861,13 @@ export async function runDispatchCampaign(campaignId: string) {
   const failedCnt = results.filter((r) => r.status === 'FAILED').length;
   const canceledCnt = results.filter((r) => r.status === 'CANCELED').length;
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_campaign',
-    entityId: campaignId,
-    eventType: 'campaign.run.completed',
-    metadata: { finalStatus, done: doneCnt, failed: failedCnt, canceled: canceledCnt },
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_campaign',
+	  entityId: campaignId,
+	  eventType: 'campaign.run.completed',
+	  metadata: { finalStatus, done: doneCnt, failed: failedCnt, canceled: canceledCnt },
+	});
 
   // Write output files and Telegram ping on completion (non-fatal)
   if (finalStatus === DispatchCampaignStatus.COMPLETED) {
@@ -887,11 +912,12 @@ export async function enqueueDispatchCampaign(campaignId: string) {
     .where(eq(dispatchCampaigns.id, campaignId))
     .returning();
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_campaign',
-    entityId: campaignId,
-    eventType: 'campaign.queued',
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_campaign',
+	  entityId: campaignId,
+	  eventType: 'campaign.queued',
+	});
 
   return campaign;
 }
@@ -903,12 +929,13 @@ export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: 
     .where(eq(dispatchCampaigns.id, campaignId))
     .returning();
 
-  await db.insert(auditEvents).values({
-    entityType: 'dispatch_campaign',
-    entityId: campaignId,
-    eventType: 'campaign.scheduled',
-    metadata: { scheduledAt: scheduledAt.toISOString() },
-  });
+	await db.insert(auditEvents).values({
+	  id: randomUUID(),
+	  entityType: 'dispatch_campaign',
+	  entityId: campaignId,
+	  eventType: 'campaign.scheduled',
+	  metadata: { scheduledAt: scheduledAt.toISOString() },
+	});
 
   return campaign;
 }

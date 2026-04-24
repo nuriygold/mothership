@@ -2,6 +2,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { approvals, tasks, users, workflows } from '@/lib/db/schema';
 import { ApprovalDecision } from '@/lib/db/prisma-types';
+import { randomUUID } from 'node:crypto';
 
 type ApprovalRow = typeof approvals.$inferSelect;
 
@@ -49,6 +50,7 @@ export async function requestApproval(input: {
   const [created] = await db
     .insert(approvals)
     .values({
+      id: randomUUID(),
       workflowId: input.workflowId ?? null,
       taskId: input.taskId ?? null,
       requestedById: input.requestedById ?? null,

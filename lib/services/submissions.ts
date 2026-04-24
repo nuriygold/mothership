@@ -2,6 +2,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { submissions, users } from '@/lib/db/schema';
 import { SubmissionValidationStatus } from '@/lib/db/prisma-types';
+import { randomUUID } from 'node:crypto';
 
 type SubmissionRow = typeof submissions.$inferSelect;
 
@@ -40,6 +41,7 @@ export async function createSubmission(input: {
   const [created] = await db
     .insert(submissions)
     .values({
+      id: randomUUID(),
       workflowId: input.workflowId,
       submittedById: input.submittedById ?? null,
       sourceChannel: input.sourceChannel,

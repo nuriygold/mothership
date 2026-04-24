@@ -2,6 +2,7 @@ import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/servi
 import { ensureSession } from '@/lib/chat/session-util';
 import { db } from '@/lib/db/client';
 import { chatMessages } from '@/lib/db/schema';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -52,7 +53,7 @@ Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not
 
   if (sessionId) {
     ensureSession(sessionId, { firstMessageText: text })
-      .then(() => db.insert(chatMessages).values({ sessionId, role: 'user', content: text }))
+      .then(() => db.insert(chatMessages).values({ id: randomUUID(), sessionId, role: 'user', content: text }))
       .catch(() => {});
   }
 
@@ -95,7 +96,7 @@ Format when applicable: PLAN / ACTION / RESULT / NEXT (skip sections that do not
         controller.close();
         if (accumulated && sessionId) {
           db.insert(chatMessages)
-            .values({ sessionId, role: 'assistant', content: accumulated })
+            .values({ id: randomUUID(), sessionId, role: 'assistant', content: accumulated })
             .then(() => ensureSession(sessionId, { firstMessageText: text }))
             .catch(() => {});
         }

@@ -24,7 +24,7 @@ export async function ensureSession(
     const now = new Date();
     await db
       .insert(chatSessions)
-      .values({ id: sessionId, title, updatedAt: now })
+      .values({ id: sessionId, title, updatedAt: now, createdAt: now })
       .onConflictDoUpdate({
         target: chatSessions.id,
         set: { updatedAt: now },

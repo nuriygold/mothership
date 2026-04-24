@@ -4,6 +4,7 @@ import { submissions, tasks, users, workflowSchemaVersions, workflows, runs } fr
 import { Prisma, WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
 import type { InputJsonValue } from '@/lib/db/json';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
+import { randomUUID } from 'node:crypto';
 
 function keyById<T extends { id: string }>(rows: T[]) {
   return new Map(rows.map((row) => [row.id, row]));
@@ -133,11 +134,13 @@ export async function createWorkflow(input: {
   const [workflow] = await db
     .insert(workflows)
     .values({
+      id: randomUUID(),
       name: input.name,
       description: input.description,
       type: input.type ?? WorkflowType.STANDARD,
       status: input.status ?? WorkflowStatus.ACTIVE,
       ownerId: input.ownerId,
+      updatedAt: new Date(),
     })
     .returning();
 
@@ -145,6 +148,7 @@ export async function createWorkflow(input: {
     const [schemaVersion] = await db
       .insert(workflowSchemaVersions)
       .values({
+        id: randomUUID(),
         workflowId: workflow.id,
         version: 1,
         schemaJson: input.schemaJson,
