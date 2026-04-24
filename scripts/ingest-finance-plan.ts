@@ -33,7 +33,8 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient, FinancePlanType, FinancePlanStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+import { FinancePlanStatus, FinancePlanType } from '../lib/db/enums';
 
 const prisma = new PrismaClient();
 

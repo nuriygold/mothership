@@ -1,7 +1,8 @@
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { submissions, tasks, users, workflowSchemaVersions, workflows, runs } from '@/lib/db/schema';
-import { Prisma, WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
+import { WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 function keyById<T extends { id: string }>(rows: T[]) {
@@ -127,7 +128,7 @@ export async function createWorkflow(input: {
   type?: WorkflowType;
   ownerId: string;
   status?: WorkflowStatus;
-  schemaJson?: Prisma.InputJsonValue;
+  schemaJson?: InputJsonValue;
 }) {
   const [workflow] = await db
     .insert(workflows)

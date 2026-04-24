@@ -19,3 +19,4 @@ fix-*.js
 .claw/
 .sandbox-home/
 .sandbox-tmp/
+AGENTS.md

@@ -1,7 +1,8 @@
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { commands, runs, submissions, tasks, workflows } from '@/lib/db/schema';
-import { Prisma, RunStatus } from '@/lib/db/prisma-types';
+import { RunStatus } from '@/lib/db/prisma-types';
+import type { InputJsonValue } from '@/lib/db/json';
 import { isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 
 export async function listRuns() {
@@ -105,7 +106,7 @@ export async function createRun(input: {
   type: string;
   sourceSystem: string;
   status?: RunStatus;
-  metadata?: Prisma.InputJsonValue;
+  metadata?: InputJsonValue;
 }) {
   const [created] = await db
     .insert(runs)
@@ -116,7 +117,7 @@ export async function createRun(input: {
       type: input.type,
       sourceSystem: input.sourceSystem,
       status: input.status ?? RunStatus.QUEUED,
-      metadata: input.metadata ?? {},
+      metadata: (input.metadata ?? {}) as InputJsonValue,
       startedAt: new Date(),
     })
     .returning({ id: runs.id });
