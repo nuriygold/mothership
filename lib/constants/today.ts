@@ -70,3 +70,21 @@ export const TIMELINE_ICON_MAP = {
   spark: Zap,
   focus: Target,
 };
+
+export const DAILY_AFFIRMATION_BARS = [
+  "You know life is what we make it.",
+  "Started from the bottom now we're here.",
+  "When you get to where you're going, remember where you came from.",
+  "You know it's real when you are who you think you are.",
+  "The world's yours if you want it.",
+  "Sometimes it's the journey that teaches you a lot about your destination.",
+  'I learned working with the negatives can make for better pictures.',
+  'Trust me, the pressure builds character.',
+  "I'm way up, I feel blessed.",
+  "Take care of you, that's what I'll do.",
+] as const;
+
+export function pickRandomAffirmationBar(): string {
+  const index = Math.floor(Math.random() * DAILY_AFFIRMATION_BARS.length);
+  return DAILY_AFFIRMATION_BARS[index] ?? 'You move with intention and grace.';
+}
