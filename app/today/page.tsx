@@ -19,7 +19,14 @@ import { NewTaskModal } from '@/components/today/new-task-modal';
 import { FinanceAlerts } from '@/components/today/finance-alerts';
 import { StatusTicker } from '@/components/today/status-ticker';
 import { ThreeDayGrid } from '@/components/today/three-day-grid';
-import { BOT_TELEGRAM_KEY, BOT_COLORS, BOT_BORDER, BOT_OWNER_LOGIN, normalizeBotName } from '@/lib/constants/today';
+import {
+  BOT_TELEGRAM_KEY,
+  BOT_COLORS,
+  BOT_BORDER,
+  BOT_OWNER_LOGIN,
+  normalizeBotName,
+  pickRandomAffirmationBar,
+} from '@/lib/constants/today';
 import type { V2DashboardPriorityItem, V2DashboardTimelineItem, V2TodayFeed, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 import type { CalendarEvent } from '@/lib/services/calendar';
 
@@ -241,8 +248,8 @@ export default function TodayPage() {
     return `${feed.userContext.greeting}, ${feed.userContext.userName}`;
   }, [feed]);
 
-  const affirmation = feed?.userContext?.affirmation ?? '';
-  const affirmationSource = feed?.userContext?.affirmationSource ?? null;
+  const affirmationSource = feed?.userContext?.affirmationSource ?? 'Daily affirmation';
+  const affirmation = useMemo(() => pickRandomAffirmationBar(), []);
 
   // Count emails received today (local time), by timestamp field.
   const emailsToday = useMemo(() => {
@@ -487,23 +494,21 @@ export default function TodayPage() {
               textShadow: '0 1px 2px rgba(184,144,42,0.18)',
             }}
           >
-            {affirmation || 'You move with intention and grace.'}
+            {affirmation}
           </p>
-          {affirmationSource && (
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '10px',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--ice-text3)',
-                opacity: 0.8,
-                marginTop: 4,
-              }}
-            >
-              — {affirmationSource}
-            </div>
-          )}
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--ice-text3)',
+              opacity: 0.8,
+              marginTop: 4,
+            }}
+          >
+            — {affirmationSource}
+          </div>
         </div>
       </div>
 
