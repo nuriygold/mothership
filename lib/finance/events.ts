@@ -1,4 +1,7 @@
-import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'node:crypto';
+import { desc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { financeEvents } from '@/lib/db/schema';
 import type { InputJsonObject } from '@/lib/db/json';
 import { processFinanceEvent } from '@/lib/finance/eventProcessor';
 
@@ -20,14 +23,16 @@ export async function createFinanceEvent(
   payload: Record<string, unknown> & { priority?: FinanceEventPriority }
 ) {
   const { priority = 'normal', ...rest } = payload;
-  const event = await prisma.financeEvent.create({
-    data: {
+  const [event] = await db
+    .insert(financeEvents)
+    .values({
+      id: randomUUID(),
       type,
       source,
       payload: rest as InputJsonObject,
       priority,
-    },
-  });
+    })
+    .returning();
 
   // Process rules async — never blocks the caller, never throws
   processFinanceEvent(event).catch(() => {});
@@ -36,16 +41,20 @@ export async function createFinanceEvent(
 }
 
 export async function resolveFinanceEvent(id: string) {
-  return prisma.financeEvent.update({
-    where: { id },
-    data: { resolved: true },
-  });
+  const [updated] = await db
+    .update(financeEvents)
+    .set({ resolved: true })
+    .where(eq(financeEvents.id, id))
+    .returning();
+
+  return updated;
 }
 
 export async function listUnresolvedFinanceEvents(limit = 20) {
-  return prisma.financeEvent.findMany({
-    where: { resolved: false },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
+  return db
+    .select()
+    .from(financeEvents)
+    .where(eq(financeEvents.resolved, false))
+    .orderBy(desc(financeEvents.createdAt))
+    .limit(limit);
 }

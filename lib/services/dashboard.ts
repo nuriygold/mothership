@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { approvals, auditEvents, commands, runs, submissions, tasks, workflows } from '@/lib/db/schema';
 import { isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
 
 export async function getDashboard() {
@@ -73,35 +75,80 @@ export async function getDashboard() {
     };
   }
 
-  const [workflows, tasks, approvals, runs, commands, activity] = await Promise.all([
-    prisma.workflow.count(),
-    prisma.task.count(),
-    prisma.approval.count({ where: { status: 'REQUESTED' } }),
-    prisma.run.count(),
-    prisma.command.count(),
-    prisma.auditEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+  const [
+    [{ count: workflowsCount }],
+    [{ count: tasksCount }],
+    [{ count: pendingApprovalsCount }],
+    [{ count: runsCount }],
+    [{ count: commandsCount }],
+    activity,
+  ] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(workflows),
+    db.select({ count: sql<number>`count(*)` }).from(tasks),
+    db.select({ count: sql<number>`count(*)` }).from(approvals).where(eq(approvals.status, 'REQUESTED')),
+    db.select({ count: sql<number>`count(*)` }).from(runs),
+    db.select({ count: sql<number>`count(*)` }).from(commands),
+    db.select().from(auditEvents).orderBy(desc(auditEvents.createdAt)).limit(10),
   ]);
 
-  const activeWorkflows = await prisma.workflow.findMany({
-    include: { submissions: true, runs: true },
-    orderBy: { createdAt: 'desc' },
-    take: 5,
-  });
+  const activeWorkflowsBase = await db.select().from(workflows).orderBy(desc(workflows.createdAt)).limit(5);
+  const activeWorkflowIds = activeWorkflowsBase.map((w) => w.id);
+  const [activeSubmissions, activeRuns] = await Promise.all([
+    activeWorkflowIds.length
+      ? db.select().from(submissions).where(inArray(submissions.workflowId, activeWorkflowIds))
+      : Promise.resolve([]),
+    activeWorkflowIds.length
+      ? db.select().from(runs).where(inArray(runs.workflowId, activeWorkflowIds))
+      : Promise.resolve([]),
+  ]);
 
-  const pendingApprovals = await prisma.approval.findMany({
-    where: { status: 'REQUESTED' },
-    include: { task: true, workflow: true },
-    orderBy: { createdAt: 'desc' },
-  });
+  const activeWorkflows = activeWorkflowsBase.map((workflow) => ({
+    ...workflow,
+    submissions: activeSubmissions.filter((s) => s.workflowId === workflow.id),
+    runs: activeRuns.filter((r) => r.workflowId === workflow.id),
+  }));
 
-  const recentRuns = await prisma.run.findMany({
-    include: { workflow: true },
-    orderBy: { startedAt: 'desc' },
-    take: 5,
-  });
+  const pendingApprovalsRows = await db
+    .select({
+      approval: approvals,
+      task: tasks,
+      workflow: workflows,
+    })
+    .from(approvals)
+    .leftJoin(tasks, eq(approvals.taskId, tasks.id))
+    .leftJoin(workflows, eq(approvals.workflowId, workflows.id))
+    .where(eq(approvals.status, 'REQUESTED'))
+    .orderBy(desc(approvals.createdAt));
+
+  const pendingApprovals = pendingApprovalsRows.map((row) => ({
+    ...row.approval,
+    task: row.task ?? null,
+    workflow: row.workflow ?? null,
+  }));
+
+  const recentRunsRows = await db
+    .select({
+      run: runs,
+      workflow: workflows,
+    })
+    .from(runs)
+    .leftJoin(workflows, eq(runs.workflowId, workflows.id))
+    .orderBy(desc(runs.startedAt))
+    .limit(5);
+
+  const recentRuns = recentRunsRows.map((row) => ({
+    ...row.run,
+    workflow: row.workflow ?? null,
+  }));
 
   return {
-    counts: { workflows, tasks, approvals, runs, commands },
+    counts: {
+      workflows: Number(workflowsCount),
+      tasks: Number(tasksCount),
+      approvals: Number(pendingApprovalsCount),
+      runs: Number(runsCount),
+      commands: Number(commandsCount),
+    },
     activeWorkflows,
     pendingApprovals,
     recentRuns,

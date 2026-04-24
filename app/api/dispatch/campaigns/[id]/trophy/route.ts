@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
 import { DispatchCampaignStatus } from '@/lib/db/prisma-types';
 import { createAuditEvent } from '@/lib/services/audit';
 import { writeCampaignOutput, pingTelegramCampaignComplete } from '@/lib/services/campaign-output';
@@ -12,21 +14,27 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
-    const campaign = await prisma.dispatchCampaign.findUnique({
-      where: { id: params.id },
-      include: { tasks: { select: { status: true } } },
-    });
+    const [campaign] = await db
+      .select()
+      .from(dispatchCampaigns)
+      .where(eq(dispatchCampaigns.id, params.id))
+      .limit(1);
     if (!campaign) {
       return NextResponse.json({ ok: false, message: 'Campaign not found' }, { status: 404 });
     }
 
+    const tasks = await db
+      .select({ status: dispatchTasks.status })
+      .from(dispatchTasks)
+      .where(eq(dispatchTasks.campaignId, campaign.id));
+
     const wasAlreadyComplete = campaign.status === DispatchCampaignStatus.COMPLETED;
 
     if (!wasAlreadyComplete) {
-      await prisma.dispatchCampaign.update({
-        where: { id: campaign.id },
-        data: { status: DispatchCampaignStatus.COMPLETED },
-      });
+      await db
+        .update(dispatchCampaigns)
+        .set({ status: DispatchCampaignStatus.COMPLETED, updatedAt: new Date() })
+        .where(eq(dispatchCampaigns.id, campaign.id));
     }
 
     // Write output files and ping Telegram (non-fatal, deduplicated on repeat calls)
@@ -36,7 +44,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         id: campaign.id,
         title: campaign.title,
         status: DispatchCampaignStatus.COMPLETED,
-        tasks: campaign.tasks,
+        tasks,
       }).catch(() => { /* non-fatal */ });
     }
 

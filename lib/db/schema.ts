@@ -1,4 +1,5 @@
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import type { JsonValue } from '@/lib/db/json';
 
 // Transitional Drizzle schema. Expand this file while migrating each Prisma model.
 export const users = pgTable('User', {
@@ -56,7 +57,7 @@ export const workflowSchemaVersions = pgTable('WorkflowSchemaVersion', {
   id: uuid('id').defaultRandom().primaryKey(),
   workflowId: uuid('workflowId').notNull(),
   version: integer('version').notNull(),
-  schemaJson: jsonb('schemaJson').notNull(),
+  schemaJson: jsonb('schemaJson').$type<JsonValue>().notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   workflowVersionIdx: uniqueIndex('WorkflowSchemaVersion_workflowId_version_key').on(table.workflowId, table.version),
@@ -68,10 +69,10 @@ export const submissions = pgTable('Submission', {
   submittedById: uuid('submittedById'),
   sourceChannel: text('sourceChannel').notNull(),
   fileName: text('fileName'),
-  rawPayload: jsonb('rawPayload').notNull(),
-  normalizedPayload: jsonb('normalizedPayload'),
+  rawPayload: jsonb('rawPayload').$type<JsonValue>().notNull(),
+  normalizedPayload: jsonb('normalizedPayload').$type<JsonValue>(),
   validationStatus: text('validationStatus').default('PENDING').notNull(),
-  validationSummary: jsonb('validationSummary'),
+  validationSummary: jsonb('validationSummary').$type<JsonValue>(),
   submittedAt: timestamp('submittedAt', { withTimezone: true }).defaultNow().notNull(),
   processedAt: timestamp('processedAt', { withTimezone: true }),
 }, (table) => ({
@@ -84,7 +85,7 @@ export const auditEvents = pgTable('AuditEvent', {
   entityId: text('entityId').notNull(),
   eventType: text('eventType').notNull(),
   actorId: uuid('actorId'),
-  metadata: text('metadata'),
+  metadata: jsonb('metadata').$type<JsonValue>(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -97,7 +98,7 @@ export const runs = pgTable('Run', {
   status: text('status').default('QUEUED').notNull(),
   startedAt: timestamp('startedAt', { withTimezone: true }),
   completedAt: timestamp('completedAt', { withTimezone: true }),
-  metadata: jsonb('metadata'),
+  metadata: jsonb('metadata').$type<JsonValue>(),
   errorMessage: text('errorMessage'),
   submissionId: uuid('submissionId'),
 }, (table) => ({
@@ -201,11 +202,64 @@ export const dispatchCampaigns = pgTable('DispatchCampaign', {
   title: text('title').notNull(),
   description: text('description'),
   status: text('status').default('DRAFT').notNull(),
+  costBudgetCents: integer('costBudgetCents'),
+  timeBudgetSeconds: integer('timeBudgetSeconds'),
+  callbackUrl: text('callbackUrl'),
+  callbackSecret: text('callbackSecret'),
+  latestPlan: jsonb('latestPlan').$type<JsonValue>(),
+  latestPlanCreatedAt: timestamp('latestPlanCreatedAt', { withTimezone: true }),
+  approvedPlanName: text('approvedPlanName'),
+  approvedPlanAt: timestamp('approvedPlanAt', { withTimezone: true }),
   visionItemId: uuid('visionItemId'),
   projectId: uuid('projectId'),
+  outputFolder: text('outputFolder'),
+  assignedBotId: text('assignedBotId'),
+  revenueStream: text('revenueStream'),
+  linkedTaskRef: text('linkedTaskRef'),
+  queuedAt: timestamp('queuedAt', { withTimezone: true }),
+  scheduledAt: timestamp('scheduledAt', { withTimezone: true }),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const dispatchTasks = pgTable('DispatchTask', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  campaignId: uuid('campaignId').notNull(),
+  title: text('title').notNull(),
+  key: text('key'),
+  description: text('description'),
+  priority: integer('priority').default(5).notNull(),
+  dependencies: jsonb('dependencies').$type<JsonValue>(),
+  toolRequirements: jsonb('toolRequirements').$type<JsonValue>(),
+  status: text('status').default('PLANNED').notNull(),
+  agentId: text('agentId'),
+  output: text('output'),
+  reviewOutput: text('reviewOutput'),
+  errorMessage: text('errorMessage'),
+  toolTurns: integer('toolTurns'),
+  taskPoolIssueNumber: integer('taskPoolIssueNumber'),
+  taskPoolIssueUrl: text('taskPoolIssueUrl'),
+  startedAt: timestamp('startedAt', { withTimezone: true }),
+  completedAt: timestamp('completedAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  campaignStatusIdx: index('DispatchTask_campaignId_status_idx').on(table.campaignId, table.status),
+}));
+
+export const projects = pgTable('Project', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  color: text('color').default('lavender').notNull(),
+  icon: text('icon').default('folder').notNull(),
+  sortOrder: integer('sortOrder').default(0).notNull(),
+  isDefault: boolean('isDefault').default(false).notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sortOrderIdx: index('Project_sortOrder_idx').on(table.sortOrder),
+}));
 
 export const chatSessions = pgTable('ChatSession', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -247,4 +301,16 @@ export const revenueStreamStatusLogs = pgTable('RevenueStreamStatusLog', {
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   streamCreatedAtIdx: index('RevenueStreamStatusLog_stream_createdAt_idx').on(table.stream, table.createdAt),
+}));
+
+export const financeEvents = pgTable('FinanceEvent', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  source: text('source').notNull(),
+  payload: jsonb('payload').$type<JsonValue>().notNull(),
+  priority: text('priority').default('normal').notNull(),
+  resolved: boolean('resolved').default(false).notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  resolvedCreatedAtIdx: index('FinanceEvent_resolved_createdAt_idx').on(table.resolved, table.createdAt),
 }));

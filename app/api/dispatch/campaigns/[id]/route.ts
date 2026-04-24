@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDispatchCampaign } from '@/lib/services/dispatch';
-import { prisma } from '@/lib/prisma';
 import { createAuditEvent } from '@/lib/services/audit';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,15 +29,18 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   } catch { /* no body is fine */ }
 
   try {
-    const campaign = await prisma.dispatchCampaign.findUnique({
-      where: { id: params.id },
-      select: { id: true, title: true, status: true },
-    });
+    const [campaign] = await db
+      .select({ id: dispatchCampaigns.id, title: dispatchCampaigns.title, status: dispatchCampaigns.status })
+      .from(dispatchCampaigns)
+      .where(eq(dispatchCampaigns.id, params.id))
+      .limit(1);
     if (!campaign) {
       return NextResponse.json({ ok: false, message: 'Campaign not found' }, { status: 404 });
     }
 
-    await prisma.dispatchCampaign.delete({ where: { id: campaign.id } });
+    // Be explicit: delete tasks first, then campaign (works regardless of FK cascade).
+    await db.delete(dispatchTasks).where(eq(dispatchTasks.campaignId, campaign.id));
+    await db.delete(dispatchCampaigns).where(eq(dispatchCampaigns.id, campaign.id));
 
     await createAuditEvent({
       entityType: 'DispatchCampaign',

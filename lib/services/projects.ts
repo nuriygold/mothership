@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { dispatchCampaigns, dispatchTasks, projects } from '@/lib/db/schema';
 
 export const DEFAULT_PROJECTS = [
   { title: 'Creative Projects',       description: 'Design, content, brand, and creative work', color: 'pink',     icon: 'palette',  sortOrder: 0, isDefault: true },
@@ -9,46 +11,98 @@ export const DEFAULT_PROJECTS = [
 ];
 
 export async function ensureDefaultProjects() {
-  const count = await prisma.project.count();
-  if (count === 0) {
-    await prisma.project.createMany({ data: DEFAULT_PROJECTS });
-  }
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(projects);
+  if (Number(count) > 0) return;
+  await db.insert(projects).values(DEFAULT_PROJECTS);
 }
 
 export async function listProjects() {
   await ensureDefaultProjects();
-  return prisma.project.findMany({
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-    include: {
-      campaigns: {
-        select: { id: true, title: true, status: true, tasks: { select: { status: true } } },
-      },
-    },
-  });
+  const projectRows = await db
+    .select()
+    .from(projects)
+    .orderBy(asc(projects.sortOrder), asc(projects.createdAt));
+
+  const projectIds = projectRows.map((p) => p.id);
+  const campaignRows = projectIds.length
+    ? await db
+        .select({
+          id: dispatchCampaigns.id,
+          title: dispatchCampaigns.title,
+          status: dispatchCampaigns.status,
+          projectId: dispatchCampaigns.projectId,
+        })
+        .from(dispatchCampaigns)
+        .where(inArray(dispatchCampaigns.projectId, projectIds))
+    : [];
+
+  const campaignIds = campaignRows.map((c) => c.id);
+  const taskRows = campaignIds.length
+    ? await db
+        .select({
+          id: dispatchTasks.id,
+          status: dispatchTasks.status,
+          campaignId: dispatchTasks.campaignId,
+        })
+        .from(dispatchTasks)
+        .where(inArray(dispatchTasks.campaignId, campaignIds))
+    : [];
+
+  return projectRows.map((project) => ({
+    ...project,
+    campaigns: campaignRows
+      .filter((c) => c.projectId === project.id)
+      .map((campaign) => ({
+        id: campaign.id,
+        title: campaign.title,
+        status: campaign.status,
+        tasks: taskRows.filter((t) => t.campaignId === campaign.id).map((t) => ({ status: t.status })),
+      })),
+  }));
 }
 
 export async function createProject(input: { title: string; description?: string; color?: string; icon?: string }) {
-  const maxOrder = await prisma.project.aggregate({ _max: { sortOrder: true } });
-  return prisma.project.create({
-    data: {
+  const [{ maxSortOrder }] = await db
+    .select({ maxSortOrder: sql<number | null>`max(${projects.sortOrder})` })
+    .from(projects);
+
+  const [created] = await db
+    .insert(projects)
+    .values({
       title: input.title,
       description: input.description,
       color: input.color ?? 'lavender',
       icon: input.icon ?? 'folder',
-      sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
-    },
-  });
+      sortOrder: (maxSortOrder ?? -1) + 1,
+    })
+    .returning();
+
+  return created;
 }
 
 export async function updateProject(id: string, input: { title?: string; description?: string; color?: string; icon?: string; sortOrder?: number }) {
-  return prisma.project.update({ where: { id }, data: input });
+  const [updated] = await db
+    .update(projects)
+    .set({ ...input, updatedAt: new Date() })
+    .where(eq(projects.id, id))
+    .returning();
+
+  return updated;
 }
 
 export async function assignCampaignToProject(campaignId: string, projectId: string | null) {
-  return prisma.dispatchCampaign.update({
-    where: { id: campaignId },
-    data: { projectId },
-  });
+  const [updated] = await db
+    .update(dispatchCampaigns)
+    .set({ projectId, updatedAt: new Date() })
+    .where(eq(dispatchCampaigns.id, campaignId))
+    .returning();
+
+  return updated;
+}
+
+export async function deleteProject(id: string) {
+  await db.delete(projects).where(eq(projects.id, id));
+  return { ok: true };
 }
 
 export async function classifyProjectForText(title: string, description: string, projectTitles: string[]): Promise<string | null> {
