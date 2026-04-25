@@ -60,6 +60,40 @@ function tryParsePlanEnvelope(output: string): RawPlanEnvelope | null {
   return null;
 }
 
+function buildFallbackPlan(campaign: {
+  title: string;
+  description?: string | null;
+}): RawPlanEnvelope {
+  const context = campaign.description?.trim() || 'No additional context provided.';
+  return {
+    plans: [
+      {
+        name: 'Fallback Plan',
+        tasks: [
+          {
+            key: 'task-1',
+            title: 'Clarify the campaign scope',
+            description: `Review the goal and context for "${campaign.title}". Context: ${context}. Return a concise scope summary and assumptions in markdown.`,
+            deps: [],
+          },
+          {
+            key: 'task-2',
+            title: 'Draft the execution steps',
+            description: `Break the campaign into concrete execution steps an AI agent can perform. Include resources, constraints, and the exact output format for each step. Campaign: "${campaign.title}". Return strict JSON-compatible structure.`,
+            deps: ['task-1'],
+          },
+          {
+            key: 'task-3',
+            title: 'Review and finalize the result',
+            description: `Verify the output against the campaign goal and tighten any gaps. Campaign: "${campaign.title}". Context: ${context}. Return the final answer in the requested format.`,
+            deps: ['task-2'],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function asStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
@@ -279,11 +313,7 @@ export async function generateDispatchPlans(campaignId: string) {
             timestamp: new Date().toISOString(),
           })
         );
-        throw new Error(
-          `Planner returned invalid JSON. ` +
-            `First: ${(result.output ?? '').slice(0, 200)} ` +
-            `Second: ${(retry.output ?? '').slice(0, 200)}`
-        );
+        parsed = buildFallbackPlan(campaign);
       }
     }
 
