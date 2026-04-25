@@ -6,6 +6,7 @@ import type { CalendarEvent } from '@/lib/services/calendar';
 
 interface ThreeDayGridProps {
   events: CalendarEvent[];
+  initialView?: '3day' | 'day';
 }
 
 const HOUR_START = 6;
@@ -167,7 +168,7 @@ function EventDetailModal({ event, onClose }: { event: CalendarEvent; onClose: (
   );
 }
 
-export function ThreeDayGrid({ events }: ThreeDayGridProps) {
+export function ThreeDayGrid({ events, initialView = '3day' }: ThreeDayGridProps) {
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -175,6 +176,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
   }, []);
 
   const [offset, setOffset] = useState(-1);
+  const [viewMode, setViewMode] = useState<'3day' | 'day'>(initialView);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const nowLineRef = useRef<HTMLDivElement>(null);
 
@@ -198,8 +200,11 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
   }, []);
 
   const days = useMemo(() => {
+    if (viewMode === 'day') {
+      return [addDays(today, offset)];
+    }
     return [0, 1, 2].map((i) => addDays(today, offset + i));
-  }, [today, offset]);
+  }, [today, offset, viewMode]);
 
   const eventsByDay = useMemo(() => {
     return days.map((day) => {
@@ -215,6 +220,9 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
   const totalHeight = HOURS.length * ROW_H;
   const nowTopPx = ((nowMinutes - HOUR_START * 60) / 60) * ROW_H;
   const todayColIndex = days.findIndex((d) => isSameDay(d, today));
+  const columnCount = days.length;
+  const gridColumns = `${GUTTER_W}px repeat(${columnCount}, 1fr)`;
+  const eventsColumns = `repeat(${columnCount}, 1fr)`;
 
   return (
     <>
@@ -239,40 +247,85 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <div style={{ display: 'grid', gridTemplateColumns: `${GUTTER_W}px repeat(3, 1fr)`, flex: 1, margin: '0 8px' }}>
-            <div />
-            {days.map((day, i) => {
-              const isToday = isSameDay(day, today);
-              return (
-                <div key={i} style={{ textAlign: 'center', padding: '0 4px' }}>
-                  <div style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '9px',
-                    color: isToday ? 'var(--ice2)' : 'var(--ice-text3)',
-                    letterSpacing: '0.08em',
-                    marginBottom: '2px',
-                  }}>
-                    {dayLabel(day)}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, margin: '0 8px' }}>
+            <div style={{ display: 'flex', border: '1px solid #7ab8d8', borderRadius: 999, overflow: 'hidden', background: 'rgba(255,255,255,0.5)' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('3day');
+                  setOffset(-1);
+                }}
+                style={{
+                  border: 'none',
+                  background: viewMode === '3day' ? 'rgba(4,112,160,0.14)' : 'transparent',
+                  color: viewMode === '3day' ? '#024878' : '#5a7a9a',
+                  padding: '5px 10px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '9px',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                3 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('day');
+                  setOffset(0);
+                }}
+                style={{
+                  border: 'none',
+                  borderLeft: '1px solid #7ab8d8',
+                  background: viewMode === 'day' ? 'rgba(4,112,160,0.14)' : 'transparent',
+                  color: viewMode === 'day' ? '#024878' : '#5a7a9a',
+                  padding: '5px 10px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '9px',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                Day Zone
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: gridColumns, width: '100%' }}>
+              <div />
+              {days.map((day, i) => {
+                const isToday = isSameDay(day, today);
+                return (
+                  <div key={i} style={{ textAlign: 'center', padding: '0 4px' }}>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '9px',
+                      color: isToday ? 'var(--ice2)' : 'var(--ice-text3)',
+                      letterSpacing: '0.08em',
+                      marginBottom: '2px',
+                    }}>
+                      {dayLabel(day)}
+                    </div>
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '50%',
+                      background: isToday ? 'var(--ice)' : 'transparent',
+                      fontFamily: 'var(--font-rajdhani)',
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      color: isToday ? '#fff' : 'var(--ice-text)',
+                      lineHeight: 1,
+                    }}>
+                      {day.getDate()}
+                    </div>
                   </div>
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '26px',
-                    height: '26px',
-                    borderRadius: '50%',
-                    background: isToday ? 'var(--ice)' : 'transparent',
-                    fontFamily: 'var(--font-rajdhani)',
-                    fontSize: '18px',
-                    fontWeight: 700,
-                    color: isToday ? '#fff' : 'var(--ice-text)',
-                    lineHeight: 1,
-                  }}>
-                    {day.getDate()}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           <button
@@ -288,7 +341,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
         <div style={{ overflowY: 'auto', maxHeight: '360px', position: 'relative', overscrollBehavior: 'contain' }}>
           <div style={{ position: 'relative', height: totalHeight }}>
             {/* Hour grid lines */}
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'grid', gridTemplateColumns: `${GUTTER_W}px repeat(3, 1fr)` }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'grid', gridTemplateColumns: gridColumns }}>
               {HOURS.map((h, hi) => (
                 <div key={h} style={{ display: 'contents' }}>
                   <div style={{
@@ -308,7 +361,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
                   }}>
                     {formatHour(h)}
                   </div>
-                  {[0, 1, 2].map((col) => (
+                  {days.map((_, col) => (
                     <div key={col} style={{
                       gridColumn: col + 2,
                       gridRow: hi + 1,
@@ -322,7 +375,7 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
             </div>
 
             {/* Events layer */}
-            <div style={{ position: 'absolute', top: 0, left: GUTTER_W, right: 0, bottom: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div style={{ position: 'absolute', top: 0, left: GUTTER_W, right: 0, bottom: 0, display: 'grid', gridTemplateColumns: eventsColumns }}>
               {eventsByDay.map((dayEvents, colIdx) => (
                 <div key={colIdx} style={{ position: 'relative' }}>
                   {dayEvents.map((ev) => {
@@ -381,8 +434,8 @@ export function ThreeDayGrid({ events }: ThreeDayGridProps) {
                 style={{
                   position: 'absolute',
                   top: nowTopPx,
-                  left: `calc(${GUTTER_W}px + ${todayColIndex} * (100% - ${GUTTER_W}px) / 3)`,
-                  width: `calc((100% - ${GUTTER_W}px) / 3)`,
+                  left: `calc(${GUTTER_W}px + ${todayColIndex} * (100% - ${GUTTER_W}px) / ${columnCount})`,
+                  width: `calc((100% - ${GUTTER_W}px) / ${columnCount})`,
                   height: '2px',
                   background: 'var(--ice)',
                   zIndex: 10,
