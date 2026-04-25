@@ -12,6 +12,7 @@ type TranscriptLine = { role: 'user' | 'assistant'; text: string };
 interface SessionResponse {
   mode?: ConnectionMode;
   client_secret?: { value?: string };
+  value?: string;
   model?: string;
   voice?: string;
   base_url?: string;
@@ -235,11 +236,10 @@ export function HotlineBlingCard() {
   const connectWebRtc = useCallback(async () => {
     const res = await fetch('/api/realtime/session', { method: 'POST' });
     const body = (await res.json()) as SessionResponse;
-    if (!res.ok || !body?.client_secret?.value) {
+    const token = body.client_secret?.value ?? body.value;
+    if (!res.ok || !token) {
       throw new Error(body?.error ?? body?.detail ?? `Session request failed (${res.status})`);
     }
-    const token = body.client_secret.value;
-    const model = body.model ?? 'gpt-4o-realtime-preview-2024-12-17';
     const baseUrl = body.base_url ?? 'https://api.openai.com/v1/realtime';
 
     let mic: MediaStream;
@@ -266,7 +266,18 @@ export function HotlineBlingCard() {
     const channel = pc.createDataChannel('oai-events');
     dataChannelRef.current = channel;
     channel.addEventListener('open', () => {
-      channel.send(JSON.stringify({ type: 'session.update', session: { input_audio_transcription: { model: 'whisper-1' } } }));
+      channel.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          input_audio_transcription: { model: 'whisper-1' },
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+          },
+        },
+      }));
     });
     channel.addEventListener('message', (event) => {
       if (typeof event.data === 'string') handleEvent(event.data);
@@ -282,7 +293,7 @@ export function HotlineBlingCard() {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const sdpRes = await fetch(`${baseUrl}?model=${encodeURIComponent(model)}`, {
+    const sdpRes = await fetch(`${baseUrl}/calls`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/sdp' },
       body: offer.sdp ?? '',
@@ -327,7 +338,18 @@ export function HotlineBlingCard() {
 
   return (
     <Card>
-      <CardTitle>Hotline Bling</CardTitle>
+      <div className="relative pr-24">
+        <CardTitle>Hotline Bling</CardTitle>
+        <div
+          className="absolute -top-1 right-0 max-w-[10rem] rotate-2 rounded-md border border-amber-700/40 bg-amber-100 px-2 py-1 shadow-[0_6px_16px_rgba(120,72,0,0.16)]"
+          title="Reminder: this voice call uses the direct OpenAI key unless Azure OpenAI env vars are configured."
+          aria-label="Reminder: this voice call uses the direct OpenAI key unless Azure OpenAI env vars are configured."
+        >
+          <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-900">
+            This runs with the Azure OpenAI key, babe.
+          </div>
+        </div>
+      </div>
       <div className="mt-3 space-y-3 text-sm text-slate-200">
 
         {status === 'checking' && (

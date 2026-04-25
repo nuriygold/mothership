@@ -25,7 +25,7 @@ type RawPlan = {
   estimated_duration_seconds?: number;
 };
 
-type RawPlanEnvelope = {
+export type RawPlanEnvelope = {
   plans: RawPlan[];
 };
 
@@ -34,7 +34,7 @@ function extractJson(text: string) {
   return fenced?.[1] || text;
 }
 
-function tryParsePlanEnvelope(output: string): RawPlanEnvelope | null {
+export function parseDispatchPlanEnvelope(output: string): RawPlanEnvelope | null {
   const trimmed = String(output ?? '').trim();
   if (!trimmed) return null;
 
@@ -60,12 +60,46 @@ function tryParsePlanEnvelope(output: string): RawPlanEnvelope | null {
   return null;
 }
 
+function buildFallbackPlan(campaign: {
+  title: string;
+  description?: string | null;
+}): RawPlanEnvelope {
+  const context = campaign.description?.trim() || 'No additional context provided.';
+  return {
+    plans: [
+      {
+        name: 'Fallback Plan',
+        tasks: [
+          {
+            key: 'task-1',
+            title: 'Clarify the campaign scope',
+            description: `Review the goal and context for "${campaign.title}". Context: ${context}. Return a concise scope summary and assumptions in markdown.`,
+            deps: [],
+          },
+          {
+            key: 'task-2',
+            title: 'Draft the execution steps',
+            description: `Break the campaign into concrete execution steps an AI agent can perform. Include resources, constraints, and the exact output format for each step. Campaign: "${campaign.title}". Return strict JSON-compatible structure.`,
+            deps: ['task-1'],
+          },
+          {
+            key: 'task-3',
+            title: 'Review and finalize the result',
+            description: `Verify the output against the campaign goal and tighten any gaps. Campaign: "${campaign.title}". Context: ${context}. Return the final answer in the requested format.`,
+            deps: ['task-2'],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function asStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
 }
 
-function normalizePlanEnvelope(raw: RawPlanEnvelope) {
+export function normalizeDispatchPlanEnvelope(raw: RawPlanEnvelope) {
   return {
     plans: raw.plans.map((plan, planIndex) => {
       const keys = new Map<string, string>();
@@ -91,6 +125,34 @@ function normalizePlanEnvelope(raw: RawPlanEnvelope) {
       };
     }),
   };
+}
+
+export function isDispatchPlanEnvelope(value: unknown): value is RawPlanEnvelope {
+  return Boolean(value && typeof value === 'object' && Array.isArray((value as RawPlanEnvelope).plans));
+}
+
+export async function saveDispatchPlanEnvelope(campaignId: string, envelope: RawPlanEnvelope, sourceAgentId?: string) {
+  const latestPlan = normalizeDispatchPlanEnvelope(envelope);
+  const [updatedCampaign] = await db
+    .update(dispatchCampaigns)
+    .set({
+      status: DispatchCampaignStatus.READY,
+      latestPlan,
+      latestPlanCreatedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(dispatchCampaigns.id, campaignId))
+    .returning();
+
+  await db.insert(auditEvents).values({
+    id: randomUUID(),
+    entityType: 'dispatch_campaign',
+    entityId: campaignId,
+    eventType: 'plan.generated',
+    metadata: { planCount: latestPlan.plans.length, agentId: sourceAgentId ?? 'manual-json' },
+  });
+
+  return { campaign: updatedCampaign, plans: latestPlan.plans };
 }
 
 export async function listDispatchCampaigns() {
@@ -238,7 +300,7 @@ export async function generateDispatchPlans(campaignId: string) {
       timeoutMs: 90_000,
     });
 
-    let parsed = tryParsePlanEnvelope(result.output || '');
+    let parsed = parseDispatchPlanEnvelope(result.output || '');
     if (!parsed) {
       console.warn(
         JSON.stringify({
@@ -267,7 +329,7 @@ export async function generateDispatchPlans(campaignId: string) {
         timeoutMs: 90_000,
       });
 
-      parsed = tryParsePlanEnvelope(retry.output || '');
+      parsed = parseDispatchPlanEnvelope(retry.output || '');
       if (!parsed) {
         console.error(
           JSON.stringify({
@@ -279,39 +341,11 @@ export async function generateDispatchPlans(campaignId: string) {
             timestamp: new Date().toISOString(),
           })
         );
-        throw new Error(
-          `Planner returned invalid JSON. ` +
-            `First: ${(result.output ?? '').slice(0, 200)} ` +
-            `Second: ${(retry.output ?? '').slice(0, 200)}`
-        );
+        parsed = buildFallbackPlan(campaign);
       }
     }
 
-    const latestPlan = normalizePlanEnvelope(parsed);
-
-    const [updatedCampaign] = await db
-      .update(dispatchCampaigns)
-      .set({
-        status: DispatchCampaignStatus.READY,
-        latestPlan,
-        latestPlanCreatedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(dispatchCampaigns.id, campaignId))
-      .returning();
-
-    await db.insert(auditEvents).values({
-      id: randomUUID(),
-      entityType: 'dispatch_campaign',
-      entityId: campaignId,
-      eventType: 'plan.generated',
-      metadata: { planCount: latestPlan.plans.length, agentId: result.agentId },
-    });
-
-    return {
-      campaign: updatedCampaign,
-      plans: latestPlan.plans,
-    };
+    return saveDispatchPlanEnvelope(campaignId, parsed, result.agentId);
   } catch (error) {
     await db
       .update(dispatchCampaigns)
