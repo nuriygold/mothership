@@ -58,8 +58,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ campaign }, { status: 201 });
   } catch (error) {
     const err = error as any;
+    const message = err?.message ?? String(error);
+    const status = message.startsWith('Unknown project "') ? 400 : 500;
     console.error('[dispatch] create campaign failed', {
-      message: err?.message ?? String(error),
+      message,
       code: err?.code,
       detail: err?.detail,
       constraint: err?.constraint,
@@ -69,14 +71,14 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        message: err?.message ?? String(error),
+        message,
         code: err?.code,
         detail: err?.detail,
         constraint: err?.constraint,
         table: err?.table_name ?? err?.table,
         column: err?.column_name ?? err?.column,
       },
-      { status: 500 }
+      { status }
     );
   }
 }

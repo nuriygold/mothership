@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { asc, and, desc, eq, inArray, lte } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { auditEvents, dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
+import { auditEvents, dispatchCampaigns, dispatchTasks, projects } from '@/lib/db/schema';
 import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/prisma-types';
 import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
@@ -99,6 +99,42 @@ function asStringArray(value: unknown) {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
+async function repairStaleCampaignProjectLink(campaignId: string): Promise<boolean> {
+  const [campaign] = await db
+    .select({ projectId: dispatchCampaigns.projectId })
+    .from(dispatchCampaigns)
+    .where(eq(dispatchCampaigns.id, campaignId))
+    .limit(1);
+
+  const projectId = campaign?.projectId?.trim();
+  if (!projectId) return false;
+
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+
+  if (project) return false;
+
+  await db
+    .update(dispatchCampaigns)
+    .set({ projectId: null, updatedAt: new Date() })
+    .where(eq(dispatchCampaigns.id, campaignId));
+
+  console.warn(
+    JSON.stringify({
+      service: 'dispatch',
+      event: 'repaired_stale_campaign_project_link',
+      campaignId,
+      staleProjectId: projectId,
+      timestamp: new Date().toISOString(),
+    })
+  );
+
+  return true;
+}
+
 export function normalizeDispatchPlanEnvelope(raw: RawPlanEnvelope) {
   return {
     plans: raw.plans.map((plan, planIndex) => {
@@ -133,6 +169,7 @@ export function isDispatchPlanEnvelope(value: unknown): value is RawPlanEnvelope
 
 export async function saveDispatchPlanEnvelope(campaignId: string, envelope: RawPlanEnvelope, sourceAgentId?: string) {
   const latestPlan = normalizeDispatchPlanEnvelope(envelope);
+  await repairStaleCampaignProjectLink(campaignId);
   const [updatedCampaign] = await db
     .update(dispatchCampaigns)
     .set({
@@ -198,6 +235,14 @@ export async function createDispatchCampaign(input: {
   linkedTaskRef?: string;
 }) {
   const now = new Date();
+  const projectId = input.projectId?.trim() || null;
+  if (projectId) {
+    const [project] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1);
+    if (!project) {
+      throw new Error(`Unknown project "${projectId}". Refresh the Projects page and try again.`);
+    }
+  }
+
   const [campaign] = await db
     .insert(dispatchCampaigns)
     .values({
@@ -208,7 +253,7 @@ export async function createDispatchCampaign(input: {
       timeBudgetSeconds: input.timeBudgetSeconds ?? null,
       callbackUrl: input.callbackUrl?.trim() || null,
       callbackSecret: input.callbackSecret?.trim() || null,
-      projectId: input.projectId?.trim() || null,
+      projectId,
       visionItemId: input.visionItemId?.trim() || null,
       outputFolder: input.outputFolder?.trim() || null,
       assignedBotId: input.assignedBotId?.trim() || null,
@@ -271,6 +316,8 @@ export async function generateDispatchPlans(campaignId: string) {
   if (!campaign) {
     throw new Error('Campaign not found');
   }
+
+  await repairStaleCampaignProjectLink(campaignId);
 
   await db
     .update(dispatchCampaigns)
@@ -347,6 +394,7 @@ export async function generateDispatchPlans(campaignId: string) {
 
     return saveDispatchPlanEnvelope(campaignId, parsed, result.agentId);
   } catch (error) {
+    await repairStaleCampaignProjectLink(campaignId);
     await db
       .update(dispatchCampaigns)
       .set({ status: campaign.status, updatedAt: new Date() })
@@ -361,6 +409,8 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
   if (!campaign) {
     throw new Error('Campaign not found');
   }
+
+  await repairStaleCampaignProjectLink(campaignId);
 
   const latestPlan = campaign.latestPlan as JsonObject | null;
   const plans = Array.isArray(latestPlan?.plans) ? (latestPlan?.plans as JsonArray) : [];
@@ -474,6 +524,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
 }
 
 export async function setDispatchCampaignStatus(campaignId: string, status: DispatchCampaignStatus) {
+  await repairStaleCampaignProjectLink(campaignId);
   const [campaign] = await db
     .update(dispatchCampaigns)
     .set({ status, updatedAt: new Date() })
@@ -878,6 +929,8 @@ export async function runDispatchCampaign(campaignId: string) {
   const [campaign] = await db.select().from(dispatchCampaigns).where(eq(dispatchCampaigns.id, campaignId)).limit(1);
   if (!campaign) throw new Error('Campaign not found');
 
+  await repairStaleCampaignProjectLink(campaignId);
+
   const campaignTasks = await db
     .select()
     .from(dispatchTasks)
@@ -1001,6 +1054,7 @@ export async function runDispatchCampaign(campaignId: string) {
 }
 
 export async function enqueueDispatchCampaign(campaignId: string) {
+  await repairStaleCampaignProjectLink(campaignId);
   const [campaign] = await db
     .update(dispatchCampaigns)
     .set({ status: DispatchCampaignStatus.QUEUED, queuedAt: new Date(), updatedAt: new Date() })
@@ -1018,6 +1072,7 @@ export async function enqueueDispatchCampaign(campaignId: string) {
 }
 
 export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: Date) {
+  await repairStaleCampaignProjectLink(campaignId);
   const [campaign] = await db
     .update(dispatchCampaigns)
     .set({ status: DispatchCampaignStatus.SCHEDULED, scheduledAt, updatedAt: new Date() })
