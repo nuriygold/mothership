@@ -25,7 +25,7 @@ type RawPlan = {
   estimated_duration_seconds?: number;
 };
 
-type RawPlanEnvelope = {
+export type RawPlanEnvelope = {
   plans: RawPlan[];
 };
 
@@ -34,7 +34,7 @@ function extractJson(text: string) {
   return fenced?.[1] || text;
 }
 
-function tryParsePlanEnvelope(output: string): RawPlanEnvelope | null {
+export function parseDispatchPlanEnvelope(output: string): RawPlanEnvelope | null {
   const trimmed = String(output ?? '').trim();
   if (!trimmed) return null;
 
@@ -99,7 +99,7 @@ function asStringArray(value: unknown) {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
-function normalizePlanEnvelope(raw: RawPlanEnvelope) {
+export function normalizeDispatchPlanEnvelope(raw: RawPlanEnvelope) {
   return {
     plans: raw.plans.map((plan, planIndex) => {
       const keys = new Map<string, string>();
@@ -125,6 +125,34 @@ function normalizePlanEnvelope(raw: RawPlanEnvelope) {
       };
     }),
   };
+}
+
+export function isDispatchPlanEnvelope(value: unknown): value is RawPlanEnvelope {
+  return Boolean(value && typeof value === 'object' && Array.isArray((value as RawPlanEnvelope).plans));
+}
+
+export async function saveDispatchPlanEnvelope(campaignId: string, envelope: RawPlanEnvelope, sourceAgentId?: string) {
+  const latestPlan = normalizeDispatchPlanEnvelope(envelope);
+  const [updatedCampaign] = await db
+    .update(dispatchCampaigns)
+    .set({
+      status: DispatchCampaignStatus.READY,
+      latestPlan,
+      latestPlanCreatedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(dispatchCampaigns.id, campaignId))
+    .returning();
+
+  await db.insert(auditEvents).values({
+    id: randomUUID(),
+    entityType: 'dispatch_campaign',
+    entityId: campaignId,
+    eventType: 'plan.generated',
+    metadata: { planCount: latestPlan.plans.length, agentId: sourceAgentId ?? 'manual-json' },
+  });
+
+  return { campaign: updatedCampaign, plans: latestPlan.plans };
 }
 
 export async function listDispatchCampaigns() {
@@ -272,7 +300,7 @@ export async function generateDispatchPlans(campaignId: string) {
       timeoutMs: 90_000,
     });
 
-    let parsed = tryParsePlanEnvelope(result.output || '');
+    let parsed = parseDispatchPlanEnvelope(result.output || '');
     if (!parsed) {
       console.warn(
         JSON.stringify({
@@ -301,7 +329,7 @@ export async function generateDispatchPlans(campaignId: string) {
         timeoutMs: 90_000,
       });
 
-      parsed = tryParsePlanEnvelope(retry.output || '');
+      parsed = parseDispatchPlanEnvelope(retry.output || '');
       if (!parsed) {
         console.error(
           JSON.stringify({
@@ -317,31 +345,7 @@ export async function generateDispatchPlans(campaignId: string) {
       }
     }
 
-    const latestPlan = normalizePlanEnvelope(parsed);
-
-    const [updatedCampaign] = await db
-      .update(dispatchCampaigns)
-      .set({
-        status: DispatchCampaignStatus.READY,
-        latestPlan,
-        latestPlanCreatedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(dispatchCampaigns.id, campaignId))
-      .returning();
-
-    await db.insert(auditEvents).values({
-      id: randomUUID(),
-      entityType: 'dispatch_campaign',
-      entityId: campaignId,
-      eventType: 'plan.generated',
-      metadata: { planCount: latestPlan.plans.length, agentId: result.agentId },
-    });
-
-    return {
-      campaign: updatedCampaign,
-      plans: latestPlan.plans,
-    };
+    return saveDispatchPlanEnvelope(campaignId, parsed, result.agentId);
   } catch (error) {
     await db
       .update(dispatchCampaigns)
