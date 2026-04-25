@@ -76,6 +76,11 @@ const DEFAULTS: Config = {
 };
 
 const CFG_KEY = 'claude-page-config';
+const ACTIVE_SESSION_KEY = 'claude-page-active-session';
+
+function isClaudeSessionId(sessionId: string | null): sessionId is string {
+  return !!sessionId && /^agent:claude:[0-9a-fA-F-]{36}$/.test(sessionId);
+}
 
 function loadCfg(): Config {
   if (typeof window === 'undefined') return DEFAULTS;
@@ -87,6 +92,21 @@ function loadCfg(): Config {
 
 function saveCfg(c: Config) {
   if (typeof window !== 'undefined') localStorage.setItem(CFG_KEY, JSON.stringify(c));
+}
+
+function readActiveSession(): string | null {
+  if (typeof window === 'undefined') return null;
+  const value = window.localStorage.getItem(ACTIVE_SESSION_KEY);
+  return isClaudeSessionId(value) ? value : null;
+}
+
+function saveActiveSession(sessionId: string | null) {
+  if (typeof window === 'undefined') return;
+  if (isClaudeSessionId(sessionId)) {
+    window.localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+  } else {
+    window.localStorage.removeItem(ACTIVE_SESSION_KEY);
+  }
 }
 
 const sel: React.CSSProperties = {
@@ -123,12 +143,44 @@ export default function ClaudePage() {
   useEffect(() => { setCfg(loadCfg()); }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const params = new URLSearchParams(window.location.search);
-    const sid = params.get('session');
-    if (sid?.startsWith('agent:claude:')) setSessionId(sid);
+    const urlSession = params.get('session');
+    const preferred = isClaudeSessionId(urlSession) ? urlSession : readActiveSession();
+
+    if (preferred) {
+      setSessionId(preferred);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetch('/api/chat/sessions?agent=claude', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const recent = Array.isArray(data?.sessions) ? data.sessions : [];
+        const restored = recent.find((session: any) => isClaudeSessionId(session?.id))?.id ?? null;
+        if (!cancelled && restored) setSessionId(restored);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const messages = sessionId ? (messagesBySession[sessionId] ?? []) : [];
+
+  useEffect(() => {
+    saveActiveSession(sessionId);
+    if (!isClaudeSessionId(sessionId)) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('session') !== sessionId) {
+      url.searchParams.set('session', sessionId);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     const el = messagesRef.current;
@@ -193,6 +245,7 @@ export default function ClaudePage() {
     url.searchParams.set('session', sid);
     window.history.replaceState({}, '', url.toString());
     setSessionId(sid);
+    saveActiveSession(sid);
     setInput('');
     setError(null);
     setLoading(false);
@@ -585,13 +638,14 @@ export default function ClaudePage() {
       {/* Chat tabs (chat mode only) */}
       {mode === 'chat' && (
         <div style={{ padding: '8px 16px', borderBottom: '1px solid #1e2235', background: 'rgba(15,19,28,0.7)', flexShrink: 0 }}>
-          <ChatTabs
-            agent="claude"
-            sessionId={sessionId}
-            onSessionChange={handleSessionChange}
-            onSessionClose={handleSessionClose}
-          />
-        </div>
+        <ChatTabs
+          agent="claude"
+          sessionId={sessionId}
+          onSessionChange={handleSessionChange}
+          onSessionClose={handleSessionClose}
+          showSearch
+        />
+      </div>
       )}
 
       {/* Main content */}
