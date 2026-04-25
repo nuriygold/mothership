@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import useSWR from 'swr';
 import {
   Plus, Palette, Cpu, TrendingUp, Home, User, Folder,
   X, Sparkles, ExternalLink,
 } from 'lucide-react';
+import { broadcastProjectsUpdated, onProjectsUpdated } from '@/lib/projects/project-sync';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? 'Failed to create');
+      broadcastProjectsUpdated();
       onCreated();
       onClose();
     } catch (e) {
@@ -207,11 +209,16 @@ function AssignCampaignModal({
 
   async function assign(campaignId: string) {
     setAssigning(campaignId);
-    await fetch(`/api/projects/${project.id}`, {
+    const res = await fetch(`/api/projects/${project.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignCampaignId: campaignId }),
     });
+    if (!res.ok) {
+      setAssigning(null);
+      return;
+    }
+    broadcastProjectsUpdated();
     onAssigned();
     setAssigning(null);
   }
@@ -362,6 +369,10 @@ export default function ProjectsPage() {
 
   const totalCampaigns = projects?.reduce((s, p) => s + p.campaigns.length, 0) ?? 0;
   const unassigned = (allCampaignsRaw ?? []).filter((c) => !c.projectId).length;
+
+  useEffect(() => onProjectsUpdated(() => {
+    void mutate();
+  }), [mutate]);
 
   return (
     <>
