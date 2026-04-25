@@ -17,6 +17,11 @@ type ChatTabsProps = {
   showSearch?: boolean;
 };
 
+type SessionMessage = {
+  role?: string;
+  content?: string;
+};
+
 const MAX_SESSIONS = 24;
 
 function isValidSessionId(agent: string, sessionId: string | null): sessionId is string {
@@ -64,6 +69,8 @@ export function ChatTabs({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [messageIndex, setMessageIndex] = useState<Record<string, string>>({});
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Hydrate from localStorage
@@ -256,7 +263,8 @@ export function ChatTabs({
 
     const matched = sessions.filter((id) => {
       const title = titles[id] ?? '';
-      return `${id} ${title}`.toLowerCase().includes(q);
+      const haystack = `${id} ${title} ${messageIndex[id] ?? ''}`.toLowerCase();
+      return haystack.includes(q);
     });
 
     if (sessionId && sessions.includes(sessionId) && !matched.includes(sessionId)) {
@@ -264,7 +272,55 @@ export function ChatTabs({
     }
 
     return matched;
-  }, [searchQuery, sessions, sessionId, titles]);
+  }, [searchQuery, sessions, sessionId, titles, messageIndex]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncSearchIndex = async () => {
+      const q = searchQuery.trim();
+      if (!q) {
+        setMessageIndex({});
+        setSearching(false);
+        return;
+      }
+
+      setSearching(true);
+      try {
+        const ids = sessions.slice(0, MAX_SESSIONS);
+        const pairs = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const res = await fetch(`/api/chat/messages?sessionId=${encodeURIComponent(id)}`, {
+                cache: 'no-store',
+              });
+              if (!res.ok) return [id, ''] as const;
+              const data = await res.json();
+              const messages: SessionMessage[] = Array.isArray(data?.messages) ? data.messages : [];
+              const indexed = messages
+                .map((message) => `${message.role ?? ''} ${message.content ?? ''}`)
+                .join(' ')
+                .slice(0, 12000);
+              return [id, indexed] as const;
+            } catch {
+              return [id, ''] as const;
+            }
+          })
+        );
+
+        if (cancelled) return;
+        setMessageIndex(Object.fromEntries(pairs));
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    };
+
+    void syncSearchIndex();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery, sessions]);
 
   return (
     <div
@@ -286,23 +342,30 @@ export function ChatTabs({
         }}
       >
         {showSearch && (
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sessions"
-            aria-label="Search sessions"
-            style={{
-              minWidth: 180,
-              flex: '1 1 180px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(255,255,255,0.04)',
-              color: 'white',
-              padding: '7px 11px',
-              fontSize: 12,
-              outline: 'none',
-            }}
-          />
+          <div style={{ minWidth: 180, flex: '1 1 180px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sessions"
+              aria-label="Search sessions"
+              style={{
+                minWidth: 0,
+                flex: 1,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'white',
+                padding: '7px 11px',
+                fontSize: 12,
+                outline: 'none',
+              }}
+            />
+            {searching && (
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+                searching…
+              </span>
+            )}
+          </div>
         )}
 
         <div
