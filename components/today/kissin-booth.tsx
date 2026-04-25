@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Mic } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
+import { formatChatTimestamp } from '@/lib/chat/format-chat-timestamp';
 
 type Message = {
   id: string;
@@ -280,6 +281,17 @@ export function KissinBooth({
                   )}
                 </>
               )}
+            </div>
+            <div
+              className="mt-1 text-[10px] font-mono"
+              style={{
+                color: 'var(--muted-foreground)',
+                opacity: 0.7,
+                textAlign: msg.role === 'user' ? 'right' : 'left',
+                width: '100%',
+              }}
+            >
+              {formatChatTimestamp(msg.ts)}
             </div>
           </div>
         ))}
