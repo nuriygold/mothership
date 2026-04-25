@@ -21,3 +21,14 @@ Result:
 - Introduce a Drizzle-backed query adapter beside the existing Prisma adapter
 - Migrate service modules one slice at a time from `lib/prisma.ts` to the new adapter
 - Remove Prisma scripts and generated client only after the runtime query path is fully off Prisma
+
+### Deploy Safety: Always Apply Drizzle Migrations
+
+Vercel will run `npm run vercel-build` when the script exists. This repo uses that hook to
+apply Drizzle migrations during deploy (and avoids running `prisma generate` / `prisma migrate`).
+
+Behavior:
+
+- Production deploys: runs `drizzle-kit migrate` then `next build`
+- Preview deploys: skips migrations by default (set `RUN_MIGRATIONS_IN_PREVIEW=1` to enable)
+- Set `SKIP_MIGRATIONS=1` to force-skip migration execution
