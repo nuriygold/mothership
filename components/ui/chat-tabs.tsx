@@ -14,6 +14,7 @@ type ChatTabsProps = {
   onSessionChange: (sessionId: string) => void;
   onSessionClose?: (sessionId: string) => void;
   className?: string;
+  showSearch?: boolean;
 };
 
 const MAX_SESSIONS = 24;
@@ -55,12 +56,14 @@ export function ChatTabs({
   onSessionChange,
   onSessionClose,
   className,
+  showSearch = false,
 }: ChatTabsProps) {
   const storageKey = useMemo(() => sessionsKey(agent), [agent]);
   const [sessions, setSessions] = useState<string[]>([]);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Hydrate from localStorage
@@ -132,7 +135,10 @@ export function ChatTabs({
         return [sessionId, ...prev].slice(0, MAX_SESSIONS);
       }
 
-      if (prev.length > 0) return prev;
+      if (prev.length > 0) {
+        onSessionChange(prev[0]);
+        return prev;
+      }
       const created = createSessionId(agent);
       onSessionChange(created);
       return [created];
@@ -244,12 +250,28 @@ export function ChatTabs({
     setRenameValue('');
   }, []);
 
+  const visibleSessions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sessions;
+
+    const matched = sessions.filter((id) => {
+      const title = titles[id] ?? '';
+      return `${id} ${title}`.toLowerCase().includes(q);
+    });
+
+    if (sessionId && sessions.includes(sessionId) && !matched.includes(sessionId)) {
+      return [sessionId, ...matched];
+    }
+
+    return matched;
+  }, [searchQuery, sessions, sessionId, titles]);
+
   return (
     <div
       className={className}
       style={{
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: 'column',
         gap: 8,
         width: '100%',
       }}
@@ -257,13 +279,42 @@ export function ChatTabs({
       <div
         style={{
           display: 'flex',
+          alignItems: 'center',
           gap: 8,
-          overflowX: 'auto',
-          flex: 1,
-          paddingBottom: 2,
+          width: '100%',
+          flexWrap: 'wrap',
         }}
       >
-        {sessions.map((id, index) => {
+        {showSearch && (
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search sessions"
+            aria-label="Search sessions"
+            style={{
+              minWidth: 180,
+              flex: '1 1 180px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(255,255,255,0.04)',
+              color: 'white',
+              padding: '7px 11px',
+              fontSize: 12,
+              outline: 'none',
+            }}
+          />
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto',
+            flex: '1 1 100%',
+            paddingBottom: 2,
+          }}
+        >
+        {visibleSessions.map((id, index) => {
           const active = id === sessionId;
           const customTitle = titles[id];
           const label = customTitle && customTitle.trim() ? customTitle : `Session ${index + 1}`;
@@ -374,6 +425,7 @@ export function ChatTabs({
             </div>
           );
         })}
+        </div>
       </div>
 
       <button
