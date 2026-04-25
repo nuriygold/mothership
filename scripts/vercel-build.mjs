@@ -31,14 +31,6 @@ if (shouldMigrate) {
   console.log('[vercel-build] Skipping migrations.');
 }
 
-console.log('[vercel-build] Generating Prisma client...');
-// `npm install --ignore-scripts` on Vercel skips the postinstall hook,
-// so we must generate the Prisma client explicitly before next build,
-// otherwise route handlers that import @prisma/client (e.g.
-// /api/plaid/balances) fail page-data collection with
-// "Cannot find module '.prisma/client/default'".
-run(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['prisma', 'generate']);
-
 console.log('[vercel-build] Running Next build...');
 run(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['next', 'build']);
 
