@@ -6,9 +6,10 @@ import remarkGfm from "remark-gfm"
 import { ChatTabs } from "@/components/ui/chat-tabs"
 import { GatewayTicker, useGatewayStatus } from "@/components/ui/gateway-ticker"
 import { SessionPalette } from "@/components/ui/session-palette"
+import { formatChatTimestamp } from "@/lib/chat/format-chat-timestamp"
 import { maybeAutoTitle } from "@/lib/chat/tabs-client"
 
-type Message = { role: 'user' | 'assistant'; content: string }
+type Message = { role: 'user' | 'assistant'; content: string; ts: string }
 
 export default function Iceman() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -58,7 +59,11 @@ export default function Iceman() {
         const msgs: Message[] = Array.isArray(data?.messages)
           ? data.messages
               .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
-              .map((m: any) => ({ role: m.role, content: String(m.content ?? '') }))
+              .map((m: any) => ({
+                role: m.role,
+                content: String(m.content ?? ''),
+                ts: String(m.createdAt ?? new Date().toISOString()),
+              }))
           : []
         if (!msgs.length) return
         setMessagesBySession((prev) => {
@@ -98,12 +103,13 @@ export default function Iceman() {
     if (!input.trim() || loading || !activeSessionId) return
 
     const text = input.trim()
+    const userTs = new Date().toISOString()
     setInput("")
     setError(null)
     setLoading(true)
     setMessagesBySession((prev) => ({
       ...prev,
-      [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text }],
+      [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text, ts: userTs }],
     }))
     maybeAutoTitle('iceman', activeSessionId, text)
 
@@ -123,6 +129,7 @@ export default function Iceman() {
       let buf = ''
       let assistantContent = ''
       let assistantAdded = false
+      const assistantTs = new Date().toISOString()
 
       outer: while (true) {
         const { value, done } = await reader.read()
@@ -144,7 +151,7 @@ export default function Iceman() {
               if (!assistantAdded) {
                 setMessagesBySession((prev) => ({
                   ...prev,
-                  [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'assistant', content: assistantContent } as Message],
+                  [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'assistant', content: assistantContent, ts: assistantTs } as Message],
                 }))
                 assistantAdded = true
               } else {
@@ -152,8 +159,8 @@ export default function Iceman() {
                   const current = prev[activeSessionId] ?? []
                   const nextMessages =
                     current.length > 0
-                      ? [...current.slice(0, -1), { role: 'assistant', content: assistantContent } as Message]
-                      : [{ role: 'assistant', content: assistantContent } as Message]
+                      ? [...current.slice(0, -1), { role: 'assistant', content: assistantContent, ts: assistantTs } as Message]
+                      : [{ role: 'assistant', content: assistantContent, ts: assistantTs } as Message]
                   return { ...prev, [activeSessionId]: nextMessages }
                 })
               }
@@ -256,13 +263,23 @@ export default function Iceman() {
               {m.role === 'user' ? (
                 <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.content}</span>
               ) : (
-                <div className="md-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                </div>
-              )}
+                  <div className="md-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
+              <div style={{
+                marginTop: 4,
+                fontSize: 10,
+                color: "rgba(255,255,255,0.34)",
+                fontFamily: "monospace",
+                textAlign: m.role === 'user' ? 'right' : 'left',
+                width: '100%',
+              }}>
+                {formatChatTimestamp(m.ts)}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
         {loading && (
           <div style={{ display: "flex", alignItems: 'flex-start' }}>

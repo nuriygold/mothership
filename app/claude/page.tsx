@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { ChatTabs } from '@/components/ui/chat-tabs';
 import { GatewayTicker } from '@/components/ui/gateway-ticker';
 import { SessionPalette } from '@/components/ui/session-palette';
+import { formatChatTimestamp } from '@/lib/chat/format-chat-timestamp';
 import { maybeAutoTitle } from '@/lib/chat/tabs-client';
 
 const TerminalView = dynamic(() => import('./terminal-view'), {
@@ -55,7 +56,7 @@ const PROVIDERS = {
 
 type Provider = keyof typeof PROVIDERS;
 type Mode = 'chat' | 'terminal' | 'live';
-type Message = { role: 'user' | 'assistant'; content: string };
+type Message = { role: 'user' | 'assistant'; content: string; ts: string };
 
 type Config = {
   provider: Provider;
@@ -133,7 +134,9 @@ export default function ClaudePage() {
   const [transcribing, setTranscribing] = useState(false);
   const [liveStatus, setLiveStatus] = useState<'idle' | 'recording' | 'thinking' | 'speaking'>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [liveTranscriptAt, setLiveTranscriptAt] = useState<string | null>(null);
   const [liveResponse, setLiveResponse] = useState('');
+  const [liveResponseAt, setLiveResponseAt] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -204,7 +207,11 @@ export default function ClaudePage() {
         const msgs: Message[] = Array.isArray(data?.messages)
           ? data.messages
               .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
-              .map((m: any) => ({ role: m.role, content: String(m.content ?? '') }))
+              .map((m: any) => ({
+                role: m.role,
+                content: String(m.content ?? ''),
+                ts: String(m.createdAt ?? new Date().toISOString()),
+              }))
           : [];
         if (!msgs.length) return;
         setMessagesBySession((prev) => {
@@ -339,7 +346,9 @@ export default function ClaudePage() {
     liveAudioRef.current?.pause();
     setLiveStatus('recording');
     setLiveTranscript('');
+    setLiveTranscriptAt(null);
     setLiveResponse('');
+    setLiveResponseAt(null);
     await startMicRecording();
   }
 
@@ -349,14 +358,18 @@ export default function ClaudePage() {
     const text = await stopMicAndTranscribe();
     if (!text) { setLiveStatus('idle'); return; }
     setLiveTranscript(text);
+    const liveTurnTs = new Date().toISOString();
+    setLiveTranscriptAt(liveTurnTs);
 
     const activeSession = sessionId;
     if (!activeSession) { setLiveStatus('idle'); return; }
 
     const prev = messagesBySession[activeSession] ?? [];
-    const withUser: Message[] = [...prev, { role: 'user', content: text }];
+    const turnTs = new Date().toISOString();
+    const withUser: Message[] = [...prev, { role: 'user', content: text, ts: turnTs }];
     setMessagesBySession((m) => ({ ...m, [activeSession]: withUser }));
     maybeAutoTitle('claude', activeSession, text);
+    setLiveResponseAt(liveTurnTs);
 
     let fullResponse = '';
     try {
@@ -396,7 +409,10 @@ export default function ClaudePage() {
         }
       }
 
-      const withAssistant: Message[] = [...withUser, { role: 'assistant', content: fullResponse }];
+      const withAssistant: Message[] = [
+        ...withUser,
+        { role: 'assistant', content: fullResponse, ts: turnTs },
+      ];
       setMessagesBySession((m) => ({ ...m, [activeSession]: withAssistant }));
 
       if (fullResponse) {
@@ -419,7 +435,7 @@ export default function ClaudePage() {
     }
 
     const prev = messagesBySession[activeSession] ?? [];
-    const withUser: Message[] = [...prev, { role: 'user', content: text }];
+    const withUser: Message[] = [...prev, { role: 'user', content: text, ts: new Date().toISOString() }];
     setInput('');
     setError(null);
     setLoading(true);
@@ -440,6 +456,7 @@ export default function ClaudePage() {
       let buf = '';
       let accumulated = '';
       let added = false;
+      const assistantTs = new Date().toISOString();
 
       outer: while (true) {
         const { value, done } = await reader.read();
@@ -457,7 +474,7 @@ export default function ClaudePage() {
             if (evt.error) { setError(evt.error); break outer; }
             if (evt.delta) {
               accumulated += evt.delta;
-              const asst: Message = { role: 'assistant', content: accumulated };
+              const asst: Message = { role: 'assistant', content: accumulated, ts: assistantTs };
               setMessagesBySession((m) => {
                 const cur = m[activeSession] ?? [];
                 return {
@@ -678,14 +695,24 @@ export default function ClaudePage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 520 }}>
             {liveTranscript && (
-              <div style={{ padding: '11px 15px', background: '#38b8da', borderRadius: '12px 12px 2px 12px', fontSize: 14, lineHeight: 1.5, alignSelf: 'flex-end', maxWidth: '88%' }}>
-                {liveTranscript}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div style={{ padding: '11px 15px', background: '#38b8da', borderRadius: '12px 12px 2px 12px', fontSize: 14, lineHeight: 1.5, alignSelf: 'flex-end', maxWidth: '88%' }}>
+                  {liveTranscript}
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)', fontFamily: 'monospace', width: '100%', textAlign: 'right' }}>
+                  {liveTranscriptAt ? formatChatTimestamp(liveTranscriptAt) : ''}
+                </div>
               </div>
             )}
             {liveResponse && (
-              <div style={{ padding: '11px 15px', background: '#1a1f30', border: '1px solid #2a2f45', borderRadius: '12px 12px 12px 2px', fontSize: 14, lineHeight: 1.55, alignSelf: 'flex-start', maxWidth: '88%' }}>
-                <div className="md-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveResponse}</ReactMarkdown>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                <div style={{ padding: '11px 15px', background: '#1a1f30', border: '1px solid #2a2f45', borderRadius: '12px 12px 12px 2px', fontSize: 14, lineHeight: 1.55, alignSelf: 'flex-start', maxWidth: '88%' }}>
+                  <div className="md-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveResponse}</ReactMarkdown>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)', fontFamily: 'monospace', width: '100%', textAlign: 'left' }}>
+                  {liveResponseAt ? formatChatTimestamp(liveResponseAt) : ''}
                 </div>
               </div>
             )}
@@ -773,6 +800,16 @@ export default function ClaudePage() {
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                     </div>
                   )}
+                </div>
+                <div style={{
+                  marginTop: 4,
+                  fontSize: 10,
+                  color: 'rgba(255,255,255,0.34)',
+                  fontFamily: 'monospace',
+                  textAlign: m.role === 'user' ? 'right' : 'left',
+                  width: '100%',
+                }}>
+                  {formatChatTimestamp(m.ts)}
                 </div>
               </div>
             ))}

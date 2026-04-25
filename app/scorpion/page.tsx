@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatTabs } from "@/components/ui/chat-tabs"
+import { formatChatTimestamp } from "@/lib/chat/format-chat-timestamp"
 
 const TerminalView = dynamic(() => import('@/components/ui/terminal-view'), {
   ssr: false,
@@ -14,7 +15,7 @@ const TerminalView = dynamic(() => import('@/components/ui/terminal-view'), {
 const TUI_URL_KEY = 'scorpion-tui-url'
 
 type Mode = 'chat' | 'tui'
-type Message = { role: 'user' | 'assistant'; content: string }
+type Message = { role: 'user' | 'assistant'; content: string; ts: string }
 
 export default function Scorpion() {
   const [mode, setMode] = useState<Mode>('chat')
@@ -84,12 +85,13 @@ export default function Scorpion() {
     if (!input.trim() || loading || !activeSessionId) return
 
     const text = input.trim()
+    const userTs = new Date().toISOString()
     setInput("")
     setError(null)
     setLoading(true)
     setMessagesBySession((prev) => ({
       ...prev,
-      [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text }],
+      [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'user', content: text, ts: userTs }],
     }))
 
     try {
@@ -108,6 +110,7 @@ export default function Scorpion() {
       let buf = ''
       let assistantContent = ''
       let assistantAdded = false
+      const assistantTs = new Date().toISOString()
 
       outer: while (true) {
         const { value, done } = await reader.read()
@@ -129,7 +132,7 @@ export default function Scorpion() {
               if (!assistantAdded) {
                 setMessagesBySession((prev) => ({
                   ...prev,
-                  [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'assistant', content: assistantContent } as Message],
+                  [activeSessionId]: [...(prev[activeSessionId] ?? []), { role: 'assistant', content: assistantContent, ts: assistantTs } as Message],
                 }))
                 assistantAdded = true
               } else {
@@ -137,8 +140,8 @@ export default function Scorpion() {
                   const current = prev[activeSessionId] ?? []
                   const nextMessages =
                     current.length > 0
-                      ? [...current.slice(0, -1), { role: 'assistant', content: assistantContent } as Message]
-                      : [{ role: 'assistant', content: assistantContent } as Message]
+                      ? [...current.slice(0, -1), { role: 'assistant', content: assistantContent, ts: assistantTs } as Message]
+                      : [{ role: 'assistant', content: assistantContent, ts: assistantTs } as Message]
                   return { ...prev, [activeSessionId]: nextMessages }
                 })
               }
@@ -300,6 +303,16 @@ export default function Scorpion() {
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                     </div>
                   )}
+                </div>
+                <div style={{
+                  marginTop: 4,
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.34)",
+                  fontFamily: "monospace",
+                  textAlign: m.role === 'user' ? 'right' : 'left',
+                  width: '100%',
+                }}>
+                  {formatChatTimestamp(m.ts)}
                 </div>
               </div>
             ))}

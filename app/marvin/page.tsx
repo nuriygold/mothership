@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { formatChatTimestamp } from "@/lib/chat/format-chat-timestamp"
 
 type AgentKey = "iceman" | "ruby" | "emerald" | "anchor" | "adrian" | "adobe"
 
@@ -9,6 +10,7 @@ type StreamEntry = {
   role: "user" | "assistant"
   agent?: AgentKey
   content: string
+  ts: string
 }
 
 const AGENTS: AgentKey[] = ["iceman", "ruby", "emerald", "anchor", "adrian", "adobe"]
@@ -156,14 +158,15 @@ export default function MarvinPage() {
         return true
       })
 
-      setEntries(
-        deduped.map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          agent: m.role === "assistant" ? m.agentKey : undefined,
-          content: m.content,
-        }))
-      )
+        setEntries(
+          deduped.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            agent: m.role === "assistant" ? m.agentKey : undefined,
+            content: m.content,
+            ts: m.createdAt,
+          }))
+        )
 
       return deduped.length
     } catch {
@@ -185,14 +188,14 @@ export default function MarvinPage() {
       }
       const id = uid(`assistant:${agent}`)
       currentTurnIdsRef.current[agent] = id
-      return [...prev, { id, role: "assistant", agent, content: delta }]
+      return [...prev, { id, role: "assistant", agent, content: delta, ts: new Date().toISOString() }]
     })
   }
 
   function appendError(agent: AgentKey, msg: string) {
     setEntries((prev) => [
       ...prev,
-      { id: uid(`assistant:${agent}:error`), role: "assistant", agent, content: `Error: ${msg}` },
+      { id: uid(`assistant:${agent}:error`), role: "assistant", agent, content: `Error: ${msg}`, ts: new Date().toISOString() },
     ])
   }
 
@@ -239,7 +242,7 @@ export default function MarvinPage() {
   async function sendText(text: string) {
     if (!text.trim() || loading) return
     currentTurnIdsRef.current = {}
-    setEntries((prev) => [...prev, { id: uid("user"), role: "user", content: text }])
+    setEntries((prev) => [...prev, { id: uid("user"), role: "user", content: text, ts: new Date().toISOString() }])
 
     const controllers = AGENTS.map(() => new AbortController())
     activeControllersRef.current = controllers
@@ -427,6 +430,17 @@ export default function MarvinPage() {
                 }}
               >
                 {entry.content}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  opacity: 0.45,
+                  fontFamily: "monospace",
+                  width: "100%",
+                  textAlign: isUser ? "right" : "left",
+                }}
+              >
+                {formatChatTimestamp(entry.ts)}
               </div>
             </div>
           )
