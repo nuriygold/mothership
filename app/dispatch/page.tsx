@@ -7,6 +7,7 @@ import { Download, Send, Trash2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+import { onProjectsUpdated, readProjectsSyncStamp } from '@/lib/projects/project-sync';
 import { REVENUE_STREAMS } from '@/lib/v2/revenue-streams';
 
 const DISPATCH_COMMANDS = [
@@ -399,7 +400,12 @@ function DispatchPageInner() {
       return hasPlanning ? 3_000 : 15_000;
     },
   });
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: fetchProjects, staleTime: 60_000 });
+  const [projectsSyncStamp, setProjectsSyncStamp] = useState(() => readProjectsSyncStamp());
+  const projectsQuery = useQuery({
+    queryKey: ['projects', projectsSyncStamp],
+    queryFn: fetchProjects,
+    staleTime: 60_000,
+  });
   const visionPillarsQuery = useQuery({ queryKey: ['vision-pillars'], queryFn: fetchVisionPillars, staleTime: 60_000 });
   const outputFoldersQuery = useQuery({ queryKey: ['output-folders'], queryFn: fetchOutputFolders, staleTime: 30_000 });
 
@@ -447,6 +453,11 @@ function DispatchPageInner() {
   useEffect(() => {
     setKeepInDispatch(false);
   }, [incomingSource, incomingTask]);
+
+  useEffect(() => onProjectsUpdated(() => {
+    setProjectsSyncStamp(readProjectsSyncStamp());
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+  }), [qc]);
 
   // Pre-fill campaign from query params (e.g. dispatched from Today page)
   useEffect(() => {
