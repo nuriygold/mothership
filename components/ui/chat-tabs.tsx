@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  onPinsUpdated,
   onTitlesUpdated,
+  readPinned,
   readTitles,
+  writePinned,
   sessionsKey,
   writeTitles,
 } from '@/lib/chat/tabs-client';
+import { Pin } from 'lucide-react';
 
 type ChatTabsProps = {
   agent: string;
@@ -66,6 +70,7 @@ export function ChatTabs({
   const storageKey = useMemo(() => sessionsKey(agent), [agent]);
   const [sessions, setSessions] = useState<string[]>([]);
   const [titles, setTitles] = useState<Record<string, string>>({});
+  const [pinned, setPinned] = useState<string[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,12 +82,17 @@ export function ChatTabs({
   useEffect(() => {
     setSessions(readStoredSessions(agent));
     setTitles(readTitles(agent));
+    setPinned(readPinned(agent));
   }, [agent]);
 
   // Listen for title updates dispatched by pages (auto-title after first send,
   // renames from other windows/tabs).
   useEffect(() => {
     return onTitlesUpdated(agent, () => setTitles(readTitles(agent)));
+  }, [agent]);
+
+  useEffect(() => {
+    return onPinsUpdated(agent, () => setPinned(readPinned(agent)));
   }, [agent]);
 
   // Pull recent sessions from the server so other devices' tabs show up here,
@@ -211,6 +221,14 @@ export function ChatTabs({
     [agent, dropTitle, onSessionChange, onSessionClose, sessionId]
   );
 
+  const togglePin = useCallback((id: string) => {
+    setPinned((prev) => {
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [id, ...prev];
+      writePinned(agent, next);
+      return next;
+    });
+  }, [agent]);
+
   const handleCloseClick = useCallback(
     (id: string, e: React.MouseEvent) => {
       const destructive = e.shiftKey || e.altKey;
@@ -273,6 +291,16 @@ export function ChatTabs({
 
     return matched;
   }, [searchQuery, sessions, sessionId, titles, messageIndex]);
+
+  const orderedSessions = useMemo(() => {
+    const index = new Map<string, number>(sessions.map((id, i) => [id, i]));
+    return [...visibleSessions].sort((a, b) => {
+      const aPinned = pinned.includes(a) ? 0 : 1;
+      const bPinned = pinned.includes(b) ? 0 : 1;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+      return (index.get(a) ?? 0) - (index.get(b) ?? 0);
+    });
+  }, [pinned, sessions, visibleSessions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -377,11 +405,12 @@ export function ChatTabs({
             paddingBottom: 2,
           }}
         >
-        {visibleSessions.map((id, index) => {
+        {orderedSessions.map((id, index) => {
           const active = id === sessionId;
           const customTitle = titles[id];
           const label = customTitle && customTitle.trim() ? customTitle : `Session ${index + 1}`;
           const isRenaming = renamingId === id;
+          const isPinned = pinned.includes(id);
 
           return (
             <div
@@ -463,10 +492,28 @@ export function ChatTabs({
                     cursor: 'pointer',
                     fontSize: 12,
                   }}
-                >
+                  >
                   ✎
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => togglePin(id)}
+                aria-label={isPinned ? `Unpin ${label}` : `Pin ${label}`}
+                title={isPinned ? `Unpin ${label}` : `Pin ${label}`}
+                style={{
+                  border: 'none',
+                  borderLeft: '1px solid rgba(255,255,255,0.14)',
+                  background: isPinned ? 'rgba(56,184,218,0.16)' : 'transparent',
+                  color: isPinned ? '#38b8da' : 'rgba(255,255,255,0.55)',
+                  width: 30,
+                  height: 28,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                <Pin className="w-3.5 h-3.5" />
+              </button>
               <button
                 type="button"
                 onClick={(e) => handleCloseClick(id, e)}
