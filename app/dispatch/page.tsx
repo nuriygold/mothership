@@ -509,6 +509,16 @@ function DispatchPageInner() {
   }, [dispatchCampaignsQuery.data, selectedCampaignId]);
 
   const selectedCampaign = dispatchCampaignsQuery.data?.find((campaign) => campaign.id === selectedCampaignId);
+  const isWorkspaceLoading =
+    dispatchCampaignsQuery.isLoading ||
+    projectsQuery.isLoading ||
+    visionPillarsQuery.isLoading ||
+    outputFoldersQuery.isLoading;
+  const isWorkspaceRefreshing =
+    dispatchCampaignsQuery.isFetching ||
+    projectsQuery.isFetching ||
+    visionPillarsQuery.isFetching ||
+    outputFoldersQuery.isFetching;
 
   const progressQuery = useQuery({
     queryKey: ['dispatch-progress', selectedCampaignId],
@@ -722,6 +732,36 @@ function DispatchPageInner() {
 
   return (
     <div className="space-y-4">
+      {(isWorkspaceLoading || isWorkspaceRefreshing) && (
+        <div
+          className="rounded-2xl border px-4 py-3"
+          style={{
+            background: 'rgba(64,200,240,0.08)',
+            borderColor: 'rgba(64,200,240,0.22)',
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                {isWorkspaceLoading ? 'Loading Dispatch workspace…' : 'Refreshing workspace data…'}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--foreground)', opacity: 0.55 }}>
+                Campaigns, projects, vision items, and output folders are syncing in the background.
+              </p>
+            </div>
+            <div className="w-40 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.45)' }}>
+              <div
+                className="h-full rounded-full animate-pulse"
+                style={{
+                  width: '62%',
+                  background: 'linear-gradient(90deg, rgba(0,217,255,0.3), rgba(0,217,255,1))',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
@@ -876,6 +916,7 @@ function DispatchPageInner() {
                         onChange={(e) => setCampaignProjectId(e.target.value)}
                       >
                         <option value="">None</option>
+                        {projectsQuery.isLoading && <option disabled>Loading projects…</option>}
                         {(projectsQuery.data ?? []).map((p) => (
                           <option key={p.id} value={p.id}>{p.title}</option>
                         ))}
