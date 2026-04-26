@@ -1,30 +1,13 @@
-import { prisma } from '@/lib/prisma';
+// TEMPORARY STUB — Prisma → Drizzle migration in progress.
+// Original handler archived in git history; will be re-enabled once the
+// Plaid + Account / Transaction Drizzle schema lands.
+// See docs/drizzle-rail-migration.md.
+import { migrationStub } from '@/lib/migration-stub';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const accounts = await prisma.account.findMany({
-    orderBy: { updatedAt: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      balance: true,
-      currency: true,
-      updatedAt: true,
-    },
-  });
-
-  const balances = accounts.map((account) => ({
-    id: account.id,
-    accountId: account.id,
-    available: account.balance,
-    current: account.balance,
-    isoCurrencyCode: account.currency,
-    institutionName: account.name,
-    type: account.type,
-    updatedAt: account.updatedAt,
-  }));
-
-  return Response.json({ balances });
-}
+export const GET = migrationStub;
+export const POST = migrationStub;
+export const PATCH = migrationStub;
+export const PUT = migrationStub;
+export const DELETE = migrationStub;

@@ -123,14 +123,12 @@ function LoginForm() {
             Not the operator?
           </p>
           <a
-            href="/demo.html"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/ops"
             className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
             style={{ color: 'var(--color-cyan)' }}
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            View platform demo
+            View Ops mission control
           </a>
         </div>
       </div>
