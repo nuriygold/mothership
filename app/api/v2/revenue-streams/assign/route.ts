@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import { notifications, tasks } from '@/lib/db/schema';
 import { getStreamDefs } from '@/lib/v2/revenue-streams-server';
 import { publishV2Event } from '@/lib/v2/event-bus';
 import { sendTelegramMessage } from '@/lib/services/telegram';
@@ -29,24 +30,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Unknown stream: ${rawStream}` }, { status: 404 });
   }
 
-  const task = await prisma.task.create({
-    data: {
+  const now = new Date();
+  const [task] = await db
+    .insert(tasks)
+    .values({
+      id: crypto.randomUUID(),
       title,
       description: description ?? null,
       assignee: def.leadDisplay,
       status: TaskStatus.TODO,
       priority,
-    },
-  });
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
 
-  const notification = await prisma.notification.create({
-    data: {
+  const [notification] = await db
+    .insert(notifications)
+    .values({
+      id: crypto.randomUUID(),
       type: 'task_assigned',
       title: `Task assigned to ${def.leadDisplay}`,
       body: title,
       href: '/tasks',
-    },
-  });
+    })
+    .returning();
 
   publishV2Event('notifications', 'new', {
     id: notification.id,

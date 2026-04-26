@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { addChatMessage, upsertChatSession } from '@/lib/db/chat';
 import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
@@ -32,18 +32,9 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Fetch chat history; upsert session + save user message (fire-and-forget)
-  const [history] = await Promise.all([
-    sessionId
-      ? prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
-      : Promise.resolve([]),
-  ]);
-
   if (sessionId) {
-    prisma.chatSession
-      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
-      .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
-      .catch(() => {});
+    await upsertChatSession(sessionId);
+    addChatMessage(sessionId, 'user', text).catch(() => {});
   }
 
   let upstreamRes: Response;
@@ -101,9 +92,7 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
         if (accumulated && sessionId) {
-          prisma.chatMessage
-            .create({ data: { sessionId, role: 'assistant', content: accumulated } })
-            .catch(() => {});
+          addChatMessage(sessionId, 'assistant', accumulated).catch(() => {});
         }
       }
 

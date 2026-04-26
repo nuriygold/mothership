@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { listChatMessages } from '@/lib/db/chat';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -15,11 +15,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const messages = await prisma.chatMessage.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: 'asc' },
-      take: 50,
-    });
+    const messages = await listChatMessages(sessionId, 50);
 
     return Response.json({ messages });
   } catch (error) {

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { addChatMessage } from '@/lib/db/chat';
 import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
 import { getV2FinanceOverview } from '@/lib/v2/orchestrator';
 import type { V2FinanceOverviewFeed } from '@/lib/v2/types';
@@ -123,20 +123,11 @@ export async function POST(req: Request) {
   }
 
   // Fetch live finance snapshot and chat history in parallel
-  const [finance, history] = await Promise.all([
-    getV2FinanceOverview(),
-    sessionId
-      ? prisma.chatMessage.findMany({
-          where: { sessionId },
-          orderBy: { createdAt: 'asc' },
-          take: 20,
-        })
-      : Promise.resolve([]),
-  ]);
+  const finance = await getV2FinanceOverview();
 
   // Save user message (fire-and-forget)
   if (sessionId) {
-    prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }).catch(() => {});
+    addChatMessage(sessionId, 'user', text).catch(() => {});
   }
 
   let upstreamRes: Response;
@@ -194,9 +185,7 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
         if (accumulated && sessionId) {
-          prisma.chatMessage
-            .create({ data: { sessionId, role: 'assistant', content: accumulated } })
-            .catch(() => {});
+          addChatMessage(sessionId, 'assistant', accumulated).catch(() => {});
         }
       }
 

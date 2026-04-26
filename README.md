@@ -41,7 +41,7 @@ All bots maintain persistent conversation history via DB-backed `ChatSession` re
 ## Tech Stack
 
 - **Frontend:** Next.js 14 App Router, React, TypeScript, Tailwind, SWR
-- **Backend:** Next.js API routes, Prisma ORM, PostgreSQL (Supabase)
+- **Backend:** Next.js API routes, Drizzle ORM, PostgreSQL (Supabase)
 - **Bots:** OpenClaw gateway with named agents + SSE streaming
 - **Wellness data:** Supabase `wellness_logs` table (cross-device sync)
 - **Voice:** Azure Speech STT/TTS (Jarvis card)
@@ -167,10 +167,10 @@ APP_TIMEZONE               # default: America/New_York
 ## Build Command (Vercel)
 
 ```
-prisma migrate deploy && prisma generate && npm run build
+npm run vercel-build
 ```
 
-This applies pending schema migrations on every deploy before building.
+This applies pending Drizzle schema migrations on deploy before running the Next.js build.
 
 ---
 

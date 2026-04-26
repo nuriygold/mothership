@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { revenueStreamStatusLogs, revenueStreamStatuses } from '@/lib/db/schema';
 import { REVENUE_STREAMS, streamByKey } from '@/lib/v2/revenue-streams';
 import { agentForKey, dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
@@ -29,14 +31,28 @@ export async function POST(req: Request) {
   }
 
   if (action === 'ping') {
-    const row = await prisma.revenueStreamStatus.upsert({
-      where: { stream: def.key },
-      create: { stream: def.key, status: 'unknown', requestedAt: new Date() },
-      update: { requestedAt: new Date() },
-    });
+    const now = new Date();
+    const [row] = await db
+      .insert(revenueStreamStatuses)
+      .values({
+        id: crypto.randomUUID(),
+        stream: def.key,
+        status: 'unknown',
+        requestedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: revenueStreamStatuses.stream,
+        set: { requestedAt: now, updatedAt: now },
+      })
+      .returning();
 
-    await prisma.revenueStreamStatusLog.create({
-      data: { stream: def.key, status: row.status, action: 'ping' },
+    await db.insert(revenueStreamStatusLogs).values({
+      id: crypto.randomUUID(),
+      stream: def.key,
+      status: row.status,
+      action: 'ping',
     });
 
     publishV2Event('revenue-streams', 'status', {
@@ -52,11 +68,22 @@ export async function POST(req: Request) {
   const prompt = action === 'run-report' ? def.reportPrompt : def.statusPrompt;
   const agentId = agentForKey(def.leadBotKey);
 
-  const row = await prisma.revenueStreamStatus.upsert({
-    where: { stream: def.key },
-    create: { stream: def.key, status: 'unknown', requestedAt: new Date() },
-    update: { requestedAt: new Date() },
-  });
+  const now = new Date();
+  const [row] = await db
+    .insert(revenueStreamStatuses)
+    .values({
+      id: crypto.randomUUID(),
+      stream: def.key,
+      status: 'unknown',
+      requestedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: revenueStreamStatuses.stream,
+      set: { requestedAt: now, updatedAt: now },
+    })
+    .returning();
 
   publishV2Event('revenue-streams', 'action', { stream: def.key, action, status: 'dispatching' });
 
@@ -65,12 +92,16 @@ export async function POST(req: Request) {
     try {
       const result = await dispatchToOpenClaw({ text: prompt, agentId, timeoutMs: 45_000 });
       const truncated = result.output.slice(0, 500);
-      await prisma.revenueStreamStatus.update({
-        where: { stream: def.key },
-        data: { lastReportAt: new Date(), lastReport: truncated, note: truncated },
-      });
-      await prisma.revenueStreamStatusLog.create({
-        data: { stream: def.key, status: row.status, note: truncated, action },
+      await db
+        .update(revenueStreamStatuses)
+        .set({ lastReportAt: new Date(), lastReport: truncated, note: truncated, updatedAt: new Date() })
+        .where(eq(revenueStreamStatuses.stream, def.key));
+      await db.insert(revenueStreamStatusLogs).values({
+        id: crypto.randomUUID(),
+        stream: def.key,
+        status: row.status,
+        note: truncated,
+        action,
       });
       publishV2Event('revenue-streams', 'status', {
         stream: def.key,
@@ -80,8 +111,9 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       const note = `Dispatch failed: ${err instanceof Error ? err.message : String(err)}`;
-      await prisma.revenueStreamStatusLog
-        .create({ data: { stream: def.key, status: row.status, note, action } })
+      await db
+        .insert(revenueStreamStatusLogs)
+        .values({ id: crypto.randomUUID(), stream: def.key, status: row.status, note, action })
         .catch(() => {});
       publishV2Event('revenue-streams', 'status', { stream: def.key, status: row.status, note });
     }

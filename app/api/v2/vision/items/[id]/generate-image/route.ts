@@ -1,12 +1,13 @@
 import { generateVisionImage } from '@/lib/services/image-gen';
-import { prisma } from '@/lib/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { visionItems } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-
-  const item = await prisma.visionItem.findUnique({ where: { id: params.id } });
+  const [item] = await db.select().from(visionItems).where(eq(visionItems.id, params.id)).limit(1);
   if (!item) return Response.json({ error: { message: 'Item not found' } }, { status: 404 });
 
   let customPrompt: string | null = null;
@@ -19,7 +20,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   try {
     const imageUrl = await generateVisionImage(params.id, item.title, item.description, customPrompt);
-    await prisma.visionItem.update({ where: { id: params.id }, data: { imageUrl } });
+    await db.update(visionItems).set({ imageUrl, updatedAt: new Date() }).where(eq(visionItems.id, params.id));
     return Response.json({ imageUrl });
   } catch (error) {
     return Response.json(
