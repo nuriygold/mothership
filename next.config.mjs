@@ -19,7 +19,7 @@ const baseConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: [],
+  transpilePackages: ['@workflow/world-local', 'undici'],
 };
 
 export default withWorkflow(baseConfig);
