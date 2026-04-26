@@ -20,10 +20,10 @@ const baseConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@workflow/world-local', 'undici'],
+  transpilePackages: ['@workflow/world-local'],
 };
 
 const wrappedConfig = withWorkflow(baseConfig);
-wrappedConfig.transpilePackages = (wrappedConfig.transpilePackages ?? []).filter((pkg) => pkg !== 'undici');
+delete wrappedConfig.turbopack;
 
 export default wrappedConfig;
