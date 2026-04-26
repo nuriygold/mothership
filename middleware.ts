@@ -7,6 +7,8 @@ const OWNER_COOKIE = 'mothership-owner-id';
 const PUBLIC_PREFIXES = [
   '/login',
   '/demo.html',
+  '/ops',          // Public demo of the mission-control surface
+  '/api/ops/',     // Mock API powering /ops — fully public during demo phase
   '/api/v2/auth/',
   '/_next/',
   '/favicon',

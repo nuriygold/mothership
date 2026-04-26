@@ -15,7 +15,7 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return;
+    if (!passphrase.trim() || loading) return;
 
     setLoading(true);
     setError('');
@@ -59,7 +59,7 @@ function LoginForm() {
               Mothership
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-              Passphrase bypassed during migration — click Unlock to continue
+              Restricted access — enter passphrase to continue
             </p>
           </div>
         </div>
@@ -109,7 +109,7 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={!passphrase.trim() || loading}
             className="rounded-2xl py-3 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
           >
@@ -123,14 +123,12 @@ function LoginForm() {
             Not the operator?
           </p>
           <a
-            href="/demo.html"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/ops"
             className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
             style={{ color: 'var(--color-cyan)' }}
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            View platform demo
+            View Ops mission control
           </a>
         </div>
       </div>
