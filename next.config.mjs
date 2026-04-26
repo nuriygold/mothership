@@ -23,4 +23,7 @@ const baseConfig = {
   transpilePackages: ['@workflow/world-local', 'undici'],
 };
 
-export default withWorkflow(baseConfig);
+const wrappedConfig = withWorkflow(baseConfig);
+wrappedConfig.transpilePackages = (wrappedConfig.transpilePackages ?? []).filter((pkg) => pkg !== 'undici');
+
+export default wrappedConfig;
