@@ -1,8 +1,8 @@
 import { desc, eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db/client';
 import { submissions, users } from '@/lib/db/schema';
 import { SubmissionValidationStatus } from '@/lib/db/prisma-types';
-import { randomUUID } from 'node:crypto';
 
 type SubmissionRow = typeof submissions.$inferSelect;
 

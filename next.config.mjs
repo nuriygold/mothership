@@ -20,7 +20,7 @@ const baseConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: [],
+  transpilePackages: ['@workflow/world-local', 'undici'],
 };
 
 const wrappedConfig = withWorkflow(baseConfig);
