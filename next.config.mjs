@@ -12,6 +12,7 @@ import { withWorkflow } from 'workflow/next';
 const baseConfig = {
   experimental: {
     typedRoutes: true,
+    serverComponentsExternalPackages: ['undici'],
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -22,4 +23,7 @@ const baseConfig = {
   transpilePackages: [],
 };
 
-export default withWorkflow(baseConfig);
+const wrappedConfig = withWorkflow(baseConfig);
+wrappedConfig.transpilePackages = (wrappedConfig.transpilePackages ?? []).filter((pkg) => pkg !== 'undici');
+
+export default wrappedConfig;
