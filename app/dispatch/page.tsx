@@ -390,8 +390,9 @@ function DispatchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
-  const gateway = useQuery({ queryKey: ['gateway'], queryFn: checkGateway, staleTime: 15_000 });
+  const [showCampaignExtras, setShowCampaignExtras] = useState(false);
+  const [showNewCampaignForm, setShowNewCampaignForm] = useState(false);
+  const [loadWorkspaceExtras, setLoadWorkspaceExtras] = useState(false);
   const dispatchCampaignsQuery = useQuery({
     queryKey: ['dispatch-campaigns'],
     queryFn: fetchDispatchCampaigns,
@@ -401,13 +402,46 @@ function DispatchPageInner() {
     },
   });
   const [projectsSyncStamp, setProjectsSyncStamp] = useState(() => readProjectsSyncStamp());
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoadWorkspaceExtras(true), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (showNewCampaignForm || showCampaignExtras) {
+      setLoadWorkspaceExtras(true);
+    }
+  }, [showCampaignExtras, showNewCampaignForm]);
+
+  const commandsQuery = useQuery({
+    queryKey: ['commands'],
+    queryFn: fetchCommands,
+    enabled: loadWorkspaceExtras,
+  });
+  const gateway = useQuery({
+    queryKey: ['gateway'],
+    queryFn: checkGateway,
+    staleTime: 15_000,
+    enabled: loadWorkspaceExtras,
+  });
   const projectsQuery = useQuery({
     queryKey: ['projects', projectsSyncStamp],
     queryFn: fetchProjects,
     staleTime: 60_000,
+    enabled: loadWorkspaceExtras && (showNewCampaignForm || showCampaignExtras),
   });
-  const visionPillarsQuery = useQuery({ queryKey: ['vision-pillars'], queryFn: fetchVisionPillars, staleTime: 60_000 });
-  const outputFoldersQuery = useQuery({ queryKey: ['output-folders'], queryFn: fetchOutputFolders, staleTime: 30_000 });
+  const visionPillarsQuery = useQuery({
+    queryKey: ['vision-pillars'],
+    queryFn: fetchVisionPillars,
+    staleTime: 60_000,
+    enabled: loadWorkspaceExtras && (showNewCampaignForm || showCampaignExtras),
+  });
+  const outputFoldersQuery = useQuery({
+    queryKey: ['output-folders'],
+    queryFn: fetchOutputFolders,
+    staleTime: 30_000,
+    enabled: loadWorkspaceExtras && (showNewCampaignForm || showCampaignExtras),
+  });
 
   const [input, setInput] = useState('');
   const [source, setSource] = useState('web');
@@ -420,7 +454,6 @@ function DispatchPageInner() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [campaignTitle, setCampaignTitle] = useState('');
   const [campaignDescription, setCampaignDescription] = useState('');
-  const [showCampaignExtras, setShowCampaignExtras] = useState(false);
   const [campaignProjectId, setCampaignProjectId] = useState('');
   const [campaignVisionItemId, setCampaignVisionItemId] = useState('');
   const [campaignOutputFolder, setCampaignOutputFolder] = useState('');
@@ -438,7 +471,6 @@ function DispatchPageInner() {
   const [taskAssignee, setTaskAssignee] = useState('');
   const [scheduleAt, setScheduleAt] = useState('');
   const [retryAgents, setRetryAgents] = useState<Record<string, string>>({});
-  const [showNewCampaignForm, setShowNewCampaignForm] = useState(false);
   const [showManualTaskEntry, setShowManualTaskEntry] = useState(false);
   const [keepInDispatch, setKeepInDispatch] = useState(false);
   const campaignSectionRef = useRef<HTMLDivElement>(null);
@@ -509,16 +541,8 @@ function DispatchPageInner() {
   }, [dispatchCampaignsQuery.data, selectedCampaignId]);
 
   const selectedCampaign = dispatchCampaignsQuery.data?.find((campaign) => campaign.id === selectedCampaignId);
-  const isWorkspaceLoading =
-    dispatchCampaignsQuery.isLoading ||
-    projectsQuery.isLoading ||
-    visionPillarsQuery.isLoading ||
-    outputFoldersQuery.isLoading;
-  const isWorkspaceRefreshing =
-    dispatchCampaignsQuery.isFetching ||
-    projectsQuery.isFetching ||
-    visionPillarsQuery.isFetching ||
-    outputFoldersQuery.isFetching;
+  const isWorkspaceLoading = dispatchCampaignsQuery.isLoading;
+  const isWorkspaceRefreshing = dispatchCampaignsQuery.isFetching;
 
   const progressQuery = useQuery({
     queryKey: ['dispatch-progress', selectedCampaignId],
@@ -1783,10 +1807,20 @@ function DispatchPageInner() {
                 <span className="text-slate-400">Gateway</span>
                 <span
                   className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    gateway.data?.ok ? 'bg-emerald-900/50 text-emerald-200' : 'bg-rose-900/50 text-rose-200'
+                    !loadWorkspaceExtras
+                      ? 'bg-slate-800 text-slate-200'
+                      : gateway.data?.ok
+                      ? 'bg-emerald-900/50 text-emerald-200'
+                      : 'bg-rose-900/50 text-rose-200'
                   }`}
                 >
-                  {gateway.isFetching ? 'Checking...' : gateway.data?.ok ? 'Reachable' : 'Unreachable'}
+                  {!loadWorkspaceExtras
+                    ? 'Idle'
+                    : gateway.isFetching
+                    ? 'Checking...'
+                    : gateway.data?.ok
+                    ? 'Reachable'
+                    : 'Unreachable'}
                 </span>
               </div>
             </div>
@@ -1924,14 +1958,15 @@ function DispatchPageInner() {
           <Card>
             <CardTitle>Recent commands</CardTitle>
             <div className="mt-3 space-y-3">
-              {(data ?? []).map((cmd) => (
+              {(commandsQuery.data ?? []).map((cmd) => (
                 <div key={cmd.id} className="rounded-lg border border-border p-3">
                   <p className="text-sm text-slate-900">{cmd.input}</p>
                   <p className="text-xs text-slate-400">{cmd.sourceChannel} · {cmd.status}</p>
                   {cmd.run && <p className="text-xs text-slate-500">Run: {cmd.run.type}</p>}
                 </div>
               ))}
-              {!data?.length && <p className="text-sm text-slate-500">No recent commands.</p>}
+              {commandsQuery.isLoading && <p className="text-sm text-slate-500">Loading recent commands…</p>}
+              {!commandsQuery.isLoading && !commandsQuery.data?.length && <p className="text-sm text-slate-500">No recent commands.</p>}
             </div>
           </Card>
         </div>
