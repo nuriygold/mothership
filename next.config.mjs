@@ -12,6 +12,7 @@ import { withWorkflow } from 'workflow/next';
 const baseConfig = {
   experimental: {
     typedRoutes: true,
+    serverComponentsExternalPackages: ['workflow', '@workflow/core', '@workflow/world-local', 'undici'],
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -19,7 +20,7 @@ const baseConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@workflow/world-local', 'undici'],
+  transpilePackages: [],
 };
 
 export default withWorkflow(baseConfig);
