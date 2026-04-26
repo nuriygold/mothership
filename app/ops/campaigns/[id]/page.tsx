@@ -193,7 +193,7 @@ export default function CampaignDetailPage() {
 function BackLink() {
   return (
     <Link
-      href="/ops"
+      href={{ pathname: '/ops' }}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

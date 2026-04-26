@@ -11,7 +11,7 @@ export function CampaignCard({ campaign, agent }: { campaign: Campaign; agent: A
   const isLive = campaign.status === 'RUNNING' || campaign.status === 'DEPLOYING';
 
   return (
-    <Link href={`/ops/campaigns/${campaign.id}`} style={{ textDecoration: 'none' }}>
+      <Link href={{ pathname: `/ops/campaigns/${campaign.id}` }} style={{ textDecoration: 'none' }}>
       <OpsCard
         glow={isLive}
         style={{
