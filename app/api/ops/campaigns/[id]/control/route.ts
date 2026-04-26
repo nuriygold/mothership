@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { controlMission } from '@/lib/ops/runtime';
+import { requireOpsAuth } from '@/lib/ops/auth';
 import type { CampaignControlAction } from '@/lib/ops/types';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,8 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = await req.json();
     const action = String(body?.action ?? '') as CampaignControlAction;

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { resetDemoMissions, seedDemoMissions } from '@/lib/ops/store';
+import { requireOpsAuth } from '@/lib/ops/auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -8,6 +9,8 @@ export const runtime = 'nodejs';
 // BLOCKED, Iceman COMPLETED) so the /ops surface has compelling content for
 // recordings or first-look demos. Idempotent: replaces any prior demo seed.
 export async function POST() {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   const result = seedDemoMissions();
   return NextResponse.json({ ok: true, ...result });
 }
@@ -15,6 +18,8 @@ export async function POST() {
 // DELETE /api/ops/demo-seed — remove the demo missions, leaving any real
 // dispatched missions intact. Demo missions are identified by name prefix.
 export async function DELETE() {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   const result = resetDemoMissions();
   return NextResponse.json({ ok: true, ...result });
 }

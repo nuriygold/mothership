@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getSystemRules, updateSystemRules } from '@/lib/ops/store';
+import { requireOpsAuth } from '@/lib/ops/auth';
 import type { SystemRules } from '@/lib/ops/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   return NextResponse.json({ rules: getSystemRules() });
 }
 
 export async function PATCH(req: Request) {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = (await req.json()) as Partial<SystemRules>;
     const patch: Partial<SystemRules> = {};

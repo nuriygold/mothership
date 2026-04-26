@@ -184,6 +184,7 @@ export function setCampaignStatus(id: string, status: CampaignStatus): void {
   c.status = status;
   c.lastActivityAt = new Date().toISOString();
   if (status === 'COMPLETED') c.progress = 1;
+  if (status === 'CANCELLED' || status === 'FAILED') c.progress = Math.min(c.progress, 0.99);
 }
 
 export function setCampaignProgress(id: string, progress: number): void {
@@ -293,9 +294,8 @@ export function applyControl(
       recordEvent(id, { level: 'warn', message: 'Escalated to human review' });
       break;
     case 'kill':
-      c.status = 'COMPLETED';
-      c.progress = 1;
-      recordEvent(id, { level: 'error', message: 'Mission killed by operator' });
+      c.status = 'CANCELLED';
+      recordEvent(id, { level: 'error', message: 'Mission cancelled by operator' });
       break;
   }
   return { ...c };

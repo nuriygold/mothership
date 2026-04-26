@@ -41,6 +41,8 @@ export function statusColor(s: string): string {
     case 'BLOCKED':   return opsTheme.red;
     case 'IDLE':      return opsTheme.amber;
     case 'COMPLETED': return opsTheme.textMuted;
+    case 'CANCELLED': return opsTheme.textDim;
+    case 'FAILED':    return opsTheme.red;
     default:          return opsTheme.textMuted;
   }
 }

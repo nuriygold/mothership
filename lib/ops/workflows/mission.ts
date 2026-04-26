@@ -18,7 +18,7 @@
 //   6. Escalates (BLOCKED) on a true blocker; never on transient failure
 
 import { DurableAgent } from '@workflow/ai/agent';
-import { sleep, FatalError } from 'workflow';
+import { createHook, sleep, FatalError } from 'workflow';
 import { z } from 'zod';
 import {
   emitFeedEvent,
@@ -30,6 +30,7 @@ import {
   validateArtifact,
   writeArtifact,
 } from './steps';
+import { opsControlHookToken, type OpsControlPayload } from '@/lib/ops/control-hook';
 
 const DEFAULT_MODEL =
   (typeof process !== 'undefined' && process.env?.MISSION_MODEL) ||
@@ -268,11 +269,74 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
     };
   }
 
-  await escalate(
+  await escalate(input.campaignId, `Missing required artifacts: ${stillMissing.join(', ')}`, undefined);
+
+  // Operator control gate: when blocked, expose a deterministic hook token so
+  // /ops can resume or force-retry without starting a brand new campaign.
+  const token = opsControlHookToken(input.campaignId);
+  await emitFeedEvent(
     input.campaignId,
-    `Mission ended without all required artifacts. Missing: ${stillMissing.join(', ')}`,
-    undefined
+    'warn',
+    `Awaiting operator action · token=${token} · allowed=resume|force_retry|kill`,
+    0.85
   );
+
+  const hook = createHook<OpsControlPayload>({ token });
+  const decision = await hook;
+  hook.dispose();
+
+  if (decision.action === 'kill') {
+    throw new FatalError('Mission killed by operator');
+  }
+
+  if (decision.action === 'force_retry' || decision.action === 'resume' || decision.action === 'approve_action') {
+    await emitFeedEvent(input.campaignId, 'info', `Operator action received: ${decision.action}. Retrying…`, 0.86);
+
+    const retryResult = await agent.stream({
+      messages: [
+        ...agentResult.messages,
+        {
+          role: 'user',
+          content: `Operator requested ${decision.action}. Produce the missing artifacts now: ${stillMissing.join(
+            ', '
+          )}. Use writeArtifact then validateArtifact for each.`,
+        },
+      ],
+      maxSteps: 10,
+    });
+    agentResult.messages = retryResult.messages;
+
+    const retryValidations = await Promise.all(
+      input.requiredArtifacts.map((name) => validateArtifact(input.campaignId, name, 1))
+    );
+    const retryMissing = input.requiredArtifacts.filter((_, i) => !retryValidations[i].valid);
+    const retryProduced = input.requiredArtifacts.filter((_, i) => retryValidations[i].valid);
+
+    if (retryMissing.length === 0) {
+      await markCampaignStatus(input.campaignId, 'COMPLETED');
+      await emitFeedEvent(
+        input.campaignId,
+        'success',
+        `Mission complete after operator retry · ${retryProduced.length}/${input.requiredArtifacts.length} artifacts produced`,
+        1
+      );
+      return {
+        campaignId: input.campaignId,
+        success: true,
+        artifactsProduced: retryProduced,
+        artifactsMissing: [],
+      };
+    }
+
+    await emitFeedEvent(input.campaignId, 'error', `Still missing artifacts after retry: ${retryMissing.join(', ')}`, 0.9);
+    return {
+      campaignId: input.campaignId,
+      success: false,
+      artifactsProduced: retryProduced,
+      artifactsMissing: retryMissing,
+    };
+  }
+
   return {
     campaignId: input.campaignId,
     success: false,

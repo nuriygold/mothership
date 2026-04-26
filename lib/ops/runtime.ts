@@ -21,6 +21,7 @@ import {
   applyControl as applyLocalControl,
   createCampaign,
   getRunIdForCampaign,
+  getCampaign,
   recordEvent,
   setCampaignRunId,
   setCampaignStatus,
@@ -30,6 +31,7 @@ import type {
   CampaignControlAction,
   CreateCampaignInput,
 } from './types';
+import { opsControlHookToken } from '@/lib/ops/control-hook';
 
 // ── Lazy runtime loaders ────────────────────────────────────────────────────
 // We import the workflow modules lazily so that:
@@ -128,7 +130,54 @@ export async function controlMission(
   if (!local) return undefined;
 
   const runId = getRunIdForCampaign(campaignId);
-  if (!runId) return local; // No durable run to act on.
+  const api = await loadWorkflowApi();
+
+  // Hook-based controls (resume/approve/retry) work even when we don't have a
+  // live `world` instance; they go through the workflow API.
+  if (api && (action === 'resume' || action === 'approve_action' || action === 'force_retry')) {
+    try {
+      const token = opsControlHookToken(campaignId);
+      await api.resumeHook(token, { action });
+      recordEvent(campaignId, { level: 'success', message: `Sent hook: ${action}` });
+      return getCampaign(campaignId) ?? local;
+    } catch (err) {
+      recordEvent(campaignId, {
+        level: 'warn',
+        message: `Hook "${action}" not accepted (no active hook?): ${describe(err)}`,
+      });
+      // For force_retry, fall through to "start a new run" behavior below.
+    }
+  }
+
+  if (!runId) {
+    // No durable run to act on. If operator requests a retry, attempt a fresh start.
+    if (api && action === 'force_retry') {
+      const current = getCampaign(campaignId);
+      if (current) {
+        const workflowFn = await loadMissionWorkflow();
+        if (workflowFn) {
+          try {
+            const run = await api.start(workflowFn, [
+              {
+                campaignId: current.id,
+                name: current.name,
+                objective: current.objective,
+                leadAgentId: current.leadAgentId,
+                requiredArtifacts: current.requiredArtifacts,
+                minimumBatchSize: current.minimumBatchSize,
+                executionMode: current.executionMode,
+              },
+            ]);
+            setCampaignRunId(current.id, run.runId);
+            recordEvent(current.id, { level: 'success', message: `Workflow restarted · run=${run.runId.slice(0, 8)}…` });
+          } catch (err) {
+            recordEvent(current.id, { level: 'error', message: `Failed to restart workflow: ${describe(err)}` });
+          }
+        }
+      }
+    }
+    return local;
+  }
 
   const world = await loadWorld();
   if (!world) return local;
@@ -138,7 +187,7 @@ export async function controlMission(
       // Append a `run_cancelled` event — the runtime materializes this into
       // a cancelled run on the next consumer pass.
       await world.events.create(runId, { eventType: 'run_cancelled' });
-      setCampaignStatus(campaignId, 'COMPLETED');
+      setCampaignStatus(campaignId, 'CANCELLED');
       recordEvent(campaignId, {
         level: 'error',
         message: `Workflow run cancelled · run=${runId.slice(0, 8)}…`,

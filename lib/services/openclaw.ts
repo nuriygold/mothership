@@ -6,6 +6,8 @@ type DispatchInput = {
   sessionKey?: string | null;
 };
 
+export type InferenceProvider = 'openclaw' | 'azure_openai';
+
 function normalizeAgentId(value?: string | null) {
   const raw = String(value ?? '').trim();
   if (!raw) return 'main';
@@ -51,9 +53,8 @@ export function agentForKey(key?: string) {
 
 export function modelForOpenClaw(agentId?: string) {
   const configured = String(process.env.OPENCLAW_MODEL || '').trim();
-  if (configured === 'openclaw' || configured.startsWith('openclaw/')) {
-    return configured;
-  }
+  // Allow callers to override the model/deployment directly (Azure OpenAI uses deployment names).
+  if (configured) return configured;
 
   const resolvedAgent = agentForKey(agentId);
   return resolvedAgent === 'main' ? 'openclaw/main' : `openclaw/${resolvedAgent}`;
@@ -73,6 +74,50 @@ export function inferenceGatewayBase(): string | undefined {
   return legacy ? legacy.replace(/\/$/, '') : undefined;
 }
 
+export function inferenceProvider(): InferenceProvider {
+  const configured = String(process.env.OPENCLAW_INFERENCE_PROVIDER || '').trim().toLowerCase();
+  if (configured === 'azure_openai' || configured === 'azure') return 'azure_openai';
+  if (configured === 'openclaw') return 'openclaw';
+
+  const gateway = inferenceGatewayBase() ?? '';
+  if (gateway.includes('openai.azure.com') || gateway.includes('cognitiveservices.azure.com')) {
+    return 'azure_openai';
+  }
+  return 'openclaw';
+}
+
+function joinUrl(base: string, path: string) {
+  return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+}
+
+export function responsesUrl(gatewayBase?: string): string {
+  const gateway = (gatewayBase ?? inferenceGatewayBase() ?? '').trim().replace(/\/$/, '');
+  if (!gateway) return '/v1/responses';
+
+  const provider = inferenceProvider();
+  if (provider !== 'azure_openai') {
+    return joinUrl(gateway, '/v1/responses');
+  }
+
+  const apiVersion =
+    String(process.env.AZURE_OPENAI_API_VERSION || process.env.OPENAI_API_VERSION || 'preview').trim() || 'preview';
+
+  // Azure OpenAI v1 path is `/openai/v1/responses`.
+  // If the provided gateway already ends in `/openai`, append `/v1/responses`.
+  // Otherwise append `/openai/v1/responses`.
+  const baseWithOpenAi = gateway.endsWith('/openai') ? gateway : joinUrl(gateway, '/openai');
+  return `${joinUrl(baseWithOpenAi, '/v1/responses')}?api-version=${encodeURIComponent(apiVersion)}`;
+}
+
+export function inferenceAuthHeaders(token: string): Record<string, string> {
+  const provider = inferenceProvider();
+  if (provider === 'azure_openai') {
+    // Azure OpenAI generally uses `api-key`, but OpenAI-compatible v1 endpoints also accept bearer in some setups.
+    return { 'api-key': token, Authorization: `Bearer ${token}` };
+  }
+  return { Authorization: `Bearer ${token}` };
+}
+
 export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: number }) {
   const gateway = inferenceGatewayBase();
   const token = process.env.OPENCLAW_TOKEN;
@@ -90,12 +135,14 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
     input: input.text,
   };
 
-  const res = await fetch(`${gateway}/v1/responses`, {
+  const url = responsesUrl(gateway);
+  const provider = inferenceProvider();
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...inferenceAuthHeaders(token),
       'Content-Type': 'application/json',
-      'x-openclaw-agent-id': agentId,
+      ...(provider === 'openclaw' ? { 'x-openclaw-agent-id': agentId } : {}),
       ...(input.sessionKey ? { 'x-openclaw-session-key': input.sessionKey } : {}),
     },
     body: JSON.stringify(body),
@@ -106,9 +153,10 @@ export async function dispatchToOpenClaw(input: DispatchInput & { timeoutMs?: nu
     const text = await res.text().catch(() => '');
     if (res.status === 404) {
       throw new Error(
-        `OpenClaw dispatch failed: 404 Not Found at ${gateway}/v1/responses. ` +
-          `The configured gateway does not expose /v1/responses — set OPENCLAW_INFERENCE_GATEWAY ` +
-          `to the correct AI inference endpoint. Raw: ${text}`
+        `OpenClaw dispatch failed: 404 Not Found at ${url}. ` +
+          `If you're using Azure OpenAI, set OPENCLAW_INFERENCE_PROVIDER=azure_openai and ` +
+          `OPENCLAW_INFERENCE_GATEWAY to your Azure resource endpoint (and set AZURE_OPENAI_API_VERSION). ` +
+          `Raw: ${text}`
       );
     }
     throw new Error(`OpenClaw dispatch failed: ${res.status} ${text}`);

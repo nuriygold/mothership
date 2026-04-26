@@ -9,11 +9,14 @@
 import { NextResponse } from 'next/server';
 import { getTickerSummary, listCampaigns } from '@/lib/ops/store';
 import { dispatchMission } from '@/lib/ops/runtime';
+import { requireOpsAuth } from '@/lib/ops/auth';
 import type { ExecutionMode } from '@/lib/ops/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   return NextResponse.json({
     campaigns: listCampaigns(),
     ticker: getTickerSummary(),
@@ -21,6 +24,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = await req.json();
 

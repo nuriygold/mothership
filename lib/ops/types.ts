@@ -2,7 +2,14 @@
 // These are intentionally framework-agnostic so the API routes can be
 // swapped from mock data to a real backend without touching the UI.
 
-export type CampaignStatus = 'RUNNING' | 'BLOCKED' | 'IDLE' | 'DEPLOYING' | 'COMPLETED';
+export type CampaignStatus =
+  | 'RUNNING'
+  | 'BLOCKED'
+  | 'IDLE'
+  | 'DEPLOYING'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'FAILED';
 
 export type AgentStatus = 'IDLE' | 'RUNNING' | 'BLOCKED';
 
