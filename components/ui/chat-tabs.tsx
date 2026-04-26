@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  onPinsUpdated,
   onTitlesUpdated,
+  readPinned,
   readTitles,
+  writePinned,
   sessionsKey,
   writeTitles,
 } from '@/lib/chat/tabs-client';
+import { Pin } from 'lucide-react';
 
 type ChatTabsProps = {
   agent: string;
@@ -14,6 +18,12 @@ type ChatTabsProps = {
   onSessionChange: (sessionId: string) => void;
   onSessionClose?: (sessionId: string) => void;
   className?: string;
+  showSearch?: boolean;
+};
+
+type SessionMessage = {
+  role?: string;
+  content?: string;
 };
 
 const MAX_SESSIONS = 24;
@@ -55,24 +65,34 @@ export function ChatTabs({
   onSessionChange,
   onSessionClose,
   className,
+  showSearch = false,
 }: ChatTabsProps) {
   const storageKey = useMemo(() => sessionsKey(agent), [agent]);
   const [sessions, setSessions] = useState<string[]>([]);
   const [titles, setTitles] = useState<Record<string, string>>({});
+  const [pinned, setPinned] = useState<string[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [messageIndex, setMessageIndex] = useState<Record<string, string>>({});
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Hydrate from localStorage
   useEffect(() => {
     setSessions(readStoredSessions(agent));
     setTitles(readTitles(agent));
+    setPinned(readPinned(agent));
   }, [agent]);
 
   // Listen for title updates dispatched by pages (auto-title after first send,
   // renames from other windows/tabs).
   useEffect(() => {
     return onTitlesUpdated(agent, () => setTitles(readTitles(agent)));
+  }, [agent]);
+
+  useEffect(() => {
+    return onPinsUpdated(agent, () => setPinned(readPinned(agent)));
   }, [agent]);
 
   // Pull recent sessions from the server so other devices' tabs show up here,
@@ -132,7 +152,10 @@ export function ChatTabs({
         return [sessionId, ...prev].slice(0, MAX_SESSIONS);
       }
 
-      if (prev.length > 0) return prev;
+      if (prev.length > 0) {
+        onSessionChange(prev[0]);
+        return prev;
+      }
       const created = createSessionId(agent);
       onSessionChange(created);
       return [created];
@@ -198,6 +221,14 @@ export function ChatTabs({
     [agent, dropTitle, onSessionChange, onSessionClose, sessionId]
   );
 
+  const togglePin = useCallback((id: string) => {
+    setPinned((prev) => {
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [id, ...prev];
+      writePinned(agent, next);
+      return next;
+    });
+  }, [agent]);
+
   const handleCloseClick = useCallback(
     (id: string, e: React.MouseEvent) => {
       const destructive = e.shiftKey || e.altKey;
@@ -244,12 +275,87 @@ export function ChatTabs({
     setRenameValue('');
   }, []);
 
+  const visibleSessions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sessions;
+
+    const matched = sessions.filter((id) => {
+      const title = titles[id] ?? '';
+      const haystack = `${id} ${title} ${messageIndex[id] ?? ''}`.toLowerCase();
+      return haystack.includes(q);
+    });
+
+    if (sessionId && sessions.includes(sessionId) && !matched.includes(sessionId)) {
+      return [sessionId, ...matched];
+    }
+
+    return matched;
+  }, [searchQuery, sessions, sessionId, titles, messageIndex]);
+
+  const orderedSessions = useMemo(() => {
+    const index = new Map<string, number>(sessions.map((id, i) => [id, i]));
+    return [...visibleSessions].sort((a, b) => {
+      const aPinned = pinned.includes(a) ? 0 : 1;
+      const bPinned = pinned.includes(b) ? 0 : 1;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+      return (index.get(a) ?? 0) - (index.get(b) ?? 0);
+    });
+  }, [pinned, sessions, visibleSessions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncSearchIndex = async () => {
+      const q = searchQuery.trim();
+      if (!q) {
+        setMessageIndex({});
+        setSearching(false);
+        return;
+      }
+
+      setSearching(true);
+      try {
+        const ids = sessions.slice(0, MAX_SESSIONS);
+        const pairs = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const res = await fetch(`/api/chat/messages?sessionId=${encodeURIComponent(id)}`, {
+                cache: 'no-store',
+              });
+              if (!res.ok) return [id, ''] as const;
+              const data = await res.json();
+              const messages: SessionMessage[] = Array.isArray(data?.messages) ? data.messages : [];
+              const indexed = messages
+                .map((message) => `${message.role ?? ''} ${message.content ?? ''}`)
+                .join(' ')
+                .slice(0, 12000);
+              return [id, indexed] as const;
+            } catch {
+              return [id, ''] as const;
+            }
+          })
+        );
+
+        if (cancelled) return;
+        setMessageIndex(Object.fromEntries(pairs));
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    };
+
+    void syncSearchIndex();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery, sessions]);
+
   return (
     <div
       className={className}
       style={{
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: 'column',
         gap: 8,
         width: '100%',
       }}
@@ -257,17 +363,54 @@ export function ChatTabs({
       <div
         style={{
           display: 'flex',
+          alignItems: 'center',
           gap: 8,
-          overflowX: 'auto',
-          flex: 1,
-          paddingBottom: 2,
+          width: '100%',
+          flexWrap: 'wrap',
         }}
       >
-        {sessions.map((id, index) => {
+        {showSearch && (
+          <div style={{ minWidth: 180, flex: '1 1 180px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sessions"
+              aria-label="Search sessions"
+              style={{
+                minWidth: 0,
+                flex: 1,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'white',
+                padding: '7px 11px',
+                fontSize: 12,
+                outline: 'none',
+              }}
+            />
+            {searching && (
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+                searching…
+              </span>
+            )}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto',
+            flex: '1 1 100%',
+            paddingBottom: 2,
+          }}
+        >
+        {orderedSessions.map((id, index) => {
           const active = id === sessionId;
           const customTitle = titles[id];
           const label = customTitle && customTitle.trim() ? customTitle : `Session ${index + 1}`;
           const isRenaming = renamingId === id;
+          const isPinned = pinned.includes(id);
 
           return (
             <div
@@ -349,10 +492,28 @@ export function ChatTabs({
                     cursor: 'pointer',
                     fontSize: 12,
                   }}
-                >
+                  >
                   ✎
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => togglePin(id)}
+                aria-label={isPinned ? `Unpin ${label}` : `Pin ${label}`}
+                title={isPinned ? `Unpin ${label}` : `Pin ${label}`}
+                style={{
+                  border: 'none',
+                  borderLeft: '1px solid rgba(255,255,255,0.14)',
+                  background: isPinned ? 'rgba(56,184,218,0.16)' : 'transparent',
+                  color: isPinned ? '#38b8da' : 'rgba(255,255,255,0.55)',
+                  width: 30,
+                  height: 28,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                <Pin className="w-3.5 h-3.5" />
+              </button>
               <button
                 type="button"
                 onClick={(e) => handleCloseClick(id, e)}
@@ -374,6 +535,7 @@ export function ChatTabs({
             </div>
           );
         })}
+        </div>
       </div>
 
       <button

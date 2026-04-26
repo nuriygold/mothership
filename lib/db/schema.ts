@@ -1,18 +1,23 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import type { JsonValue } from '@/lib/db/json';
+
+// Re-export the canonical Dispatch / Mission Control schema so consumers can
+// continue to import everything from a single entry point. New code should
+// prefer the `mc*` exports for the generic agent-orchestration data model.
+export * from '@/lib/db/dispatch-schema';
 
 // Transitional Drizzle schema. Expand this file while migrating each Prisma model.
 export const users = pgTable('User', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
   name: text('name'),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
 });
 
 export const notifications = pgTable('Notification', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   type: text('type').notNull(),
-  userId: uuid('userId'),
   title: text('title').notNull(),
   body: text('body'),
   href: text('href'),
@@ -23,55 +28,55 @@ export const notifications = pgTable('Notification', {
 }));
 
 export const tasks = pgTable('Task', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  workflowId: uuid('workflowId'),
+  id: text('id').primaryKey(),
+  workflowId: text('workflowId'),
   title: text('title').notNull(),
   description: text('description'),
   status: text('status').default('TODO').notNull(),
   priority: text('priority').default('MEDIUM').notNull(),
-  ownerId: uuid('ownerId'),
+  ownerId: text('ownerId'),
   assignee: text('assignee'),
   dueAt: timestamp('dueAt', { withTimezone: true }),
-  visionItemId: uuid('visionItemId'),
+  visionItemId: text('visionItemId'),
   completedAt: timestamp('completedAt', { withTimezone: true }),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
 }, (table) => ({
   completedAtIdx: index('Task_completedAt_idx').on(table.completedAt),
 }));
 
 export const workflows = pgTable('Workflow', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
   type: text('type').default('STANDARD').notNull(),
   status: text('status').default('ACTIVE').notNull(),
-  ownerId: uuid('ownerId').notNull(),
-  currentSchemaVersionId: uuid('currentSchemaVersionId'),
+  ownerId: text('ownerId').notNull(),
+  currentSchemaVersionId: text('currentSchemaVersionId'),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
 });
 
 export const workflowSchemaVersions = pgTable('WorkflowSchemaVersion', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  workflowId: uuid('workflowId').notNull(),
+  id: text('id').primaryKey(),
+  workflowId: text('workflowId').notNull(),
   version: integer('version').notNull(),
-  schemaJson: jsonb('schemaJson').notNull(),
+  schemaJson: jsonb('schemaJson').$type<JsonValue>().notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   workflowVersionIdx: uniqueIndex('WorkflowSchemaVersion_workflowId_version_key').on(table.workflowId, table.version),
 }));
 
 export const submissions = pgTable('Submission', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  workflowId: uuid('workflowId').notNull(),
-  submittedById: uuid('submittedById'),
+  id: text('id').primaryKey(),
+  workflowId: text('workflowId').notNull(),
+  submittedById: text('submittedById'),
   sourceChannel: text('sourceChannel').notNull(),
   fileName: text('fileName'),
-  rawPayload: jsonb('rawPayload').notNull(),
-  normalizedPayload: jsonb('normalizedPayload'),
+  rawPayload: jsonb('rawPayload').$type<JsonValue>().notNull(),
+  normalizedPayload: jsonb('normalizedPayload').$type<JsonValue>(),
   validationStatus: text('validationStatus').default('PENDING').notNull(),
-  validationSummary: jsonb('validationSummary'),
+  validationSummary: jsonb('validationSummary').$type<JsonValue>(),
   submittedAt: timestamp('submittedAt', { withTimezone: true }).defaultNow().notNull(),
   processedAt: timestamp('processedAt', { withTimezone: true }),
 }, (table) => ({
@@ -79,37 +84,37 @@ export const submissions = pgTable('Submission', {
 }));
 
 export const auditEvents = pgTable('AuditEvent', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   entityType: text('entityType').notNull(),
   entityId: text('entityId').notNull(),
   eventType: text('eventType').notNull(),
-  actorId: uuid('actorId'),
-  metadata: text('metadata'),
+  actorId: text('actorId'),
+  metadata: jsonb('metadata').$type<JsonValue>(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const runs = pgTable('Run', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  workflowId: uuid('workflowId'),
-  taskId: uuid('taskId').unique(),
+  id: text('id').primaryKey(),
+  workflowId: text('workflowId'),
+  taskId: text('taskId').unique(),
   type: text('type').notNull(),
   sourceSystem: text('sourceSystem').notNull(),
   status: text('status').default('QUEUED').notNull(),
   startedAt: timestamp('startedAt', { withTimezone: true }),
   completedAt: timestamp('completedAt', { withTimezone: true }),
-  metadata: jsonb('metadata'),
+  metadata: jsonb('metadata').$type<JsonValue>(),
   errorMessage: text('errorMessage'),
-  submissionId: uuid('submissionId'),
+  submissionId: text('submissionId'),
 }, (table) => ({
   startedAtIdx: index('Run_startedAt_idx').on(table.startedAt),
 }));
 
 export const approvals = pgTable('Approval', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  workflowId: uuid('workflowId'),
-  taskId: uuid('taskId'),
-  requestedById: uuid('requestedById'),
-  decidedById: uuid('decidedById'),
+  id: text('id').primaryKey(),
+  workflowId: text('workflowId'),
+  taskId: text('taskId'),
+  requestedById: text('requestedById'),
+  decidedById: text('decidedById'),
   status: text('status').default('REQUESTED').notNull(),
   reason: text('reason'),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
@@ -119,12 +124,12 @@ export const approvals = pgTable('Approval', {
 }));
 
 export const commands = pgTable('Command', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   input: text('input').notNull(),
   sourceChannel: text('sourceChannel').notNull(),
-  requestedById: uuid('requestedById'),
+  requestedById: text('requestedById'),
   status: text('status').default('RECEIVED').notNull(),
-  runId: uuid('runId'),
+  runId: text('runId'),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp('completedAt', { withTimezone: true }),
 }, (table) => ({
@@ -197,26 +202,79 @@ export const visionTaskLinks = pgTable('VisionTaskLink', {
 }));
 
 export const dispatchCampaigns = pgTable('DispatchCampaign', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   title: text('title').notNull(),
   description: text('description'),
   status: text('status').default('DRAFT').notNull(),
-  visionItemId: uuid('visionItemId'),
-  projectId: uuid('projectId'),
+  costBudgetCents: integer('costBudgetCents'),
+  timeBudgetSeconds: integer('timeBudgetSeconds'),
+  callbackUrl: text('callbackUrl'),
+  callbackSecret: text('callbackSecret'),
+  latestPlan: jsonb('latestPlan').$type<JsonValue>(),
+  latestPlanCreatedAt: timestamp('latestPlanCreatedAt', { withTimezone: true }),
+  approvedPlanName: text('approvedPlanName'),
+  approvedPlanAt: timestamp('approvedPlanAt', { withTimezone: true }),
+  visionItemId: text('visionItemId'),
+  projectId: text('projectId'),
+  outputFolder: text('outputFolder'),
+  assignedBotId: text('assignedBotId'),
+  revenueStream: text('revenueStream'),
+  linkedTaskRef: text('linkedTaskRef'),
+  queuedAt: timestamp('queuedAt', { withTimezone: true }),
+  scheduledAt: timestamp('scheduledAt', { withTimezone: true }),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
 });
 
-export const chatSessions = pgTable('ChatSession', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  title: text('title'),
+export const dispatchTasks = pgTable('DispatchTask', {
+  id: text('id').primaryKey(),
+  campaignId: text('campaignId').notNull(),
+  title: text('title').notNull(),
+  key: text('key'),
+  description: text('description'),
+  priority: integer('priority').default(5).notNull(),
+  dependencies: jsonb('dependencies').$type<JsonValue>(),
+  toolRequirements: jsonb('toolRequirements').$type<JsonValue>(),
+  status: text('status').default('PLANNED').notNull(),
+  agentId: text('agentId'),
+  output: text('output'),
+  reviewOutput: text('reviewOutput'),
+  errorMessage: text('errorMessage'),
+  toolTurns: integer('toolTurns'),
+  taskPoolIssueNumber: integer('taskPoolIssueNumber'),
+  taskPoolIssueUrl: text('taskPoolIssueUrl'),
+  startedAt: timestamp('startedAt', { withTimezone: true }),
+  completedAt: timestamp('completedAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+}, (table) => ({
+  campaignStatusIdx: index('DispatchTask_campaignId_status_idx').on(table.campaignId, table.status),
+}));
+
+export const projects = pgTable('Project', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  color: text('color').default('lavender').notNull(),
+  icon: text('icon').default('folder').notNull(),
+  sortOrder: integer('sortOrder').default(0).notNull(),
+  isDefault: boolean('isDefault').default(false).notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sortOrderIdx: index('Project_sortOrder_idx').on(table.sortOrder),
+}));
+
+export const chatSessions = pgTable('ChatSession', {
+  id: text('id').primaryKey(),
+  title: text('title'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
 });
 
 export const chatMessages = pgTable('ChatMessage', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  sessionId: uuid('sessionId').notNull(),
+  id: text('id').primaryKey(),
+  sessionId: text('sessionId').notNull(),
   role: text('role').notNull(),
   content: text('content').notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
@@ -247,4 +305,30 @@ export const revenueStreamStatusLogs = pgTable('RevenueStreamStatusLog', {
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   streamCreatedAtIdx: index('RevenueStreamStatusLog_stream_createdAt_idx').on(table.stream, table.createdAt),
+}));
+
+export const financeEvents = pgTable('FinanceEvent', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  source: text('source').notNull(),
+  payload: jsonb('payload').$type<JsonValue>().notNull(),
+  priority: text('priority').default('normal').notNull(),
+  resolved: boolean('resolved').default(false).notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  resolvedCreatedAtIdx: index('FinanceEvent_resolved_createdAt_idx').on(table.resolved, table.createdAt),
+}));
+
+export const payables = pgTable('Payable', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  vendor: text('vendor').notNull(),
+  amount: doublePrecision('amount').notNull(),
+  currency: text('currency').default('USD').notNull(),
+  dueDate: timestamp('dueDate', { withTimezone: true }),
+  status: text('status').default('pending').notNull(),
+  description: text('description'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  statusDueIdx: index('Payable_status_dueDate_idx').on(table.status, table.dueDate),
 }));

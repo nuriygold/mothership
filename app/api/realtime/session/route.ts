@@ -3,7 +3,7 @@ import { SIX_GOD_SYSTEM_PROMPT, SIX_GOD_VOICE_ADDENDUM } from '@/lib/prompts/six
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const DEFAULT_MODEL = process.env.OPENAI_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2024-12-17';
+const DEFAULT_MODEL = process.env.OPENAI_REALTIME_MODEL ?? 'gpt-realtime';
 const DEFAULT_VOICE = process.env.OPENAI_REALTIME_VOICE ?? 'ash';
 
 // ── Azure config ──────────────────────────────────────────────────────────────
@@ -82,14 +82,21 @@ export async function POST() {
     );
   }
 
-  const upstream = await fetch('https://api.openai.com/v1/realtime/sessions', {
+  const upstream = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
     method: 'POST',
     headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      voice: DEFAULT_VOICE,
-      instructions,
-      modalities: ['audio', 'text'],
+      session: {
+        type: 'realtime',
+        model: DEFAULT_MODEL,
+        instructions,
+        audio: {
+          output: {
+            voice: DEFAULT_VOICE,
+          },
+        },
+        modalities: ['audio', 'text'],
+      },
     }),
   });
   if (!upstream.ok) {
@@ -102,9 +109,9 @@ export async function POST() {
   const data = await upstream.json();
   const body: SessionResponse = {
     mode: 'webrtc',
-    client_secret: data?.client_secret,
-    model: data?.model ?? DEFAULT_MODEL,
-    voice: data?.voice ?? DEFAULT_VOICE,
+    client_secret: data?.client_secret ?? data,
+    model: data?.session?.model ?? DEFAULT_MODEL,
+    voice: data?.session?.audio?.output?.voice ?? DEFAULT_VOICE,
     base_url: OPENAI_WEBRTC_BASE,
   };
   return Response.json(body);

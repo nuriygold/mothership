@@ -396,6 +396,20 @@ a { color: inherit; }
   to   { transform: translateX(-50%); }
 }
 
+/* ── /ops mission-control animations ── */
+@keyframes opsPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.92); }
+}
+@keyframes opsFadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes opsFabFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
 @supports (padding: env(safe-area-inset-bottom)) {
   .main-container > main {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom));

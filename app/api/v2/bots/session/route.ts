@@ -45,7 +45,7 @@ export async function GET(req: Request) {
   if (!session) {
     [session] = await db
       .insert(chatSessions)
-      .values({ title: sessionTitle })
+      .values({ id: randomUUID(), title: sessionTitle, updatedAt: new Date() })
       .returning({ id: chatSessions.id });
   }
 

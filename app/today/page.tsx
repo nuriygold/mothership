@@ -14,7 +14,6 @@ import { TrophyModal } from '@/components/today/trophy-modal';
 import { TakeActionModal } from '@/components/today/take-action-modal';
 import { AssignToDropdown } from '@/components/today/assign-to-dropdown';
 import { WellnessAnchors } from '@/components/today/wellness-anchors';
-import { HotlineBlingCard } from '@/components/voice/hotline-bling-card';
 import { NewTaskModal } from '@/components/today/new-task-modal';
 import { FinanceAlerts } from '@/components/today/finance-alerts';
 import { StatusTicker } from '@/components/today/status-ticker';
@@ -248,8 +247,9 @@ export default function TodayPage() {
     return `${feed.userContext.greeting}, ${feed.userContext.userName}`;
   }, [feed]);
 
-  const affirmationSource = feed?.userContext?.affirmationSource ?? 'Daily affirmation';
-  const affirmation = useMemo(() => pickRandomAffirmationBar(), []);
+  const randomAffirmation = useMemo(() => pickRandomAffirmationBar(), []);
+  const affirmation = randomAffirmation.text;
+  const affirmationSource = `Song: ${randomAffirmation.song}`;
 
   // Count emails received today (local time), by timestamp field.
   const emailsToday = useMemo(() => {
@@ -633,10 +633,27 @@ export default function TodayPage() {
         </div>
       </div>
 
-      {/* ── Voice (Hotline Bling · 6 God) ── */}
-      <div>
-        <HotlineBlingCard />
-      </div>
+      {/* ── Voice placeholder ── */}
+      <Card>
+        <div className="flex items-start gap-4">
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-2xl border"
+            style={{
+              background: 'linear-gradient(135deg, rgba(64,200,240,0.18), rgba(184,228,248,0.24))',
+              borderColor: '#b8e0f5',
+              color: '#0470a0',
+            }}
+          >
+            <Video className="h-7 w-7" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <CardTitle>Hotline Bling</CardTitle>
+            <p className="mt-2 text-sm" style={{ color: 'var(--foreground)', opacity: 0.6 }}>
+              Coming soon.
+            </p>
+          </div>
+        </div>
+      </Card>
 
     </div>
     </>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const OWNER_COOKIE = 'mothership-owner-id';
+const OPS_PUBLIC_DEMO = String(process.env.OPS_PUBLIC_DEMO ?? '').trim() === 'true';
 
 // Paths that never require auth
 const PUBLIC_PREFIXES = [
@@ -16,6 +17,10 @@ const PUBLIC_PREFIXES = [
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (OPS_PUBLIC_DEMO && (pathname.startsWith('/ops') || pathname.startsWith('/api/ops/'))) {
+    return NextResponse.next();
+  }
 
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();

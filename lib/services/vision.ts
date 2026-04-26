@@ -12,6 +12,7 @@ import {
   visionTaskLinks,
 } from '@/lib/db/schema';
 import { VisionPillarColor, VisionItemStatus } from '@/lib/db/prisma-types';
+import { randomUUID } from 'node:crypto';
 
 const DEFAULT_PILLARS: Array<{
   label: string;
@@ -29,6 +30,7 @@ const DEFAULT_PILLARS: Array<{
 
 async function createAuditEvent(entityType: string, entityId: string, eventType: string, metadata?: unknown) {
   await db.insert(auditEvents).values({
+    id: randomUUID(),
     entityType,
     entityId,
     eventType,

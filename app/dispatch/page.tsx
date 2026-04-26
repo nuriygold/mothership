@@ -7,6 +7,7 @@ import { Download, Send, Trash2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
 import { SlashCommandSheet } from '@/components/ui/slash-command-sheet';
+import { onProjectsUpdated, readProjectsSyncStamp } from '@/lib/projects/project-sync';
 import { REVENUE_STREAMS } from '@/lib/v2/revenue-streams';
 
 const DISPATCH_COMMANDS = [
@@ -223,6 +224,17 @@ async function generateDispatchPlan(campaignId: string) {
   return body;
 }
 
+async function convertDispatchPlanJson(payload: { campaignId: string; rawJson: string }) {
+  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/plan/convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rawJson: payload.rawJson }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to convert plan JSON');
+  return body;
+}
+
 async function approveDispatchPlan(payload: { campaignId: string; planName: string }) {
   const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/plan/approve`, {
     method: 'POST',
@@ -378,8 +390,9 @@ function DispatchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['commands'], queryFn: fetchCommands });
-  const gateway = useQuery({ queryKey: ['gateway'], queryFn: checkGateway, staleTime: 15_000 });
+  const [showCampaignExtras, setShowCampaignExtras] = useState(false);
+  const [showNewCampaignForm, setShowNewCampaignForm] = useState(false);
+  const [loadWorkspaceExtras, setLoadWorkspaceExtras] = useState(false);
   const dispatchCampaignsQuery = useQuery({
     queryKey: ['dispatch-campaigns'],
     queryFn: fetchDispatchCampaigns,
@@ -388,9 +401,47 @@ function DispatchPageInner() {
       return hasPlanning ? 3_000 : 15_000;
     },
   });
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: fetchProjects, staleTime: 60_000 });
-  const visionPillarsQuery = useQuery({ queryKey: ['vision-pillars'], queryFn: fetchVisionPillars, staleTime: 60_000 });
-  const outputFoldersQuery = useQuery({ queryKey: ['output-folders'], queryFn: fetchOutputFolders, staleTime: 30_000 });
+  const [projectsSyncStamp, setProjectsSyncStamp] = useState(() => readProjectsSyncStamp());
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoadWorkspaceExtras(true), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (showNewCampaignForm || showCampaignExtras) {
+      setLoadWorkspaceExtras(true);
+    }
+  }, [showCampaignExtras, showNewCampaignForm]);
+
+  const commandsQuery = useQuery({
+    queryKey: ['commands'],
+    queryFn: fetchCommands,
+    enabled: loadWorkspaceExtras,
+  });
+  const gateway = useQuery({
+    queryKey: ['gateway'],
+    queryFn: checkGateway,
+    staleTime: 15_000,
+    enabled: loadWorkspaceExtras,
+  });
+  const projectsQuery = useQuery({
+    queryKey: ['projects', projectsSyncStamp],
+    queryFn: fetchProjects,
+    staleTime: 60_000,
+    enabled: loadWorkspaceExtras && (showNewCampaignForm || showCampaignExtras),
+  });
+  const visionPillarsQuery = useQuery({
+    queryKey: ['vision-pillars'],
+    queryFn: fetchVisionPillars,
+    staleTime: 60_000,
+    enabled: loadWorkspaceExtras && (showNewCampaignForm || showCampaignExtras),
+  });
+  const outputFoldersQuery = useQuery({
+    queryKey: ['output-folders'],
+    queryFn: fetchOutputFolders,
+    staleTime: 30_000,
+    enabled: loadWorkspaceExtras && (showNewCampaignForm || showCampaignExtras),
+  });
 
   const [input, setInput] = useState('');
   const [source, setSource] = useState('web');
@@ -403,13 +454,13 @@ function DispatchPageInner() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [campaignTitle, setCampaignTitle] = useState('');
   const [campaignDescription, setCampaignDescription] = useState('');
-  const [showCampaignExtras, setShowCampaignExtras] = useState(false);
   const [campaignProjectId, setCampaignProjectId] = useState('');
   const [campaignVisionItemId, setCampaignVisionItemId] = useState('');
   const [campaignOutputFolder, setCampaignOutputFolder] = useState('');
   const [campaignAssignedBotId, setCampaignAssignedBotId] = useState('');
   const [campaignRevenueStream, setCampaignRevenueStream] = useState('');
   const [campaignLinkedTaskRef, setCampaignLinkedTaskRef] = useState('');
+  const [planJsonText, setPlanJsonText] = useState('');
   const [sendToBotTarget, setSendToBotTarget] = useState<string | null>(null);
   const [sendToBotBotId, setSendToBotBotId] = useState('main');
   const [sendToBotNote, setSendToBotNote] = useState('');
@@ -420,7 +471,6 @@ function DispatchPageInner() {
   const [taskAssignee, setTaskAssignee] = useState('');
   const [scheduleAt, setScheduleAt] = useState('');
   const [retryAgents, setRetryAgents] = useState<Record<string, string>>({});
-  const [showNewCampaignForm, setShowNewCampaignForm] = useState(false);
   const [showManualTaskEntry, setShowManualTaskEntry] = useState(false);
   const [keepInDispatch, setKeepInDispatch] = useState(false);
   const campaignSectionRef = useRef<HTMLDivElement>(null);
@@ -435,6 +485,11 @@ function DispatchPageInner() {
   useEffect(() => {
     setKeepInDispatch(false);
   }, [incomingSource, incomingTask]);
+
+  useEffect(() => onProjectsUpdated(() => {
+    setProjectsSyncStamp(readProjectsSyncStamp());
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+  }), [qc]);
 
   // Pre-fill campaign from query params (e.g. dispatched from Today page)
   useEffect(() => {
@@ -486,6 +541,8 @@ function DispatchPageInner() {
   }, [dispatchCampaignsQuery.data, selectedCampaignId]);
 
   const selectedCampaign = dispatchCampaignsQuery.data?.find((campaign) => campaign.id === selectedCampaignId);
+  const isWorkspaceLoading = dispatchCampaignsQuery.isLoading;
+  const isWorkspaceRefreshing = dispatchCampaignsQuery.isFetching;
 
   const progressQuery = useQuery({
     queryKey: ['dispatch-progress', selectedCampaignId],
@@ -582,6 +639,14 @@ function DispatchPageInner() {
     },
   });
 
+  const convertPlanJsonMutation = useMutation({
+    mutationFn: convertDispatchPlanJson,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
+      await qc.invalidateQueries({ queryKey: ['dispatch-progress', selectedCampaignId] });
+    },
+  });
+
   const approvePlanMutation = useMutation({
     mutationFn: approveDispatchPlan,
     onSuccess: async () => {
@@ -645,6 +710,13 @@ function DispatchPageInner() {
 
   const availablePlans = selectedCampaign?.latestPlan?.plans ?? [];
 
+  useEffect(() => {
+    if (!selectedCampaign) return;
+    if (!planJsonText.trim()) {
+      setPlanJsonText(JSON.stringify(selectedCampaign.latestPlan ?? { plans: [] }, null, 2));
+    }
+  }, [planJsonText, selectedCampaign]);
+
   // Phase 4: step derived from campaign state
   const currentStep = selectedCampaign
     ? (['DONE', 'COMPLETED'].includes(selectedCampaign.status)
@@ -684,6 +756,36 @@ function DispatchPageInner() {
 
   return (
     <div className="space-y-4">
+      {(isWorkspaceLoading || isWorkspaceRefreshing) && (
+        <div
+          className="rounded-2xl border px-4 py-3"
+          style={{
+            background: 'rgba(64,200,240,0.08)',
+            borderColor: 'rgba(64,200,240,0.22)',
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                {isWorkspaceLoading ? 'Loading Dispatch workspace…' : 'Refreshing workspace data…'}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--foreground)', opacity: 0.55 }}>
+                Campaigns, projects, vision items, and output folders are syncing in the background.
+              </p>
+            </div>
+            <div className="w-40 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.45)' }}>
+              <div
+                className="h-full rounded-full animate-pulse"
+                style={{
+                  width: '62%',
+                  background: 'linear-gradient(90deg, rgba(0,217,255,0.3), rgba(0,217,255,1))',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
@@ -838,6 +940,7 @@ function DispatchPageInner() {
                         onChange={(e) => setCampaignProjectId(e.target.value)}
                       >
                         <option value="">None</option>
+                        {projectsQuery.isLoading && <option disabled>Loading projects…</option>}
                         {(projectsQuery.data ?? []).map((p) => (
                           <option key={p.id} value={p.id}>{p.title}</option>
                         ))}
@@ -1278,11 +1381,11 @@ function DispatchPageInner() {
 
           {/* Plan options */}
           <Card>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Plan options</p>
-              {selectedCampaign.approvedPlanName && (
-                <span className="text-xs text-emerald-400">Active: {selectedCampaign.approvedPlanName}</span>
-              )}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Plan options</p>
+                {selectedCampaign.approvedPlanName && (
+                  <span className="text-xs text-emerald-400">Active: {selectedCampaign.approvedPlanName}</span>
+                )}
             </div>
             {planMutation.isLoading && (
               <p className="mt-2 text-xs animate-pulse" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
@@ -1336,6 +1439,44 @@ function DispatchPageInner() {
               )}
               {approvePlanMutation.isError && (
                 <p className="text-xs text-rose-400">{(approvePlanMutation.error as Error).message}</p>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-xl p-3" style={{ border: '1px solid var(--card-border)', background: 'var(--muted)' }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Raw JSON conversion</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPlanJsonText(JSON.stringify(selectedCampaign.latestPlan ?? { plans: [] }, null, 2))}
+                  >
+                    Load current JSON
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => convertPlanJsonMutation.mutate({ campaignId: selectedCampaign.id, rawJson: planJsonText })}
+                    disabled={convertPlanJsonMutation.isLoading || !planJsonText.trim()}
+                  >
+                    {convertPlanJsonMutation.isLoading ? 'Converting…' : 'Convert JSON'}
+                  </Button>
+                </div>
+              </div>
+              <textarea
+                className="mt-3 w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 font-mono text-[11px] text-slate-900"
+                rows={8}
+                value={planJsonText}
+                onChange={(e) => setPlanJsonText(e.target.value)}
+                placeholder='Paste raw plan JSON here, then click "Convert JSON".'
+              />
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
+                Accepts strict plan-envelope JSON with a top-level plans array. This is the manual escape hatch when OpenClaw returns non-JSON text.
+              </p>
+              {convertPlanJsonMutation.isError && (
+                <p className="mt-2 text-xs text-rose-400">{(convertPlanJsonMutation.error as Error).message}</p>
+              )}
+              {convertPlanJsonMutation.isSuccess && (
+                <p className="mt-2 text-xs text-emerald-400">JSON converted and saved to the campaign.</p>
               )}
             </div>
           </Card>
@@ -1666,10 +1807,20 @@ function DispatchPageInner() {
                 <span className="text-slate-400">Gateway</span>
                 <span
                   className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    gateway.data?.ok ? 'bg-emerald-900/50 text-emerald-200' : 'bg-rose-900/50 text-rose-200'
+                    !loadWorkspaceExtras
+                      ? 'bg-slate-800 text-slate-200'
+                      : gateway.data?.ok
+                      ? 'bg-emerald-900/50 text-emerald-200'
+                      : 'bg-rose-900/50 text-rose-200'
                   }`}
                 >
-                  {gateway.isFetching ? 'Checking...' : gateway.data?.ok ? 'Reachable' : 'Unreachable'}
+                  {!loadWorkspaceExtras
+                    ? 'Idle'
+                    : gateway.isFetching
+                    ? 'Checking...'
+                    : gateway.data?.ok
+                    ? 'Reachable'
+                    : 'Unreachable'}
                 </span>
               </div>
             </div>
@@ -1807,14 +1958,15 @@ function DispatchPageInner() {
           <Card>
             <CardTitle>Recent commands</CardTitle>
             <div className="mt-3 space-y-3">
-              {(data ?? []).map((cmd) => (
+              {(commandsQuery.data ?? []).map((cmd) => (
                 <div key={cmd.id} className="rounded-lg border border-border p-3">
                   <p className="text-sm text-slate-900">{cmd.input}</p>
                   <p className="text-xs text-slate-400">{cmd.sourceChannel} · {cmd.status}</p>
                   {cmd.run && <p className="text-xs text-slate-500">Run: {cmd.run.type}</p>}
                 </div>
               ))}
-              {!data?.length && <p className="text-sm text-slate-500">No recent commands.</p>}
+              {commandsQuery.isLoading && <p className="text-sm text-slate-500">Loading recent commands…</p>}
+              {!commandsQuery.isLoading && !commandsQuery.data?.length && <p className="text-sm text-slate-500">No recent commands.</p>}
             </div>
           </Card>
         </div>

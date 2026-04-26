@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pin } from 'lucide-react';
+import { onPinsUpdated, readPinned, writePinned } from '@/lib/chat/tabs-client';
 
 type SessionRow = {
   id: string;
@@ -33,6 +35,7 @@ export function SessionPalette({ agent, onSelect }: Props) {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  const [pinned, setPinned] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Cmd/Ctrl+K toggle
@@ -72,18 +75,38 @@ export function SessionPalette({ agent, onSelect }: Props) {
   }, [agent, open]);
 
   useEffect(() => {
+    if (!open) return;
+    setPinned(readPinned(agent));
+    return onPinsUpdated(agent, () => setPinned(readPinned(agent)));
+  }, [agent, open]);
+
+  useEffect(() => {
     if (open) inputRef.current?.focus();
     else setQuery('');
   }, [open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => {
+    const base = q ? sessions.filter((s) => {
       const hay = `${s.title ?? ''} ${s.lastMessage ?? ''} ${s.id}`.toLowerCase();
       return hay.includes(q);
+    }) : sessions;
+    const index = new Map<string, number>(sessions.map((s, i) => [s.id, i]));
+    return [...base].sort((a, b) => {
+      const aPinned = pinned.includes(a.id) ? 0 : 1;
+      const bPinned = pinned.includes(b.id) ? 0 : 1;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+      return (index.get(a.id) ?? 0) - (index.get(b.id) ?? 0);
     });
-  }, [sessions, query]);
+  }, [sessions, query, pinned]);
+
+  const togglePin = useCallback((id: string) => {
+    setPinned((prev) => {
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [id, ...prev];
+      writePinned(agent, next);
+      return next;
+    });
+  }, [agent]);
 
   const pick = useCallback(
     (row: SessionRow) => {
@@ -171,12 +194,20 @@ export function SessionPalette({ agent, onSelect }: Props) {
           {filtered.map((row, i) => {
             const active = i === highlighted;
             const label = row.title?.trim() || `Untitled · ${row.id.slice(-6)}`;
+            const isPinned = pinned.includes(row.id);
             return (
-              <button
+              <div
                 key={row.id}
-                type="button"
                 onMouseEnter={() => setHighlighted(i)}
+                role="button"
+                tabIndex={0}
                 onClick={() => pick(row)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    pick(row);
+                  }
+                }}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -201,27 +232,75 @@ export function SessionPalette({ agent, onSelect }: Props) {
                     fontWeight: 500,
                   }}
                 >
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {label}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
-                    {formatAgo(row.updatedAt)}
-                  </span>
-                </div>
-                {row.lastMessage && (
-                  <div
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pick(row);
+                    }}
                     style={{
-                      fontSize: 12,
-                      color: 'rgba(255,255,255,0.5)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      flex: 1,
+                      minWidth: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: 0,
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      textAlign: 'left',
                     }}
                   >
-                    {row.lastMessage}
-                  </div>
-                )}
-              </button>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {label}
+                    </span>
+                    {isPinned && (
+                      <Pin className="w-3.5 h-3.5" style={{ color: '#38b8da', flexShrink: 0 }} />
+                    )}
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+                      {formatAgo(row.updatedAt)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => togglePin(row.id)}
+                    title={isPinned ? 'Unpin thread' : 'Pin thread'}
+                    aria-label={isPinned ? 'Unpin thread' : 'Pin thread'}
+                    style={{
+                      border: 'none',
+                      background: isPinned ? 'rgba(56,184,218,0.16)' : 'rgba(255,255,255,0.04)',
+                      color: isPinned ? '#38b8da' : 'rgba(255,255,255,0.55)',
+                      borderRadius: 999,
+                      width: 26,
+                      height: 26,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Pin className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {row.lastMessage && (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: 'rgba(255,255,255,0.5)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                      }}
+                    >
+                      {row.lastMessage}
+                    </div>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>

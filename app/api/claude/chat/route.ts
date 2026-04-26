@@ -1,5 +1,7 @@
-import { prisma } from '@/lib/prisma';
 import { ensureSession } from '@/lib/chat/session-util';
+import { db } from '@/lib/db/client';
+import { chatMessages } from '@/lib/db/schema';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -15,7 +17,7 @@ function persistMessage(
 ) {
   if (!sessionId || !content) return;
   ensureSession(sessionId, { firstMessageText })
-    .then(() => prisma.chatMessage.create({ data: { sessionId, role, content } }))
+    .then(() => db.insert(chatMessages).values({ id: randomUUID(), sessionId, role, content }))
     .catch(() => {});
 }
 

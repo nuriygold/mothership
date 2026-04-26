@@ -1,7 +1,9 @@
 import { desc, eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db/client';
+import type { InputJsonValue } from '@/lib/db/json';
 import { submissions, tasks, users, workflowSchemaVersions, workflows, runs } from '@/lib/db/schema';
-import { Prisma, WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
+import { WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 function keyById<T extends { id: string }>(rows: T[]) {
@@ -127,16 +129,18 @@ export async function createWorkflow(input: {
   type?: WorkflowType;
   ownerId: string;
   status?: WorkflowStatus;
-  schemaJson?: Prisma.InputJsonValue;
+  schemaJson?: InputJsonValue;
 }) {
   const [workflow] = await db
     .insert(workflows)
     .values({
+      id: randomUUID(),
       name: input.name,
       description: input.description,
       type: input.type ?? WorkflowType.STANDARD,
       status: input.status ?? WorkflowStatus.ACTIVE,
       ownerId: input.ownerId,
+      updatedAt: new Date(),
     })
     .returning();
 
@@ -144,6 +148,7 @@ export async function createWorkflow(input: {
     const [schemaVersion] = await db
       .insert(workflowSchemaVersions)
       .values({
+        id: randomUUID(),
         workflowId: workflow.id,
         version: 1,
         schemaJson: input.schemaJson,

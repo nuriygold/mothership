@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
+import { sql } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { tasks } from '@/lib/db/schema';
 import { checkGateway } from '@/lib/services/openclaw';
 import { checkGmailConnectivity, checkZohoConnectivity } from '@/lib/services/email';
-import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 async function checkRuby(): Promise<{ ok: boolean; reason?: string }> {
   try {
-    const count = await prisma.task.count();
-    return { ok: true, reason: `${count} tasks tracked in DB` };
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(tasks);
+    return { ok: true, reason: `${Number(count)} tasks tracked in DB` };
   } catch (err) {
     return { ok: false, reason: `DB unreachable: ${err instanceof Error ? err.message : String(err)}` };
   }

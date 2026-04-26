@@ -4,6 +4,7 @@ import { createTask } from '@/lib/services/tasks';
 import { getVisionItem, linkTaskToItem } from '@/lib/services/vision';
 import { createTaskPoolIssue, isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
 import { TaskPriority } from '@/lib/db/prisma-types';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (!poolTask) {
         return Response.json({ error: { message: 'Task pool unavailable' } }, { status: 503 });
       }
-      const [task] = await db.insert(tasks).values({ title, priority, visionItemId: params.id }).returning();
+      const [task] = await db
+        .insert(tasks)
+        .values({ id: randomUUID(), title, priority, visionItemId: params.id, updatedAt: new Date() })
+        .returning();
       await linkTaskToItem(params.id, task.id);
       return Response.json({ task: poolTask }, { status: 201 });
     }

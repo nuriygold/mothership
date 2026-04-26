@@ -3,6 +3,7 @@ import { db } from '@/lib/db/client';
 import { tasks, users, workflows } from '@/lib/db/schema';
 import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
 import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks, updateTaskPoolIssue } from '@/lib/integrations/task-pool';
+import { randomUUID } from 'node:crypto';
 
 async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: string }) {
   if (input.ownerId !== undefined) return input.ownerId;
@@ -99,6 +100,7 @@ export async function createTask(input: {
   const [created] = await db
     .insert(tasks)
     .values({
+      id: randomUUID(),
       title: input.title,
       description: input.description,
       workflowId: input.workflowId ?? null,
@@ -107,6 +109,7 @@ export async function createTask(input: {
       priority: input.priority ?? TaskPriority.MEDIUM,
       dueAt: input.dueAt ?? null,
       visionItemId: input.visionItemId ?? null,
+      updatedAt: new Date(),
     })
     .returning({ id: tasks.id });
 

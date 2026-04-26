@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { chatMessages } from '@/lib/db/schema';
 import { ensureSession } from '@/lib/chat/session-util';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
     await ensureSession(sessionId, { firstMessageText: role === 'user' ? content : undefined });
     const [message] = await db
       .insert(chatMessages)
-      .values({ sessionId, role, content })
+      .values({ id: randomUUID(), sessionId, role, content })
       .returning({
         id: chatMessages.id,
         role: chatMessages.role,

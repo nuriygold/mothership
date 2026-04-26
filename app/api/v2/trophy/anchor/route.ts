@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { auditEvents } from '@/lib/db/schema';
 import { createAuditEvent } from '@/lib/services/audit';
 
 export const dynamic = 'force-dynamic';
@@ -23,10 +25,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const existing = await prisma.auditEvent.findFirst({
-      where: { entityType: 'WellnessAnchor', eventType: 'COMPLETED', entityId: date },
-      select: { id: true, createdAt: true },
-    });
+    const [existing] = await db
+      .select({ id: auditEvents.id, createdAt: auditEvents.createdAt })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.entityType, 'WellnessAnchor'), eq(auditEvents.eventType, 'COMPLETED'), eq(auditEvents.entityId, date)))
+      .limit(1);
     if (existing) {
       return NextResponse.json({ ok: true, alreadyAwarded: true, awardedAt: existing.createdAt.toISOString() });
     }

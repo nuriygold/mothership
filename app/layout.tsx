@@ -23,6 +23,7 @@ const navItems = [
   // Sidebar anchor — directly under the Mothership logo.
   { label: 'Trophies', href: '/trophy' },
   { label: 'Today', href: '/today' },
+  { label: 'Ops', href: '/ops' },
   { label: 'Marco', href: '/marco' },
   { label: 'Claude', href: '/claude' },
   { label: 'Ruby', href: '/ruby' },
@@ -32,6 +33,7 @@ const navItems = [
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
+  { label: 'Telegram', href: '/telegram' },
   { label: 'Finance', href: '/finance' },
   { label: 'Streams', href: '/revenue-streams' },
   { label: 'Activity (Log)', href: '/activity' },

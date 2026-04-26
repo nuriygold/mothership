@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sendTelegramMessage } from '@/lib/services/telegram';
+import { createAuditEvent } from '@/lib/services/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,14 @@ export async function POST(req: Request) {
     }
 
     const result = await sendTelegramMessage({ text, botKey, chatId });
+
+    await createAuditEvent({
+      entityType: 'telegram',
+      entityId: String(result?.result?.message_id ?? Date.now()),
+      eventType: 'telegram_outbound',
+      metadata: { text, botKey: botKey ?? 'default', chatId: chatId ?? process.env.TELEGRAM_CHAT_ID ?? '' },
+    });
+
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json(

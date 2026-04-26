@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema';
 import { OWNER_COOKIE } from '@/lib/services/owner';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -23,9 +24,10 @@ export async function POST(req: Request) {
 
   // Find or create the owner user by email
   const email = String(process.env.OWNER_EMAIL ?? 'hello@nuriy.com').trim();
+  const now = new Date();
   await db
     .insert(users)
-    .values({ email, name: 'Nuriy' })
+    .values({ id: randomUUID(), email, name: 'Nuriy', updatedAt: now })
     .onConflictDoNothing({ target: users.email });
 
   const [user] = await db

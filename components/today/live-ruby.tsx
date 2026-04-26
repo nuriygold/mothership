@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Mic, Plus, Trash2, MessageSquare, Pencil, Check, X, Copy, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { formatChatTimestamp } from '@/lib/chat/format-chat-timestamp';
 
 type Message = {
   id: string;
@@ -840,6 +841,17 @@ export function LiveRuby({
                   ) : (
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                   )}
+                </div>
+                <div
+                  className="mt-1 text-[10px] font-mono"
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    opacity: 0.7,
+                    textAlign: msg.role === 'user' ? 'right' : 'left',
+                    width: '100%',
+                  }}
+                >
+                  {formatChatTimestamp(msg.ts)}
                 </div>
                 {!msg.streaming && msg.text && (
                   <button

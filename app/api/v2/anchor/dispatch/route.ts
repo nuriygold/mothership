@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma';
-import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
+import { addChatMessage, upsertChatSession } from '@/lib/db/chat';
+import { agentForKey, inferenceAuthHeaders, inferenceGatewayBase, inferenceProvider, modelForOpenClaw, responsesUrl } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,28 +32,21 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
   }
 
-  // Fetch chat history; upsert session + save user message (fire-and-forget)
-  const [history] = await Promise.all([
-    sessionId
-      ? prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
-      : Promise.resolve([]),
-  ]);
-
   if (sessionId) {
-    prisma.chatSession
-      .upsert({ where: { id: sessionId }, create: { id: sessionId }, update: { updatedAt: new Date() } })
-      .then(() => prisma.chatMessage.create({ data: { sessionId, role: 'user', content: text } }))
-      .catch(() => {});
+    await upsertChatSession(sessionId);
+    addChatMessage(sessionId, 'user', text).catch(() => {});
   }
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(`${gateway}/v1/responses`, {
+    const url = responsesUrl(gateway);
+    const provider = inferenceProvider();
+    upstreamRes = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...inferenceAuthHeaders(token),
         'Content-Type': 'application/json',
-        'x-openclaw-agent-id': resolvedAgent,
+        ...(provider === 'openclaw' ? { 'x-openclaw-agent-id': resolvedAgent } : {}),
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
       body: JSON.stringify({ stream: true, model, input: text, instructions: SYSTEM_PROMPT }),
@@ -101,9 +94,7 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
         if (accumulated && sessionId) {
-          prisma.chatMessage
-            .create({ data: { sessionId, role: 'assistant', content: accumulated } })
-            .catch(() => {});
+          addChatMessage(sessionId, 'assistant', accumulated).catch(() => {});
         }
       }
 

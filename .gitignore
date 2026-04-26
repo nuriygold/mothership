@@ -19,3 +19,7 @@ fix-*.js
 .claw/
 .sandbox-home/
 .sandbox-tmp/
+AGENTS.md
+
+# Supabase CLI link metadata (local only)
+supabase/.temp/

@@ -6,7 +6,10 @@
  * Events that survive processing stay in the Action Feed.
  */
 
-import type { Prisma } from '@/lib/db/prisma-types';
+import type { JsonValue } from '@/lib/db/json';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { financeEvents } from '@/lib/db/schema';
 import { resolveFinanceEvent } from '@/lib/finance/events';
 import { touchMerchant } from '@/lib/finance/merchantProfile';
 import { runAnomalyDetection } from '@/lib/finance/anomalyDetector';
@@ -18,7 +21,7 @@ type FinanceEventRow = {
   id: string;
   type: string;
   source: string;
-  payload: Prisma.JsonValue;
+  payload: JsonValue;
   priority: string;
   resolved: boolean;
   createdAt: Date;
@@ -146,11 +149,7 @@ async function applyResult(event: FinanceEventRow, result: ProcessResult): Promi
     console.log(`${tag} auto-resolved — ${result.reason}`);
   } else if (result.action === 'escalated') {
     // Update priority to high/critical, keep unresolved
-    const { prisma } = await import('@/lib/prisma');
-    await prisma.financeEvent.update({
-      where: { id: event.id },
-      data: { priority: 'high' },
-    });
+    await db.update(financeEvents).set({ priority: 'high' }).where(eq(financeEvents.id, event.id));
     console.log(`${tag} escalated — ${result.reason}`);
   } else {
     console.log(`${tag} kept — ${result.reason}`);

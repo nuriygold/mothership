@@ -1,19 +1,11 @@
-import { prisma } from '@/lib/prisma';
+// TEMPORARY STUB — Prisma → Drizzle migration in progress.
+// See docs/drizzle-rail-migration.md.
+import { migrationStub } from '@/lib/migration-stub';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const items = await prisma.plaidItem.findMany({
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      itemId: true,
-      institutionName: true,
-      status: true,
-      errorCode: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-  return Response.json({ items });
-}
+export const GET = migrationStub;
+export const POST = migrationStub;
+export const PATCH = migrationStub;
+export const PUT = migrationStub;
+export const DELETE = migrationStub;
