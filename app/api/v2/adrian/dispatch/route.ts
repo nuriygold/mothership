@@ -1,5 +1,5 @@
 import { addChatMessage, upsertChatSession } from '@/lib/db/chat';
-import { agentForKey, inferenceGatewayBase, modelForOpenClaw } from '@/lib/services/openclaw';
+import { agentForKey, inferenceAuthHeaders, inferenceGatewayBase, inferenceProvider, modelForOpenClaw, responsesUrl } from '@/lib/services/openclaw';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,12 +39,14 @@ export async function POST(req: Request) {
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(`${gateway}/v1/responses`, {
+    const url = responsesUrl(gateway);
+    const provider = inferenceProvider();
+    upstreamRes = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...inferenceAuthHeaders(token),
         'Content-Type': 'application/json',
-        'x-openclaw-agent-id': resolvedAgent,
+        ...(provider === 'openclaw' ? { 'x-openclaw-agent-id': resolvedAgent } : {}),
         ...(sessionId ? { 'x-openclaw-session-key': sessionId } : {}),
       },
       body: JSON.stringify({ stream: true, model, input: text, instructions: SYSTEM_PROMPT }),

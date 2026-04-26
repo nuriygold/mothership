@@ -1,12 +1,27 @@
-// In-memory mock store for the Ops control plane.
-// Module-scoped so values persist across requests within a single
-// server instance. Replace with a real backend (Supabase, Postgres,
-// or an event store) without changing the API route shapes.
+// In-memory mission registry for the Ops control plane.
+//
+// This is the *only* component that should ever hold campaign state outside
+// of the WDK runtime + your durable storage. There is no fake/seed campaign
+// data — the registry starts empty and grows as the operator dispatches
+// missions through `dispatchMission()` (see `lib/ops/runtime.ts`).
+//
+// The agent roster below is treated as static template metadata, not
+// runtime state — it tells the dispatch modal which lead agents are
+// available. Once a real `agents` table exists in Postgres, replace
+// `listAgents()` with a Drizzle query and delete the constant.
+//
+// Module-scoped variables persist across requests within a single server
+// instance. They are NOT a substitute for durable storage — they are the
+// thinnest possible mirror of workflow state so the UI has something to
+// read between events. The workflow itself is the source of truth.
 
 import type {
   Agent,
   Campaign,
+  CampaignArtifact,
+  CampaignBlocker,
   CampaignControlAction,
+  CampaignStatus,
   CreateCampaignInput,
   FeedEvent,
   OpsTickerSummary,
@@ -16,213 +31,55 @@ import type {
 
 const STALE_MINUTES = 12;
 
-function isoMinutesAgo(min: number): string {
-  return new Date(Date.now() - min * 60_000).toISOString();
-}
-
 function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// ── Agents ──────────────────────────────────────────────────────────────────
+// ── Agent roster (template metadata) ────────────────────────────────────────
+// Real agents live in Postgres; this is just enough for the dispatch UI to
+// populate its lead-agent dropdown until the schema is wired up.
 const agents: Agent[] = [
   {
     id: 'agent_adrian',
     name: 'Adrian',
-    domain: 'Shopify',
+    domain: 'Web extraction',
     capabilities: ['catalog audit', 'product extraction', 'browser fallback'],
-    status: 'RUNNING',
-    activeCampaignIds: ['camp_shopify_audit'],
+    status: 'IDLE',
+    activeCampaignIds: [],
   },
   {
     id: 'agent_ruby',
     name: 'Ruby',
-    domain: 'TikTok',
+    domain: 'Outreach',
     capabilities: ['campaign drafting', 'creator outreach', 'content QA'],
     status: 'IDLE',
-    activeCampaignIds: ['camp_tiktok_q1'],
+    activeCampaignIds: [],
   },
   {
     id: 'agent_iceman',
     name: 'Iceman',
-    domain: 'Product',
+    domain: 'Build & deploy',
     capabilities: ['build orchestration', 'deploy gating', 'release notes'],
-    status: 'RUNNING',
-    activeCampaignIds: ['camp_nuriy_deploy'],
+    status: 'IDLE',
+    activeCampaignIds: [],
   },
   {
     id: 'agent_marvin',
     name: 'Marvin',
     domain: 'Finance',
     capabilities: ['ledger reconciliation', 'payable scan', 'cash projection'],
-    status: 'BLOCKED',
-    activeCampaignIds: ['camp_finance_recon'],
+    status: 'IDLE',
+    activeCampaignIds: [],
   },
 ];
 
-// ── Campaigns ───────────────────────────────────────────────────────────────
-const campaigns: Campaign[] = [
-  {
-    id: 'camp_shopify_audit',
-    name: 'Shopify Audit',
-    objective: 'Audit full product catalog and emit normalized products.md.',
-    leadAgentId: 'agent_adrian',
-    status: 'RUNNING',
-    lastActivityAt: isoMinutesAgo(1),
-    startedAt: isoMinutesAgo(38),
-    progress: 0.62,
-    quickStats: { filesUpdated: 7, rowsProcessed: 1284, batchCount: 5 },
-    artifacts: [
-      {
-        name: 'products.md',
-        size: 48_210,
-        rows: 1284,
-        updatedAt: isoMinutesAgo(1),
-        preview:
-          '# Shopify Catalog\n\n| SKU | Title | Price | Inventory |\n| --- | --- | --- | --- |\n| SH-001 | Atlas Tee | $34.00 | 142 |\n| SH-002 | Nimbus Hoodie | $78.00 | 67 |\n| SH-003 | Halcyon Cap | $24.00 | 0 |\n| SH-004 | Vector Tote | $42.00 | 88 |\n\n_…1,280 more rows_',
-      },
-      {
-        name: 'action-log.md',
-        size: 9_842,
-        updatedAt: isoMinutesAgo(2),
-        preview:
-          '## Action Log\n- [00:38:14] Catalog snapshot taken (1,284 rows)\n- [00:38:42] Batch 1/5 normalized\n- [00:39:11] Batch 2/5 normalized\n- [00:39:45] Browser fallback engaged (rate limit)\n- [00:40:19] Batch 3/5 normalized',
-      },
-      {
-        name: 'blockers.md',
-        size: 412,
-        updatedAt: isoMinutesAgo(7),
-        preview: '## Blockers\n_(none)_',
-      },
-    ],
-    blocker: null,
-    feed: [
-      { id: uid('fe'), timestamp: isoMinutesAgo(0.05), level: 'info', message: 'Extracting product batch (5/5)' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(0.4), level: 'warn', message: 'Fallback: Browser extraction' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(0.9), level: 'info', message: 'Writing to products.md' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(1.6), level: 'success', message: 'Batch 4/5 committed (312 rows)' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(2.4), level: 'info', message: 'Batch 4/5 normalize started' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(3.1), level: 'success', message: 'Batch 3/5 committed (256 rows)' },
-    ],
-    executionMode: 'STANDARD',
-    minimumBatchSize: 5,
-    requiredArtifacts: ['products.md', 'action-log.md', 'blockers.md'],
-  },
-  {
-    id: 'camp_tiktok_q1',
-    name: 'TikTok Campaign Q1',
-    objective: 'Draft, validate, and stage Q1 creator outreach.',
-    leadAgentId: 'agent_ruby',
-    status: 'IDLE',
-    lastActivityAt: isoMinutesAgo(22),
-    startedAt: isoMinutesAgo(140),
-    progress: 0.34,
-    quickStats: { filesUpdated: 3, rowsProcessed: 84, batchCount: 2 },
-    artifacts: [
-      {
-        name: 'creators.md',
-        size: 12_004,
-        rows: 84,
-        updatedAt: isoMinutesAgo(22),
-        preview:
-          '# Creator Targets\n\n- @northbound — 412k followers — fashion\n- @halcyonhouse — 220k followers — design\n- @vectorline — 188k followers — tech\n- _…81 more_',
-      },
-      {
-        name: 'action-log.md',
-        size: 4_312,
-        updatedAt: isoMinutesAgo(22),
-        preview:
-          '## Action Log\n- [00:00:12] Audience filter applied\n- [00:01:48] 84 candidates scored\n- [00:02:22] Awaiting approval to draft outreach',
-      },
-    ],
-    blocker: null,
-    feed: [
-      { id: uid('fe'), timestamp: isoMinutesAgo(22), level: 'info', message: 'Awaiting approval to draft outreach' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(24), level: 'success', message: '84 creators scored' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(26), level: 'info', message: 'Audience filter applied' },
-    ],
-    executionMode: 'STANDARD',
-    minimumBatchSize: 5,
-    requiredArtifacts: ['creators.md', 'action-log.md'],
-  },
-  {
-    id: 'camp_nuriy_deploy',
-    name: 'Nuriy Product Deploy',
-    objective: 'Stage and deploy release v3.4 to production.',
-    leadAgentId: 'agent_iceman',
-    status: 'DEPLOYING',
-    lastActivityAt: isoMinutesAgo(0.5),
-    startedAt: isoMinutesAgo(11),
-    progress: 0.81,
-    quickStats: { filesUpdated: 22, rowsProcessed: 0, batchCount: 1 },
-    artifacts: [
-      {
-        name: 'release-notes.md',
-        size: 6_201,
-        updatedAt: isoMinutesAgo(0.5),
-        preview:
-          '# Release v3.4\n\n## Highlights\n- Ops control plane (beta)\n- Watchdog interval reduced to 10m\n- Aggressive execution mode\n\n## Fixes\n- Stale campaign detection\n- Artifact diff rendering',
-      },
-      {
-        name: 'action-log.md',
-        size: 2_080,
-        updatedAt: isoMinutesAgo(0.5),
-        preview: '## Action Log\n- [00:11:02] Build green\n- [00:11:14] Deploying to production',
-      },
-    ],
-    blocker: null,
-    feed: [
-      { id: uid('fe'), timestamp: isoMinutesAgo(0.3), level: 'info', message: 'Deploying to production' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(0.8), level: 'success', message: 'Build green' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(1.4), level: 'info', message: 'Compiling 142 modules' },
-    ],
-    executionMode: 'AGGRESSIVE',
-    minimumBatchSize: 5,
-    requiredArtifacts: ['release-notes.md', 'action-log.md'],
-  },
-  {
-    id: 'camp_finance_recon',
-    name: 'Finance Reconciliation',
-    objective: 'Reconcile November ledger against bank feed.',
-    leadAgentId: 'agent_marvin',
-    status: 'BLOCKED',
-    lastActivityAt: isoMinutesAgo(18),
-    startedAt: isoMinutesAgo(64),
-    progress: 0.45,
-    quickStats: { filesUpdated: 4, rowsProcessed: 612, batchCount: 3 },
-    artifacts: [
-      {
-        name: 'ledger-diff.md',
-        size: 18_402,
-        rows: 612,
-        updatedAt: isoMinutesAgo(18),
-        preview:
-          '# Ledger Diff\n\n| Date | Memo | Ledger | Bank | Δ |\n| --- | --- | --- | --- | --- |\n| 11-04 | Stripe payout | $4,210 | $4,210 | 0 |\n| 11-07 | Plaid sync | — | $812 | +812 |',
-      },
-      {
-        name: 'blockers.md',
-        size: 612,
-        updatedAt: isoMinutesAgo(18),
-        preview: '## Blockers\n- MISSING_API_KEY: PLAID_CLIENT_ID required for sandbox refresh',
-      },
-    ],
-    blocker: {
-      type: 'MISSING_API_KEY',
-      attempts: 3,
-      requiredInput: 'PLAID_CLIENT_ID',
-      detectedAt: isoMinutesAgo(18),
-    },
-    feed: [
-      { id: uid('fe'), timestamp: isoMinutesAgo(18), level: 'error', message: 'Blocker detected: Missing API key' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(19), level: 'warn', message: 'Retry 3/3 failed for Plaid sandbox' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(20), level: 'warn', message: 'Retry 2/3 failed for Plaid sandbox' },
-      { id: uid('fe'), timestamp: isoMinutesAgo(22), level: 'info', message: 'Refreshing Plaid sandbox cursor' },
-    ],
-    executionMode: 'STANDARD',
-    minimumBatchSize: 5,
-    requiredArtifacts: ['ledger-diff.md', 'blockers.md'],
-  },
-];
+// ── Mission registry ────────────────────────────────────────────────────────
+// Starts empty. Populated only by `createCampaign()` (called from the
+// dispatch route via the runtime adapter).
+const campaigns: Campaign[] = [];
+
+// Maps campaignId → workflow runId so control actions can find the run.
+const runIdByCampaignId = new Map<string, string>();
 
 // ── System rules ────────────────────────────────────────────────────────────
 let systemRules: SystemRules = {
@@ -233,69 +90,58 @@ let systemRules: SystemRules = {
   blockerThreshold: 3,
 };
 
-// ── Live feed simulation ────────────────────────────────────────────────────
-// On every read, we synthesize a few fresh events for RUNNING/DEPLOYING
-// campaigns so the UI feels live without a real backend.
-const LIVE_TEMPLATES: Record<string, string[]> = {
-  camp_shopify_audit: [
-    'Streaming product diff to artifact',
-    'Browser fallback engaged (rate limit)',
-    'Normalizing batch slice',
-    'Writing to products.md',
-    'Validated 64 SKUs in slice',
-  ],
-  camp_nuriy_deploy: [
-    'Edge function deployed',
-    'Cache warmed for /ops',
-    'Health check OK',
-    'Promoting build to production',
-  ],
-};
-
-function tickLiveFeed(c: Campaign) {
-  if (c.status !== 'RUNNING' && c.status !== 'DEPLOYING') return;
-  const templates = LIVE_TEMPLATES[c.id];
-  if (!templates) return;
-  // 35% chance per read to add a new event, capped at 40 total.
-  if (Math.random() < 0.35 && c.feed.length < 40) {
-    const message = templates[Math.floor(Math.random() * templates.length)];
-    c.feed.unshift({
-      id: uid('fe'),
-      timestamp: new Date().toISOString(),
-      level: Math.random() < 0.15 ? 'warn' : 'info',
-      message,
-    });
-    c.lastActivityAt = new Date().toISOString();
-    if (c.progress < 0.95) c.progress = Math.min(0.95, c.progress + 0.005);
-  }
-}
-
-// ── Public API ──────────────────────────────────────────────────────────────
+// ── Public API: reads ───────────────────────────────────────────────────────
 export function listAgents(): Agent[] {
-  return agents.map((a) => ({ ...a }));
+  // Recompute live status from active campaigns so agents reflect what their
+  // missions are doing without any background simulation.
+  return agents.map((a) => {
+    const activeCampaignIds = campaigns
+      .filter((c) => c.leadAgentId === a.id && c.status === 'RUNNING')
+      .map((c) => c.id);
+    const blocked = campaigns.some(
+      (c) => c.leadAgentId === a.id && c.status === 'BLOCKED'
+    );
+    return {
+      ...a,
+      activeCampaignIds,
+      status: blocked ? 'BLOCKED' : activeCampaignIds.length > 0 ? 'RUNNING' : 'IDLE',
+    };
+  });
 }
 
 export function getAgent(id: string): Agent | undefined {
-  return agents.find((a) => a.id === id);
+  return listAgents().find((a) => a.id === id);
 }
 
 export function listCampaigns(): Campaign[] {
-  campaigns.forEach(tickLiveFeed);
   return campaigns.map((c) => ({ ...c }));
 }
 
 export function getCampaign(id: string): Campaign | undefined {
   const c = campaigns.find((x) => x.id === id);
-  if (c) tickLiveFeed(c);
   return c ? { ...c } : undefined;
 }
 
 export function getCampaignFeed(id: string): FeedEvent[] {
   const c = campaigns.find((x) => x.id === id);
-  if (!c) return [];
-  tickLiveFeed(c);
-  return [...c.feed];
+  return c ? [...c.feed] : [];
 }
+
+export function getCampaignArtifact(
+  id: string,
+  artifactName: string
+): CampaignArtifact | undefined {
+  const c = campaigns.find((x) => x.id === id);
+  return c?.artifacts.find((a) => a.name === artifactName);
+}
+
+export function getRunIdForCampaign(id: string): string | undefined {
+  return runIdByCampaignId.get(id);
+}
+
+// ── Public API: writes ──────────────────────────────────────────────────────
+// All write paths are designed so they can be called from `'use step'`
+// functions in the workflow runtime. They are pure data updates with no I/O.
 
 export function createCampaign(input: CreateCampaignInput): Campaign {
   const id = uid('camp');
@@ -305,10 +151,10 @@ export function createCampaign(input: CreateCampaignInput): Campaign {
     name: input.name,
     objective: input.objective,
     leadAgentId: input.leadAgentId,
-    status: 'RUNNING',
+    status: 'IDLE', // promoted to RUNNING by the workflow itself
     lastActivityAt: now,
     startedAt: now,
-    progress: 0.05,
+    progress: 0,
     quickStats: { filesUpdated: 0, rowsProcessed: 0, batchCount: 0 },
     artifacts: [],
     blocker: null,
@@ -316,8 +162,8 @@ export function createCampaign(input: CreateCampaignInput): Campaign {
       {
         id: uid('fe'),
         timestamp: now,
-        level: 'success',
-        message: `Campaign dispatched · mode=${input.executionMode.toLowerCase()}`,
+        level: 'info',
+        message: `Mission queued · mode=${input.executionMode.toLowerCase()} · agent=${input.leadAgentId.replace('agent_', '')}`,
       },
     ],
     executionMode: input.executionMode,
@@ -328,44 +174,134 @@ export function createCampaign(input: CreateCampaignInput): Campaign {
   return { ...next };
 }
 
-export function applyControl(id: string, action: CampaignControlAction): Campaign | undefined {
+export function setCampaignRunId(campaignId: string, runId: string): void {
+  runIdByCampaignId.set(campaignId, runId);
+}
+
+export function setCampaignStatus(id: string, status: CampaignStatus): void {
+  const c = campaigns.find((x) => x.id === id);
+  if (!c) return;
+  c.status = status;
+  c.lastActivityAt = new Date().toISOString();
+  if (status === 'COMPLETED') c.progress = 1;
+  if (status === 'CANCELLED' || status === 'FAILED') c.progress = Math.min(c.progress, 0.99);
+}
+
+export function setCampaignProgress(id: string, progress: number): void {
+  const c = campaigns.find((x) => x.id === id);
+  if (!c) return;
+  c.progress = Math.max(0, Math.min(1, progress));
+  c.lastActivityAt = new Date().toISOString();
+}
+
+export function setCampaignBlocker(
+  id: string,
+  blocker: CampaignBlocker | null
+): void {
+  const c = campaigns.find((x) => x.id === id);
+  if (!c) return;
+  c.blocker = blocker;
+  c.lastActivityAt = new Date().toISOString();
+}
+
+export function recordEvent(
+  id: string,
+  event: { level: FeedEvent['level']; message: string }
+): FeedEvent | undefined {
+  const c = campaigns.find((x) => x.id === id);
+  if (!c) return undefined;
+  const fe: FeedEvent = {
+    id: uid('fe'),
+    timestamp: new Date().toISOString(),
+    level: event.level,
+    message: event.message,
+  };
+  c.feed.unshift(fe);
+  // Cap feed length to avoid unbounded growth on long-running missions.
+  if (c.feed.length > 200) c.feed.length = 200;
+  c.lastActivityAt = fe.timestamp;
+  return fe;
+}
+
+export function upsertArtifact(
+  id: string,
+  artifact: { name: string; content: string; rows?: number }
+): CampaignArtifact | undefined {
   const c = campaigns.find((x) => x.id === id);
   if (!c) return undefined;
   const now = new Date().toISOString();
-  const event = (level: FeedEvent['level'], message: string): FeedEvent => ({
-    id: uid('fe'),
-    timestamp: now,
-    level,
-    message,
-  });
+  const size = Buffer.byteLength(artifact.content, 'utf8');
+  // Truncate preview to 4 KB so we don't ship huge payloads to the client.
+  const preview =
+    artifact.content.length > 4096
+      ? `${artifact.content.slice(0, 4096)}\n\n_…truncated_`
+      : artifact.content;
+
+  const existingIndex = c.artifacts.findIndex((a) => a.name === artifact.name);
+  const next: CampaignArtifact = {
+    name: artifact.name,
+    size,
+    rows: artifact.rows,
+    updatedAt: now,
+    preview,
+  };
+  if (existingIndex >= 0) {
+    c.artifacts[existingIndex] = next;
+  } else {
+    c.artifacts.push(next);
+    c.quickStats.filesUpdated = c.artifacts.length;
+  }
+  if (typeof artifact.rows === 'number') {
+    c.quickStats.rowsProcessed = artifact.rows;
+  }
+  c.lastActivityAt = now;
+  return next;
+}
+
+export function incrementBatchCount(id: string): void {
+  const c = campaigns.find((x) => x.id === id);
+  if (!c) return;
+  c.quickStats.batchCount += 1;
+  c.lastActivityAt = new Date().toISOString();
+}
+
+// ── Operator control actions ────────────────────────────────────────────────
+// These are the synchronous local-state effects. The runtime adapter layers
+// the actual workflow control on top (`world.events.create()` for cancel,
+// `resumeHook()` for approval, etc.).
+export function applyControl(
+  id: string,
+  action: CampaignControlAction
+): Campaign | undefined {
+  const c = campaigns.find((x) => x.id === id);
+  if (!c) return undefined;
 
   switch (action) {
     case 'resume':
       c.status = 'RUNNING';
       c.blocker = null;
-      c.feed.unshift(event('success', 'Execution resumed by operator'));
+      recordEvent(id, { level: 'success', message: 'Execution resumed by operator' });
       break;
     case 'force_retry':
-      c.feed.unshift(event('info', 'Force retry issued'));
       c.status = 'RUNNING';
+      recordEvent(id, { level: 'info', message: 'Force retry issued' });
       break;
     case 'approve_action':
-      c.feed.unshift(event('success', 'Operator approved pending action'));
       c.status = 'RUNNING';
+      recordEvent(id, { level: 'success', message: 'Operator approved pending action' });
       break;
     case 'escalate':
-      c.feed.unshift(event('warn', 'Escalated to human review'));
+      recordEvent(id, { level: 'warn', message: 'Escalated to human review' });
       break;
     case 'kill':
-      c.status = 'COMPLETED';
-      c.feed.unshift(event('error', 'Task killed by operator'));
-      c.progress = 1;
+      c.status = 'CANCELLED';
+      recordEvent(id, { level: 'error', message: 'Mission cancelled by operator' });
       break;
   }
-  c.lastActivityAt = now;
   return { ...c };
 }
 
+// ── System rules ────────────────────────────────────────────────────────────
 export function getSystemRules(): SystemRules {
   return { ...systemRules };
 }
@@ -375,6 +311,7 @@ export function updateSystemRules(patch: Partial<SystemRules>): SystemRules {
   return { ...systemRules };
 }
 
+// ── Watchdog ────────────────────────────────────────────────────────────────
 export function getWatchdogState(): WatchdogState {
   const inProgress = campaigns
     .filter((c) => c.status === 'RUNNING' || c.status === 'DEPLOYING' || c.status === 'BLOCKED')
@@ -404,13 +341,7 @@ export function forceResumeAll(): number {
     if (c.status === 'BLOCKED') {
       c.status = 'RUNNING';
       c.blocker = null;
-      c.lastActivityAt = new Date().toISOString();
-      c.feed.unshift({
-        id: uid('fe'),
-        timestamp: new Date().toISOString(),
-        level: 'success',
-        message: 'Watchdog: force-resume',
-      });
+      recordEvent(c.id, { level: 'success', message: 'Watchdog: force-resume' });
       count += 1;
     }
   }
@@ -421,9 +352,7 @@ export function escalateAllBlockers(): number {
   let count = 0;
   for (const c of campaigns) {
     if (c.blocker) {
-      c.feed.unshift({
-        id: uid('fe'),
-        timestamp: new Date().toISOString(),
+      recordEvent(c.id, {
         level: 'warn',
         message: `Watchdog: escalated blocker (${c.blocker.type})`,
       });
@@ -433,20 +362,242 @@ export function escalateAllBlockers(): number {
   return count;
 }
 
+// ── Demo seed (for hackathon recording / first-look demos) ──────────────────
+// Creates three richly-populated missions in different states so the /ops
+// surface has compelling visual content when there's no live workflow run.
+// Bypasses the WDK runtime intentionally — these are local fixtures, not
+// real workflow runs. Marked with `demo: true` would be cleaner, but the
+// Campaign type doesn't carry that flag; the convention here is that demo
+// missions all start with `Demo:` in their name.
+export function seedDemoMissions(): { created: string[] } {
+  resetDemoMissions(); // idempotent — clears any prior demo seed
+  const created: string[] = [];
+  const now = new Date();
+
+  // ── Mission 1: RUNNING — Adrian Shopify audit ─────────────────────────────
+  const m1 = createCampaign({
+    name: 'Demo: Shopify Catalog Audit',
+    objective:
+      'Audit live Shopify catalog for missing alt text, broken variant links, and pricing drift. Produce per-product diff and a remediation queue.',
+    leadAgentId: 'agent_adrian',
+    requiredArtifacts: ['products.md', 'action-log.md'],
+    minimumBatchSize: 5,
+    executionMode: 'STANDARD',
+  });
+  setCampaignStatus(m1.id, 'RUNNING');
+  setCampaignProgress(m1.id, 0.62);
+  upsertArtifact(m1.id, {
+    name: 'products.md',
+    rows: 184,
+    content: [
+      '# Catalog Audit · Products',
+      '',
+      '_184 products scanned · 23 issues flagged_',
+      '',
+      '| SKU | Issue | Severity |',
+      '| --- | ----- | -------- |',
+      '| ATL-TEE-001 | Missing alt text on 3 variant images | low |',
+      '| ATL-HOODIE-014 | Variant link 404 on `/black-xl` | high |',
+      '| HCY-CAP-007 | Compare-at price below sale price | medium |',
+      '| ATL-CREW-019 | SEO description exceeds 160 chars | low |',
+      '| HCY-PAN-022 | Inventory quantity mismatch (Shopify ↔ ledger) | high |',
+      '',
+      '_Continued for 18 more rows…_',
+    ].join('\n'),
+  });
+  upsertArtifact(m1.id, {
+    name: 'action-log.md',
+    rows: 4,
+    content: [
+      '# Action Log',
+      '',
+      '- `2026-04-25T14:02:11Z` — Pulled 184 products from Storefront API',
+      '- `2026-04-25T14:02:48Z` — Ran alt-text checker (mcp.image-audit)',
+      '- `2026-04-25T14:03:32Z` — Ran variant link probe on 47 products',
+      '- `2026-04-25T14:04:15Z` — Detected 6 high-severity issues — drafting remediation plan',
+    ].join('\n'),
+  });
+  for (const ev of [
+    { level: 'info' as const, message: 'Started Adrian · target=storefront.api', minus: 240 },
+    { level: 'info' as const, message: 'Fetched 184 products · 5 batches', minus: 200 },
+    { level: 'info' as const, message: 'Batch 1/5 complete · 0 issues', minus: 175 },
+    { level: 'info' as const, message: 'Batch 2/5 complete · 7 issues flagged', minus: 140 },
+    { level: 'warn' as const, message: 'Variant link probe: 6 high-severity 404s on Halcyon SKUs', minus: 95 },
+    { level: 'info' as const, message: 'Batch 3/5 complete · drafting remediation plan via AI Gateway', minus: 60 },
+    { level: 'success' as const, message: 'Wrote products.md · 184 rows', minus: 30 },
+  ]) {
+    backdateEvent(m1.id, now, ev.minus, ev.level, ev.message);
+  }
+  created.push(m1.id);
+
+  // ── Mission 2: BLOCKED — Marvin finance recon awaiting approval ───────────
+  const m2 = createCampaign({
+    name: 'Demo: Finance Recon (Apr 2026)',
+    objective:
+      'Reconcile April expense ledger against Plaid feed. Flag merchant overlaps and propose subscription cancellations needing operator approval.',
+    leadAgentId: 'agent_marvin',
+    requiredArtifacts: ['ledger-diff.md', 'blockers.md'],
+    minimumBatchSize: 5,
+    executionMode: 'STANDARD',
+  });
+  setCampaignStatus(m2.id, 'BLOCKED');
+  setCampaignProgress(m2.id, 0.48);
+  upsertArtifact(m2.id, {
+    name: 'ledger-diff.md',
+    rows: 89,
+    content: [
+      '# April Reconciliation Diff',
+      '',
+      '_89 transactions reconciled · 4 unresolved · 2 awaiting approval_',
+      '',
+      '## Unresolved',
+      '',
+      '- `$847.20` — Vercel · matches 2 candidate ledger entries',
+      '- `$129.00` — Anthropic · no ledger match',
+      '- `$58.00` — Notion · duplicate of `notion-team` charge from Mar 31',
+      '- `$24.00` — GitHub · prorated, ledger expects $19',
+      '',
+      '## Awaiting Approval',
+      '',
+      '- Cancel duplicate Notion subscription? `$58/mo` overlap with team plan',
+      '- Reclassify `$24 GitHub` from "tools" to "subscriptions"?',
+    ].join('\n'),
+  });
+  setCampaignBlocker(m2.id, {
+    type: 'pending_input',
+    summary: 'Awaiting operator approval to cancel duplicate Notion subscription',
+    requiredInput: 'approve | deny',
+    attempts: 1,
+    surfacedAt: new Date(now.getTime() - 90 * 1000).toISOString(),
+  });
+  for (const ev of [
+    { level: 'info' as const, message: 'Started Marvin · target=plaid+ledger', minus: 720 },
+    { level: 'info' as const, message: 'Fetched 142 Plaid transactions · April 1–30', minus: 680 },
+    { level: 'info' as const, message: 'Loaded ledger snapshot · 138 entries', minus: 660 },
+    { level: 'info' as const, message: 'Reconciled 89/142 · 4 unresolved', minus: 480 },
+    { level: 'warn' as const, message: 'Detected duplicate Notion subscription · $58/mo overlap', minus: 180 },
+    { level: 'warn' as const, message: 'Pausing for operator approval · cancel duplicate?', minus: 90 },
+  ]) {
+    backdateEvent(m2.id, now, ev.minus, ev.level, ev.message);
+  }
+  created.push(m2.id);
+
+  // ── Mission 3: COMPLETED — Iceman deploy ──────────────────────────────────
+  const m3 = createCampaign({
+    name: 'Demo: Mothership Deploy v0.142.0',
+    objective:
+      'Build, gate, and deploy mothership v0.142.0. Generate release notes, run smoke tests, and post deploy receipt.',
+    leadAgentId: 'agent_iceman',
+    requiredArtifacts: ['release-notes.md', 'action-log.md'],
+    minimumBatchSize: 1,
+    executionMode: 'STANDARD',
+  });
+  setCampaignStatus(m3.id, 'COMPLETED');
+  setCampaignProgress(m3.id, 1);
+  upsertArtifact(m3.id, {
+    name: 'release-notes.md',
+    rows: 12,
+    content: [
+      '# v0.142.0',
+      '',
+      '## Highlights',
+      '',
+      '- Added `/ops` mission control surface',
+      '- Wired Vercel Workflow / WDK for durable agent runs',
+      '- Mission AI calls now route through Vercel AI Gateway',
+      '',
+      '## Internal',
+      '',
+      '- Replaced Prisma with Drizzle on the Plaid + finance surface',
+      '- Stubbed 23 in-flight migration routes to 503',
+      '- Added watchdog panel for stale-mission detection',
+    ].join('\n'),
+  });
+  upsertArtifact(m3.id, {
+    name: 'action-log.md',
+    rows: 6,
+    content: [
+      '# Deploy Action Log',
+      '',
+      '- `pre-flight` · ✓ Type check passed (0 errors)',
+      '- `pre-flight` · ✓ Smoke suite passed (28/28)',
+      '- `build` · ✓ next build · 12.4s · 0 warnings',
+      '- `deploy` · ✓ Promoted to production · `mothership-7286.vercel.app`',
+      '- `verify` · ✓ Health check returned 200 in 142ms',
+    ].join('\n'),
+  });
+  for (const ev of [
+    { level: 'info' as const, message: 'Started Iceman · target=production', minus: 1860 },
+    { level: 'info' as const, message: 'Type check passed', minus: 1820 },
+    { level: 'info' as const, message: 'Smoke suite passed (28/28)', minus: 1780 },
+    { level: 'info' as const, message: 'next build complete · 12.4s', minus: 1640 },
+    { level: 'info' as const, message: 'Promoted to production', minus: 1600 },
+    { level: 'success' as const, message: 'Deploy verified · health=200 · 142ms', minus: 1580 },
+    { level: 'success' as const, message: 'Mission complete · all required artifacts produced', minus: 1575 },
+  ]) {
+    backdateEvent(m3.id, now, ev.minus, ev.level, ev.message);
+  }
+  created.push(m3.id);
+
+  return { created };
+}
+
+export function resetDemoMissions(): { removed: number } {
+  const before = campaigns.length;
+  for (let i = campaigns.length - 1; i >= 0; i--) {
+    if (campaigns[i].name.startsWith('Demo:')) {
+      runIdByCampaignId.delete(campaigns[i].id);
+      campaigns.splice(i, 1);
+    }
+  }
+  return { removed: before - campaigns.length };
+}
+
+// Internal helper: append an event with a timestamp `secondsAgo` in the past
+// so demo feeds tell a coherent timeline when first loaded.
+function backdateEvent(
+  campaignId: string,
+  now: Date,
+  secondsAgo: number,
+  level: FeedEvent['level'],
+  message: string
+): void {
+  const c = campaigns.find((x) => x.id === campaignId);
+  if (!c) return;
+  const fe: FeedEvent = {
+    id: uid('fe'),
+    timestamp: new Date(now.getTime() - secondsAgo * 1000).toISOString(),
+    level,
+    message,
+  };
+  c.feed.unshift(fe);
+}
+
+// ── Ticker ──────────────────────────────────────────────────────────────────
 export function getTickerSummary(): OpsTickerSummary {
-  const active = campaigns.filter((c) => c.status === 'RUNNING' || c.status === 'DEPLOYING').length;
+  const active = campaigns.filter(
+    (c) => c.status === 'RUNNING' || c.status === 'DEPLOYING'
+  ).length;
   const blocked = campaigns.filter((c) => c.status === 'BLOCKED').length;
   const entries = campaigns.map((c) => {
-    let label: string;
-    if (c.status === 'RUNNING') label = `${c.name}: Running`;
-    else if (c.status === 'BLOCKED') label = `${c.name}: Blocked`;
-    else if (c.status === 'IDLE') label = `${c.name}: Idle`;
-    else if (c.status === 'DEPLOYING') label = `${c.name}: Deploying`;
-    else label = `${c.name}: Completed`;
+    const label =
+      c.status === 'RUNNING'
+        ? `${c.name}: Running`
+        : c.status === 'BLOCKED'
+        ? `${c.name}: Blocked`
+        : c.status === 'IDLE'
+        ? `${c.name}: Queued`
+        : c.status === 'DEPLOYING'
+        ? `${c.name}: Deploying`
+        : `${c.name}: Completed`;
     const status: 'OK' | 'WARN' | 'CRIT' =
       c.status === 'BLOCKED' ? 'CRIT' : c.status === 'IDLE' ? 'WARN' : 'OK';
     return { label, status };
   });
-  entries.push({ label: 'Watchdog: Active', status: 'OK' });
+  // Always show the watchdog heartbeat so the ticker isn't empty pre-dispatch.
+  entries.push({
+    label: campaigns.length === 0 ? 'No active missions' : 'Watchdog: Active',
+    status: 'OK',
+  });
   return { activeCampaigns: active, blockedCampaigns: blocked, entries };
 }

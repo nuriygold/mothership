@@ -41,6 +41,8 @@ export function statusColor(s: string): string {
     case 'BLOCKED':   return opsTheme.red;
     case 'IDLE':      return opsTheme.amber;
     case 'COMPLETED': return opsTheme.textMuted;
+    case 'CANCELLED': return opsTheme.textDim;
+    case 'FAILED':    return opsTheme.red;
     default:          return opsTheme.textMuted;
   }
 }
@@ -114,6 +116,20 @@ export async function patchSystemRules(patch: Partial<SystemRules>): Promise<Sys
   const body = await res.json();
   if (!res.ok) throw new Error(body?.message ?? 'Failed to update rules');
   return body.rules as SystemRules;
+}
+
+export async function loadDemoMissions(): Promise<{ created: string[] }> {
+  const res = await fetch('/api/ops/demo-seed', { method: 'POST' });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to load demo missions');
+  return body;
+}
+
+export async function clearDemoMissions(): Promise<{ removed: number }> {
+  const res = await fetch('/api/ops/demo-seed', { method: 'DELETE' });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to clear demo missions');
+  return body;
 }
 
 export async function watchdogAction(action: 'force_resume_all' | 'escalate_all'): Promise<number> {

@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
 import { escalateAllBlockers, forceResumeAll, getWatchdogState } from '@/lib/ops/store';
+import { requireOpsAuth } from '@/lib/ops/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   return NextResponse.json(getWatchdogState());
 }
 
 export async function POST(req: Request) {
+  const auth = await requireOpsAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = await req.json();
     const action = String(body?.action ?? '');

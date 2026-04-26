@@ -1,6 +1,11 @@
 import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import type { JsonValue } from '@/lib/db/json';
 
+// Re-export the canonical Dispatch / Mission Control schema so consumers can
+// continue to import everything from a single entry point. New code should
+// prefer the `mc*` exports for the generic agent-orchestration data model.
+export * from '@/lib/db/dispatch-schema';
+
 // Transitional Drizzle schema. Expand this file while migrating each Prisma model.
 export const users = pgTable('User', {
   id: text('id').primaryKey(),
