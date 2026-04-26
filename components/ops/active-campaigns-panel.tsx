@@ -39,6 +39,37 @@ export function ActiveCampaignsPanel({
         </div>
       )}
 
+      {!loading && campaigns.length === 0 && (
+        <div
+          style={{
+            fontFamily: opsTheme.mono,
+            fontSize: 11,
+            color: opsTheme.textMuted,
+            padding: '28px 20px',
+            border: `1px dashed ${opsTheme.border}`,
+            borderRadius: 12,
+            textAlign: 'center',
+            lineHeight: 1.6,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: opsTheme.display,
+              fontSize: 14,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: opsTheme.text,
+              marginBottom: 6,
+            }}
+          >
+            No missions in flight
+          </div>
+          Dispatch a mission to start a durable workflow run.
+          <br />
+          Each mission spins up a WDK workflow that produces required artifacts via Vercel AI Gateway.
+        </div>
+      )}
+
       <div
         style={{
           display: 'grid',
