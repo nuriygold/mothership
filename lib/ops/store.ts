@@ -362,6 +362,217 @@ export function escalateAllBlockers(): number {
   return count;
 }
 
+// ── Demo seed (for hackathon recording / first-look demos) ──────────────────
+// Creates three richly-populated missions in different states so the /ops
+// surface has compelling visual content when there's no live workflow run.
+// Bypasses the WDK runtime intentionally — these are local fixtures, not
+// real workflow runs. Marked with `demo: true` would be cleaner, but the
+// Campaign type doesn't carry that flag; the convention here is that demo
+// missions all start with `Demo:` in their name.
+export function seedDemoMissions(): { created: string[] } {
+  resetDemoMissions(); // idempotent — clears any prior demo seed
+  const created: string[] = [];
+  const now = new Date();
+
+  // ── Mission 1: RUNNING — Adrian Shopify audit ─────────────────────────────
+  const m1 = createCampaign({
+    name: 'Demo: Shopify Catalog Audit',
+    objective:
+      'Audit live Shopify catalog for missing alt text, broken variant links, and pricing drift. Produce per-product diff and a remediation queue.',
+    leadAgentId: 'agent_adrian',
+    requiredArtifacts: ['products.md', 'action-log.md'],
+    minimumBatchSize: 5,
+    executionMode: 'STANDARD',
+  });
+  setCampaignStatus(m1.id, 'RUNNING');
+  setCampaignProgress(m1.id, 0.62);
+  upsertArtifact(m1.id, {
+    name: 'products.md',
+    rows: 184,
+    content: [
+      '# Catalog Audit · Products',
+      '',
+      '_184 products scanned · 23 issues flagged_',
+      '',
+      '| SKU | Issue | Severity |',
+      '| --- | ----- | -------- |',
+      '| ATL-TEE-001 | Missing alt text on 3 variant images | low |',
+      '| ATL-HOODIE-014 | Variant link 404 on `/black-xl` | high |',
+      '| HCY-CAP-007 | Compare-at price below sale price | medium |',
+      '| ATL-CREW-019 | SEO description exceeds 160 chars | low |',
+      '| HCY-PAN-022 | Inventory quantity mismatch (Shopify ↔ ledger) | high |',
+      '',
+      '_Continued for 18 more rows…_',
+    ].join('\n'),
+  });
+  upsertArtifact(m1.id, {
+    name: 'action-log.md',
+    rows: 4,
+    content: [
+      '# Action Log',
+      '',
+      '- `2026-04-25T14:02:11Z` — Pulled 184 products from Storefront API',
+      '- `2026-04-25T14:02:48Z` — Ran alt-text checker (mcp.image-audit)',
+      '- `2026-04-25T14:03:32Z` — Ran variant link probe on 47 products',
+      '- `2026-04-25T14:04:15Z` — Detected 6 high-severity issues — drafting remediation plan',
+    ].join('\n'),
+  });
+  for (const ev of [
+    { level: 'info' as const, message: 'Started Adrian · target=storefront.api', minus: 240 },
+    { level: 'info' as const, message: 'Fetched 184 products · 5 batches', minus: 200 },
+    { level: 'info' as const, message: 'Batch 1/5 complete · 0 issues', minus: 175 },
+    { level: 'info' as const, message: 'Batch 2/5 complete · 7 issues flagged', minus: 140 },
+    { level: 'warn' as const, message: 'Variant link probe: 6 high-severity 404s on Halcyon SKUs', minus: 95 },
+    { level: 'info' as const, message: 'Batch 3/5 complete · drafting remediation plan via AI Gateway', minus: 60 },
+    { level: 'success' as const, message: 'Wrote products.md · 184 rows', minus: 30 },
+  ]) {
+    backdateEvent(m1.id, now, ev.minus, ev.level, ev.message);
+  }
+  created.push(m1.id);
+
+  // ── Mission 2: BLOCKED — Marvin finance recon awaiting approval ───────────
+  const m2 = createCampaign({
+    name: 'Demo: Finance Recon (Apr 2026)',
+    objective:
+      'Reconcile April expense ledger against Plaid feed. Flag merchant overlaps and propose subscription cancellations needing operator approval.',
+    leadAgentId: 'agent_marvin',
+    requiredArtifacts: ['ledger-diff.md', 'blockers.md'],
+    minimumBatchSize: 5,
+    executionMode: 'STANDARD',
+  });
+  setCampaignStatus(m2.id, 'BLOCKED');
+  setCampaignProgress(m2.id, 0.48);
+  upsertArtifact(m2.id, {
+    name: 'ledger-diff.md',
+    rows: 89,
+    content: [
+      '# April Reconciliation Diff',
+      '',
+      '_89 transactions reconciled · 4 unresolved · 2 awaiting approval_',
+      '',
+      '## Unresolved',
+      '',
+      '- `$847.20` — Vercel · matches 2 candidate ledger entries',
+      '- `$129.00` — Anthropic · no ledger match',
+      '- `$58.00` — Notion · duplicate of `notion-team` charge from Mar 31',
+      '- `$24.00` — GitHub · prorated, ledger expects $19',
+      '',
+      '## Awaiting Approval',
+      '',
+      '- Cancel duplicate Notion subscription? `$58/mo` overlap with team plan',
+      '- Reclassify `$24 GitHub` from "tools" to "subscriptions"?',
+    ].join('\n'),
+  });
+  setCampaignBlocker(m2.id, {
+    type: 'pending_input',
+    summary: 'Awaiting operator approval to cancel duplicate Notion subscription',
+    requiredInput: 'approve | deny',
+    attempts: 1,
+    surfacedAt: new Date(now.getTime() - 90 * 1000).toISOString(),
+  });
+  for (const ev of [
+    { level: 'info' as const, message: 'Started Marvin · target=plaid+ledger', minus: 720 },
+    { level: 'info' as const, message: 'Fetched 142 Plaid transactions · April 1–30', minus: 680 },
+    { level: 'info' as const, message: 'Loaded ledger snapshot · 138 entries', minus: 660 },
+    { level: 'info' as const, message: 'Reconciled 89/142 · 4 unresolved', minus: 480 },
+    { level: 'warn' as const, message: 'Detected duplicate Notion subscription · $58/mo overlap', minus: 180 },
+    { level: 'warn' as const, message: 'Pausing for operator approval · cancel duplicate?', minus: 90 },
+  ]) {
+    backdateEvent(m2.id, now, ev.minus, ev.level, ev.message);
+  }
+  created.push(m2.id);
+
+  // ── Mission 3: COMPLETED — Iceman deploy ──────────────────────────────────
+  const m3 = createCampaign({
+    name: 'Demo: Mothership Deploy v0.142.0',
+    objective:
+      'Build, gate, and deploy mothership v0.142.0. Generate release notes, run smoke tests, and post deploy receipt.',
+    leadAgentId: 'agent_iceman',
+    requiredArtifacts: ['release-notes.md', 'action-log.md'],
+    minimumBatchSize: 1,
+    executionMode: 'STANDARD',
+  });
+  setCampaignStatus(m3.id, 'COMPLETED');
+  setCampaignProgress(m3.id, 1);
+  upsertArtifact(m3.id, {
+    name: 'release-notes.md',
+    rows: 12,
+    content: [
+      '# v0.142.0',
+      '',
+      '## Highlights',
+      '',
+      '- Added `/ops` mission control surface',
+      '- Wired Vercel Workflow / WDK for durable agent runs',
+      '- Mission AI calls now route through Vercel AI Gateway',
+      '',
+      '## Internal',
+      '',
+      '- Replaced Prisma with Drizzle on the Plaid + finance surface',
+      '- Stubbed 23 in-flight migration routes to 503',
+      '- Added watchdog panel for stale-mission detection',
+    ].join('\n'),
+  });
+  upsertArtifact(m3.id, {
+    name: 'action-log.md',
+    rows: 6,
+    content: [
+      '# Deploy Action Log',
+      '',
+      '- `pre-flight` · ✓ Type check passed (0 errors)',
+      '- `pre-flight` · ✓ Smoke suite passed (28/28)',
+      '- `build` · ✓ next build · 12.4s · 0 warnings',
+      '- `deploy` · ✓ Promoted to production · `mothership-7286.vercel.app`',
+      '- `verify` · ✓ Health check returned 200 in 142ms',
+    ].join('\n'),
+  });
+  for (const ev of [
+    { level: 'info' as const, message: 'Started Iceman · target=production', minus: 1860 },
+    { level: 'info' as const, message: 'Type check passed', minus: 1820 },
+    { level: 'info' as const, message: 'Smoke suite passed (28/28)', minus: 1780 },
+    { level: 'info' as const, message: 'next build complete · 12.4s', minus: 1640 },
+    { level: 'info' as const, message: 'Promoted to production', minus: 1600 },
+    { level: 'success' as const, message: 'Deploy verified · health=200 · 142ms', minus: 1580 },
+    { level: 'success' as const, message: 'Mission complete · all required artifacts produced', minus: 1575 },
+  ]) {
+    backdateEvent(m3.id, now, ev.minus, ev.level, ev.message);
+  }
+  created.push(m3.id);
+
+  return { created };
+}
+
+export function resetDemoMissions(): { removed: number } {
+  const before = campaigns.length;
+  for (let i = campaigns.length - 1; i >= 0; i--) {
+    if (campaigns[i].name.startsWith('Demo:')) {
+      runIdByCampaignId.delete(campaigns[i].id);
+      campaigns.splice(i, 1);
+    }
+  }
+  return { removed: before - campaigns.length };
+}
+
+// Internal helper: append an event with a timestamp `secondsAgo` in the past
+// so demo feeds tell a coherent timeline when first loaded.
+function backdateEvent(
+  campaignId: string,
+  now: Date,
+  secondsAgo: number,
+  level: FeedEvent['level'],
+  message: string
+): void {
+  const c = campaigns.find((x) => x.id === campaignId);
+  if (!c) return;
+  const fe: FeedEvent = {
+    id: uid('fe'),
+    timestamp: new Date(now.getTime() - secondsAgo * 1000).toISOString(),
+    level,
+    message,
+  };
+  c.feed.unshift(fe);
+}
+
 // ── Ticker ──────────────────────────────────────────────────────────────────
 export function getTickerSummary(): OpsTickerSummary {
   const active = campaigns.filter(

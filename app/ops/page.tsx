@@ -100,7 +100,12 @@ export default function OpsPage() {
 
       {/* Active campaigns */}
       <div style={{ marginBottom: 16 }}>
-        <ActiveCampaignsPanel campaigns={campaigns} agents={agents} loading={isLoading} />
+        <ActiveCampaignsPanel
+          campaigns={campaigns}
+          agents={agents}
+          loading={isLoading}
+          onMutated={() => { void mutateCampaigns(); }}
+        />
       </div>
 
       {/* Watchdog + System Rules */}
