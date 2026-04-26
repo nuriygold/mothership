@@ -116,6 +116,20 @@ export async function patchSystemRules(patch: Partial<SystemRules>): Promise<Sys
   return body.rules as SystemRules;
 }
 
+export async function loadDemoMissions(): Promise<{ created: string[] }> {
+  const res = await fetch('/api/ops/demo-seed', { method: 'POST' });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to load demo missions');
+  return body;
+}
+
+export async function clearDemoMissions(): Promise<{ removed: number }> {
+  const res = await fetch('/api/ops/demo-seed', { method: 'DELETE' });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.message ?? 'Failed to clear demo missions');
+  return body;
+}
+
 export async function watchdogAction(action: 'force_resume_all' | 'escalate_all'): Promise<number> {
   const res = await fetch('/api/ops/watchdog', {
     method: 'POST',

@@ -1,30 +1,12 @@
-import { generateVisionImage } from '@/lib/services/image-gen';
-import { prisma } from '@/lib/prisma';
+// TEMPORARY STUB — Prisma → Drizzle migration in progress.
+// See docs/drizzle-rail-migration.md.
+import { migrationStub } from '@/lib/migration-stub';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-
-  const item = await prisma.visionItem.findUnique({ where: { id: params.id } });
-  if (!item) return Response.json({ error: { message: 'Item not found' } }, { status: 404 });
-
-  let customPrompt: string | null = null;
-  try {
-    const body = await req.json();
-    customPrompt = body?.customPrompt ?? null;
-  } catch {
-    // no body or not JSON — that's fine
-  }
-
-  try {
-    const imageUrl = await generateVisionImage(params.id, item.title, item.description, customPrompt);
-    await prisma.visionItem.update({ where: { id: params.id }, data: { imageUrl } });
-    return Response.json({ imageUrl });
-  } catch (error) {
-    return Response.json(
-      { error: { message: error instanceof Error ? error.message : String(error) } },
-      { status: 500 }
-    );
-  }
-}
+export const GET = migrationStub;
+export const POST = migrationStub;
+export const PATCH = migrationStub;
+export const PUT = migrationStub;
+export const DELETE = migrationStub;
