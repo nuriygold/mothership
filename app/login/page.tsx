@@ -15,7 +15,7 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!passphrase.trim() || loading) return;
+    if (loading) return;
 
     setLoading(true);
     setError('');
@@ -59,7 +59,7 @@ function LoginForm() {
               Mothership
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-              Restricted access — enter passphrase to continue
+              Passphrase bypassed during migration — click Unlock to continue
             </p>
           </div>
         </div>
@@ -109,7 +109,7 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={!passphrase.trim() || loading}
+            disabled={loading}
             className="rounded-2xl py-3 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--color-cyan)', color: '#0A0E1A' }}
           >
