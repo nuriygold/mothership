@@ -512,6 +512,9 @@ export default function TodayPage() {
         </div>
       </div>
 
+      {/* ── Daily Briefing ── */}
+      <DailyBriefing tasksData={tasksData} campaigns={campaigns} />
+
       {/* ── KPI Row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
         <KpiBox
