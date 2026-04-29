@@ -14,8 +14,11 @@
  * as discrete scheduled events rather than a flat daily rate.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, desc, eq, gte, ilike, inArray, lt, sql as drizzleSql } from 'drizzle-orm';
 import { createFinanceEvent } from '@/lib/finance/events';
+import { randomUUID } from 'node:crypto';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -55,15 +58,17 @@ export async function detectIncomePattern(
 ): Promise<IncomeDetectionResult> {
   const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
-  const txs = await prisma.transaction.findMany({
-    where: {
-      description: { equals: description, mode: 'insensitive' },
-      amount: { gte: MIN_AMOUNT },
-      occurredAt: { gte: since },
-    },
-    orderBy: { occurredAt: 'asc' },
-    select: { occurredAt: true, amount: true },
-  });
+  const txs = await db.select({ occurredAt: schema.transactions.occurredAt, amount: schema.transactions.amount })
+    .from(schema.transactions)
+    .where(and(
+      ilike(schema.transactions.description, description),
+      gte(schema.transactions.amount, MIN_AMOUNT),
+      gte(schema.transactions.occurredAt, since)
+    ))
+    .orderBy(desc(schema.transactions.occurredAt)); // Ordered newest first in orchestrator, but here we need asc
+
+  // Correct ordering for gap calculation
+  txs.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
 
   if (txs.length < MIN_OCCURRENCES) {
     return { detected: false, reason: `Only ${txs.length} occurrence(s) — need ${MIN_OCCURRENCES}` };
@@ -126,9 +131,10 @@ export async function runIncomeDetection(description: string): Promise<void> {
     const normalizedSource = description.trim();
 
     // Already detected — don't re-analyse
-    const existing = await prisma.incomeSource.findUnique({
-      where: { source: normalizedSource },
-    });
+    const [existing] = await db.select()
+      .from(schema.incomeSources)
+      .where(eq(schema.incomeSources.source, normalizedSource))
+      .limit(1);
     if (existing) return;
 
     const result = await detectIncomePattern(description);
@@ -138,14 +144,14 @@ export async function runIncomeDetection(description: string): Promise<void> {
     }
 
     // Persist the income schedule
-    await prisma.incomeSource.create({
-      data: {
-        source: normalizedSource,
-        amount: result.avgAmount,
-        interval: result.interval,
-        avgDays: result.avgDays,
-        lastSeenDate: result.lastDate,
-      },
+    await db.insert(schema.incomeSources).values({
+      id: randomUUID(),
+      source: normalizedSource,
+      amount: result.avgAmount,
+      interval: result.interval,
+      avgDays: result.avgDays,
+      lastSeenDate: result.lastDate,
+      updatedAt: new Date(),
     });
 
     // Emit event — stays in the Action Feed for user awareness
@@ -176,16 +182,18 @@ export async function scanForIncomeSchedules(): Promise<void> {
     const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
     // Find descriptions appearing ≥ MIN_OCCURRENCES times in the lookback window
-    const candidates = await prisma.transaction.groupBy({
-      by: ['description'],
-      where: {
-        amount: { gte: MIN_AMOUNT },
-        occurredAt: { gte: since },
-        description: { not: null },
-      },
-      _count: { id: true },
-      having: { id: { _count: { gte: MIN_OCCURRENCES } } },
-    });
+    const candidates = await db.select({
+      description: schema.transactions.description,
+      count: drizzleSql<number>`count(*)`
+    })
+    .from(schema.transactions)
+    .where(and(
+      gte(schema.transactions.amount, MIN_AMOUNT),
+      gte(schema.transactions.occurredAt, since),
+      drizzleSql`${schema.transactions.description} IS NOT NULL`
+    ))
+    .groupBy(schema.transactions.description)
+    .having(drizzleSql`count(*) >= ${MIN_OCCURRENCES}`);
 
     // Run detection on each candidate that isn't already known
     await Promise.allSettled(
@@ -203,9 +211,9 @@ export async function scanForIncomeSchedules(): Promise<void> {
  * Used by the cashflow forecaster to project income forward.
  */
 export async function listIncomeSources(): Promise<DetectedIncomeSource[]> {
-  const sources = await prisma.incomeSource.findMany({
-    orderBy: { amount: 'desc' },
-  });
+  const sources = await db.select()
+    .from(schema.incomeSources)
+    .orderBy(desc(schema.incomeSources.amount));
   return sources.map((s) => ({
     id: s.id,
     source: s.source,

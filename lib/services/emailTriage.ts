@@ -1,5 +1,7 @@
-import { TaskPriority } from '@/lib/db/prisma-types';
-import { prisma } from '@/lib/prisma';
+import { TaskPriority, EmailTriageBucket, EmailTriageStatus } from '@/lib/db/enums';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
+import { eq, desc, and } from 'drizzle-orm';
 import {
   deleteGmailMessage,
   getEmailListUnsubscribeUrl,
@@ -9,7 +11,8 @@ import {
 import { createCalendarEvent } from '@/lib/services/calendar';
 import { createTask } from '@/lib/services/tasks';
 import { getV2EmailFeed, markDraftSent } from '@/lib/v2/orchestrator';
-import type { EmailTriageBucket, EmailTriageConfidence } from '@/lib/v2/types';
+import type { EmailTriageConfidence } from '@/lib/v2/types';
+import { v4 as uuidv4 } from 'uuid';
 
 type TriageEmailMeta = {
   id: string;
@@ -233,12 +236,15 @@ function buildGroupMeta(bucket: EmailTriageBucket, emails: TriageEmailMeta[]) {
 }
 
 async function classifyWriteBack(emailId: string, snippet: string): Promise<WriteBackBucket> {
-  const draft = await prisma.emailDraftSuggestion.findFirst({
-    where: { emailExternalId: emailId, source: 'ruby_custom', approvedAt: null },
-    orderBy: { createdAt: 'desc' },
+  const draft = await db.query.emailDraftSuggestions.findFirst({
+    where: and(
+      eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+      eq(schema.emailDraftSuggestions.source, 'ruby_custom')
+    ),
+    orderBy: desc(schema.emailDraftSuggestions.createdAt),
   });
 
-  if (!draft) return 'SKIP';
+  if (!draft || draft.approvedAt) return 'SKIP';
 
   const hay = `${draft.body} ${snippet}`.toLowerCase();
   if (/\b(ready to send|sounds great|let's do it|confirm|yes)\b/.test(hay)) return 'SEND';
@@ -247,14 +253,15 @@ async function classifyWriteBack(emailId: string, snippet: string): Promise<Writ
 }
 
 export async function runEmailAgentTriage(): Promise<{ created: number; dismissed: number }> {
-  const dismissed = await prisma.emailAgentTriage.updateMany({
-    where: { status: 'PENDING' },
-    data: { status: 'DENIED', deniedAt: new Date() },
-  });
+  const result = await db.update(schema.emailAgentTriages)
+    .set({ status: EmailTriageStatus.DENIED, deniedAt: new Date(), updatedAt: new Date() })
+    .where(eq(schema.emailAgentTriages.status, EmailTriageStatus.PENDING));
+  
+  const dismissed = result.rowCount ?? 0;
 
   const feed = await getV2EmailFeed();
   const emails = feed.inbox;
-  if (emails.length === 0) return { created: 0, dismissed: dismissed.count };
+  if (emails.length === 0) return { created: 0, dismissed };
 
   const grouped = new Map<EmailTriageBucket, TriageEmailMeta[]>();
   const urgency = new Map<EmailTriageBucket, number>();
@@ -300,27 +307,32 @@ export async function runEmailAgentTriage(): Promise<{ created: number; dismisse
       subGroups: bucket === 'PERSONAL' ? personalSubGroups : undefined,
     };
 
-    await prisma.emailAgentTriage.create({
-      data: {
-        bucket,
-        emailIds: bucketEmails.map((e) => e.id),
-        emailSummaries: bucketEmails as unknown as object,
-        agentName,
-        recommendation,
-        actionLabel,
-        actionPayload: payload as unknown as object,
-      },
+    await db.insert(schema.emailAgentTriages).values({
+      id: uuidv4(),
+      bucket,
+      emailIds: bucketEmails.map((e) => e.id),
+      emailSummaries: bucketEmails,
+      agentName,
+      recommendation,
+      actionLabel,
+      actionPayload: payload,
+      updatedAt: new Date(),
     });
     created += 1;
   }
 
-  return { created, dismissed: dismissed.count };
+  return { created, dismissed };
 }
 
 export async function listPendingTriages() {
   const [rows, latest] = await Promise.all([
-    prisma.emailAgentTriage.findMany({ where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' } }),
-    prisma.emailAgentTriage.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    db.query.emailAgentTriages.findMany({
+      where: eq(schema.emailAgentTriages.status, EmailTriageStatus.PENDING),
+      orderBy: desc(schema.emailAgentTriages.createdAt)
+    }),
+    db.query.emailAgentTriages.findFirst({
+      orderBy: desc(schema.emailAgentTriages.createdAt)
+    }),
   ]);
 
   return {
@@ -361,9 +373,11 @@ async function archiveEmails(emailIds: string[]) {
 }
 
 export async function approveEmailTriage(id: string): Promise<{ ok: boolean; message: string; results?: unknown[] }> {
-  const triage = await prisma.emailAgentTriage.findUnique({ where: { id } });
+  const triage = await db.query.emailAgentTriages.findFirst({
+    where: eq(schema.emailAgentTriages.id, id)
+  });
   if (!triage) return { ok: false, message: 'Triage not found' };
-  if (triage.status !== 'PENDING') return { ok: true, message: 'Already processed' };
+  if (triage.status !== EmailTriageStatus.PENDING) return { ok: true, message: 'Already processed' };
 
   const emailIds = triage.emailIds as string[];
   const summaries = triage.emailSummaries as TriageEmailMeta[];
@@ -379,12 +393,15 @@ export async function approveEmailTriage(id: string): Promise<{ ok: boolean; mes
 
         for (const emailId of sendIds) {
           try {
-            const draft = await prisma.emailDraftSuggestion.findFirst({
-              where: { emailExternalId: emailId, source: 'ruby_custom', approvedAt: null },
-              orderBy: { createdAt: 'desc' },
+            const draft = await db.query.emailDraftSuggestions.findFirst({
+              where: and(
+                eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+                eq(schema.emailDraftSuggestions.source, 'ruby_custom')
+              ),
+              orderBy: desc(schema.emailDraftSuggestions.createdAt),
             });
             const email = byId.get(emailId);
-            if (!draft || !email) {
+            if (!draft || draft.approvedAt || !email) {
               results.push({ emailId, action: 'skipped_no_draft_or_email' });
               continue;
             }
@@ -471,10 +488,14 @@ export async function approveEmailTriage(id: string): Promise<{ ok: boolean; mes
         break;
     }
 
-    await prisma.emailAgentTriage.update({
-      where: { id },
-      data: { status: 'EXECUTED', approvedAt: new Date(), executedAt: new Date() },
-    });
+    await db.update(schema.emailAgentTriages)
+      .set({
+        status: EmailTriageStatus.EXECUTED,
+        approvedAt: new Date(),
+        executedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(schema.emailAgentTriages.id, id));
 
     return { ok: true, message: 'Action executed', results };
   } catch (err) {
@@ -483,9 +504,15 @@ export async function approveEmailTriage(id: string): Promise<{ ok: boolean; mes
 }
 
 export async function denyEmailTriage(id: string): Promise<{ ok: boolean }> {
-  await prisma.emailAgentTriage.updateMany({
-    where: { id, status: 'PENDING' },
-    data: { status: 'DENIED', deniedAt: new Date() },
-  });
+  await db.update(schema.emailAgentTriages)
+    .set({
+      status: EmailTriageStatus.DENIED,
+      deniedAt: new Date(),
+      updatedAt: new Date()
+    })
+    .where(and(
+      eq(schema.emailAgentTriages.id, id),
+      eq(schema.emailAgentTriages.status, EmailTriageStatus.PENDING)
+    ));
   return { ok: true };
 }

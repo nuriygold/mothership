@@ -29,9 +29,10 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { db } from '../lib/db/client';
+import * as schema from '../lib/db/schema';
+import { eq, and, gte, lte, sql } from 'drizzle-orm';
+import crypto from 'crypto';
 
 // ---------------------------------------------------------------------------
 // CSV parser
@@ -172,7 +173,9 @@ async function main() {
     process.exit(1);
   }
 
-  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  const account = await db.query.accounts.findFirst({
+    where: eq(schema.accounts.id, accountId),
+  });
   if (!account) {
     console.error(`Error: No account found with id "${accountId}"`);
     process.exit(1);
@@ -204,7 +207,7 @@ async function main() {
     const normalized = format === 'chase' ? normalizeChase(row) : normalizeCapOne(row);
     if (!normalized) { errors++; continue; }
 
-    const { description, amount, type, category, occurredAt } = normalized;
+    const { description, amount, category, occurredAt } = normalized;
 
     // Duplicate check: same account + description + amount + same calendar day
     const dayStart = new Date(occurredAt);
@@ -212,26 +215,36 @@ async function main() {
     const dayEnd = new Date(occurredAt);
     dayEnd.setHours(23, 59, 59, 999);
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        accountId,
-        description,
-        amount,
-        occurredAt: { gte: dayStart, lte: dayEnd },
-      },
+    const existing = await db.query.transactions.findFirst({
+      where: and(
+        eq(schema.transactions.accountId, accountId),
+        eq(schema.transactions.description, description),
+        eq(schema.transactions.amount, amount),
+        gte(schema.transactions.occurredAt, dayStart),
+        lte(schema.transactions.occurredAt, dayEnd)
+      ),
     });
 
     if (existing) { skipped++; continue; }
 
-    await prisma.$transaction([
-      prisma.transaction.create({
-        data: { accountId, description, amount, category, handledByBot: bot, occurredAt },
-      }),
-      prisma.account.update({
-        where: { id: accountId },
-        data: { balance: { increment: amount } },
-      }),
-    ]);
+    await db.transaction(async (tx) => {
+      await tx.insert(schema.transactions).values({
+        id: crypto.randomUUID(),
+        accountId,
+        description,
+        amount,
+        category,
+        handledByBot: bot,
+        occurredAt,
+      });
+
+      await tx.update(schema.accounts)
+        .set({
+          balance: sql`${schema.accounts.balance} + ${amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.accounts.id, accountId));
+    });
 
     inserted++;
     console.log(`  [+] ${occurredAt.toISOString().slice(0, 10)}  ${description.slice(0, 40).padEnd(40)}  $${amount}`);
@@ -247,6 +260,5 @@ async function main() {
 main()
   .catch((err) => {
     console.error('[ingest-csv] Fatal error:', err);
-    prisma.$disconnect().finally(() => process.exit(1));
-  })
-  .finally(() => prisma.$disconnect());
+    process.exit(1);
+  });

@@ -1,6 +1,6 @@
 import { getV2TasksFeed } from '@/lib/v2/orchestrator';
 import { createTask } from '@/lib/services/tasks';
-import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
+import { TaskPriority, TaskStatus } from '@/lib/db/enums';
 
 export const dynamic = 'force-dynamic';
 

@@ -546,10 +546,10 @@ export default function TodayPage() {
       <WellnessAnchors onAllComplete={handleAnchorAllComplete} />
 
       {/* ── 3-Day Calendar Grid ── */}
-      <ThreeDayGrid events={calEvents} />
+      <ThreeDayGrid events={calEvents} initialView="day" />
 
       {/* ── SSE Stream ── */}
-      <SseLiveBox streamStatus={streamStatus} />
+      <SseLiveBox streamStatus={streamStatus} logs={sseLogs} />
 
 
       {/* ── Quick Actions ── */}
@@ -727,6 +727,53 @@ function KpiBox({
               letterSpacing: '0.1em',
               color: 'var(--ice2)',
               opacity: 0.85,
+              marginBottom: '2px',
+            }}
+          >
+            {subLabel}
+          </div>
+        )}
+        <div
+          style={{
+            fontFamily: 'var(--font-rajdhani)',
+            fontSize: '34px',
+            fontWeight: 700,
+            color: 'var(--ice-text)',
+            lineHeight: 1,
+            letterSpacing: '0.5px',
+          }}
+        >
+          {count === null ? '—' : count}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--ice-text3)',
+            marginTop: '4px',
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--ice2)',
+            marginTop: '2px',
+            opacity: 0.75,
+          }}
+        >
+          {sub}
+        </div>
+      </div>
+    </Link>
+  );
+}
+         opacity: 0.85,
               marginBottom: '2px',
             }}
           >

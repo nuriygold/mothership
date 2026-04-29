@@ -6,8 +6,11 @@ import {
   CountryCode,
   RemovedTransaction,
 } from 'plaid';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
+import { eq, and, ne, inArray, sql } from 'drizzle-orm';
 import { encrypt, decrypt } from '@/lib/utils/encryption';
+import { v4 as uuidv4 } from 'uuid';
 
 function buildClient(): PlaidApi {
   const clientId = process.env.PLAID_CLIENT_ID;
@@ -62,18 +65,21 @@ export async function exchangePublicToken(
 
   const encryptedToken = encrypt(access_token);
 
-  await prisma.plaidItem.upsert({
-    where: { itemId: item_id },
-    update: {
+  await db.insert(schema.plaidItems).values({
+    id: uuidv4(),
+    itemId: item_id,
+    accessToken: encryptedToken,
+    institutionName: institutionName ?? null,
+    status: 'good',
+    updatedAt: new Date(),
+  }).onConflictDoUpdate({
+    target: schema.plaidItems.itemId,
+    set: {
       accessToken: encryptedToken,
       institutionName: institutionName ?? undefined,
       status: 'good',
       errorCode: null,
-    },
-    create: {
-      itemId: item_id,
-      accessToken: encryptedToken,
-      institutionName: institutionName ?? null,
+      updatedAt: new Date(),
     },
   });
 
@@ -93,15 +99,20 @@ export async function syncAccountsForItem(accessToken: string): Promise<void> {
     const balance = plaidAccount.balances.current ?? plaidAccount.balances.available ?? 0;
     const name = plaidAccount.official_name ?? plaidAccount.name;
 
-    await prisma.account.upsert({
-      where: { id: plaidAccount.account_id },
-      update: { balance, name, type },
-      create: {
-        id: plaidAccount.account_id,
+    await db.insert(schema.accounts).values({
+      id: plaidAccount.account_id,
+      name,
+      type,
+      balance,
+      liquid: type !== 'investment',
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: schema.accounts.id,
+      set: {
+        balance,
         name,
         type,
-        balance,
-        liquid: type !== 'investment',
+        updatedAt: new Date(),
       },
     });
   }
@@ -110,7 +121,11 @@ export async function syncAccountsForItem(accessToken: string): Promise<void> {
 // ─── Transaction sync ─────────────────────────────────────────────────────────
 
 export async function syncTransactionsForItem(itemId: string): Promise<{ added: number; removed: number }> {
-  const item = await prisma.plaidItem.findUniqueOrThrow({ where: { itemId } });
+  const item = await db.query.plaidItems.findFirst({
+    where: eq(schema.plaidItems.itemId, itemId),
+  });
+  if (!item) throw new Error(`Plaid item ${itemId} not found`);
+
   const accessToken = decrypt(item.accessToken);
   const client = buildClient();
 
@@ -127,20 +142,25 @@ export async function syncTransactionsForItem(itemId: string): Promise<{ added: 
     const { data } = response;
 
     for (const tx of data.added) {
-      const account = await prisma.account.findUnique({ where: { id: tx.account_id } });
+      const account = await db.query.accounts.findFirst({
+        where: eq(schema.accounts.id, tx.account_id),
+      });
       if (!account) continue;
 
       const amount = -(tx.amount); // Plaid amounts: positive = debit, we store debits as negative
-      await prisma.transaction.upsert({
-        where: { id: tx.transaction_id },
-        update: { amount, description: tx.name, category: tx.personal_finance_category?.primary ?? null },
-        create: {
-          id: tx.transaction_id,
-          accountId: tx.account_id,
+      await db.insert(schema.transactions).values({
+        id: tx.transaction_id,
+        accountId: tx.account_id,
+        amount,
+        description: tx.name,
+        category: tx.personal_finance_category?.primary ?? null,
+        occurredAt: new Date(tx.date),
+      }).onConflictDoUpdate({
+        target: schema.transactions.id,
+        set: {
           amount,
           description: tx.name,
           category: tx.personal_finance_category?.primary ?? null,
-          occurredAt: new Date(tx.date),
         },
       });
       added++;
@@ -148,15 +168,18 @@ export async function syncTransactionsForItem(itemId: string): Promise<{ added: 
 
     for (const tx of data.modified) {
       const amount = -(tx.amount);
-      await prisma.transaction.updateMany({
-        where: { id: tx.transaction_id },
-        data: { amount, description: tx.name, category: tx.personal_finance_category?.primary ?? null },
-      });
+      await db.update(schema.transactions)
+        .set({
+          amount,
+          description: tx.name,
+          category: tx.personal_finance_category?.primary ?? null,
+        })
+        .where(eq(schema.transactions.id, tx.transaction_id));
     }
 
     if (data.removed.length > 0) {
       const ids = (data.removed as RemovedTransaction[]).map((r) => r.transaction_id).filter(Boolean) as string[];
-      await prisma.transaction.deleteMany({ where: { id: { in: ids } } });
+      await db.delete(schema.transactions).where(inArray(schema.transactions.id, ids));
       removed += ids.length;
     }
 
@@ -164,10 +187,14 @@ export async function syncTransactionsForItem(itemId: string): Promise<{ added: 
     hasMore = data.has_more;
   }
 
-  await prisma.plaidItem.update({
-    where: { itemId },
-    data: { cursor, status: 'good', errorCode: null },
-  });
+  await db.update(schema.plaidItems)
+    .set({
+      cursor,
+      status: 'good',
+      errorCode: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.plaidItems.itemId, itemId));
 
   // Refresh account balances after transaction sync
   await syncAccountsForItem(accessToken);
@@ -176,7 +203,9 @@ export async function syncTransactionsForItem(itemId: string): Promise<{ added: 
 }
 
 export async function syncAllItems(): Promise<{ itemId: string; added: number; removed: number; error?: string }[]> {
-  const items = await prisma.plaidItem.findMany({ where: { status: { not: 'login_required' } } });
+  const items = await db.query.plaidItems.findMany({
+    where: ne(schema.plaidItems.status, 'login_required'),
+  });
   return Promise.all(
     items.map(async (item) => {
       try {
@@ -192,7 +221,9 @@ export async function syncAllItems(): Promise<{ itemId: string; added: number; r
 // ─── Item removal ─────────────────────────────────────────────────────────────
 
 export async function removeItem(itemId: string): Promise<void> {
-  const item = await prisma.plaidItem.findUnique({ where: { itemId } });
+  const item = await db.query.plaidItems.findFirst({
+    where: eq(schema.plaidItems.itemId, itemId),
+  });
   if (!item) return;
 
   try {
@@ -202,23 +233,29 @@ export async function removeItem(itemId: string): Promise<void> {
     // If Plaid call fails we still remove locally
   }
 
-  await prisma.plaidItem.delete({ where: { itemId } });
+  await db.delete(schema.plaidItems).where(eq(schema.plaidItems.itemId, itemId));
 }
 
 // ─── Status update (called after successful re-link) ──────────────────────────
 
 export async function clearItemError(itemId: string): Promise<void> {
-  await prisma.plaidItem.update({
-    where: { itemId },
-    data: { status: 'good', errorCode: null },
-  });
+  await db.update(schema.plaidItems)
+    .set({
+      status: 'good',
+      errorCode: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.plaidItems.itemId, itemId));
 }
 
 export async function markItemError(itemId: string, errorCode: string, loginRequired: boolean): Promise<void> {
-  await prisma.plaidItem.update({
-    where: { itemId },
-    data: { status: loginRequired ? 'login_required' : 'error', errorCode },
-  });
+  await db.update(schema.plaidItems)
+    .set({
+      status: loginRequired ? 'login_required' : 'error',
+      errorCode,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.plaidItems.itemId, itemId));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -232,6 +269,9 @@ function mapPlaidType(type: string, subtype?: string): string {
 }
 
 export async function getAccessTokenForItem(itemId: string): Promise<string> {
-  const item = await prisma.plaidItem.findUniqueOrThrow({ where: { itemId } });
+  const item = await db.query.plaidItems.findFirst({
+    where: eq(schema.plaidItems.itemId, itemId),
+  });
+  if (!item) throw new Error(`Plaid item ${itemId} not found`);
   return decrypt(item.accessToken);
 }
