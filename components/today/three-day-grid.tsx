@@ -476,7 +476,3 @@ export function ThreeDayGrid({ events, initialView = '3day' }: ThreeDayGridProps
     </>
   );
 }
-/div>
-    </>
-  );
-}
