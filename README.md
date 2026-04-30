@@ -101,13 +101,12 @@ OPENCLAW_AGENT_EMERALD     # Emerald agent ID (required — others fall back to 
 
 ### Database URL precedence (important)
 ```
-PRISMA_DATABASE_URL        # Optional explicit runtime DB URL (highest priority)
-DATABASE_URL               # Primary DB URL for app + Prisma CLI
+DATABASE_URL               # Primary DB URL for app + Drizzle CLI
 DATABASE_POOLER_URL        # Legacy fallback only when DATABASE_URL is not set
 ```
 
-Use the **same database** for all three values (or leave unused values blank). Mixing different hosts/databases causes
-data drift symptoms like items showing in one surface but missing in Vision/Dispatch.
+Use the **same database** for every configured connection string (or leave unused values blank). Mixing different
+hosts/databases causes data drift symptoms like items showing in one surface but missing in Vision/Dispatch.
 
 ### Owner Auth
 ```

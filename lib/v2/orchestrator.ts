@@ -8,7 +8,6 @@ import { fetchTodayCalendarEvents } from '@/lib/services/calendar';
 import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
-import { prisma } from '@/lib/prisma';
 import { db } from '@/lib/db/client';
 import * as schema from '@/lib/db/schema';
 import { and, asc, desc, eq, ilike, inArray, lt, sql as drizzleSql } from 'drizzle-orm';

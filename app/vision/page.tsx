@@ -113,12 +113,12 @@ export default function VisionPage() {
           <p className="font-medium mb-1" style={{ color: 'var(--foreground)' }}>
             Vision Board unavailable
           </p>
-          <p style={{ color: 'var(--foreground)', opacity: 0.55 }}>
-            {error?.message ?? 'Could not load the vision board.'} The database migration may need to be applied:{' '}
-            <code className="rounded px-1" style={{ background: 'rgba(0,0,0,0.08)', fontSize: '11px' }}>
-              npx prisma migrate deploy
-            </code>
-          </p>
+            <p style={{ color: 'var(--foreground)', opacity: 0.55 }}>
+              {error?.message ?? 'Could not load the vision board.'} The database migration may need to be applied:{' '}
+              <code className="rounded px-1" style={{ background: 'rgba(0,0,0,0.08)', fontSize: '11px' }}>
+              npm run db:migrate
+              </code>
+            </p>
         </div>
       </div>
     );
