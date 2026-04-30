@@ -1,5 +1,6 @@
 import { mutateTaskFromAction } from '@/lib/v2/orchestrator';
 import { updateTask } from '@/lib/services/tasks';
+import { TaskStatus } from '@/lib/db/enums';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,7 @@ export async function PATCH(
 ) {
 
   try {
-    const body = (await req.json()) as { action?: 'start' | 'defer' | 'complete' | 'unblock' | 'assign' | 'vision_board'; ownerLogin?: string };
+    const body = (await req.json()) as { action?: 'start' | 'defer' | 'complete' | 'unblock' | 'block' | 'assign' | 'vision_board'; ownerLogin?: string };
     if (!body.action) {
       return Response.json(
         { error: { code: 'VALIDATION_ERROR', message: 'action is required' } },
@@ -48,6 +49,12 @@ export async function PATCH(
       const assigned = extractOwnerDisplayName(updatedTask, ownerLogin);
       const ownerId = extractOwnerId(updatedTask);
       return Response.json({ ok: true, assigned, ownerId });
+    }
+
+    // 'block' is handled directly here since mutateTaskFromAction does not include it
+    if (body.action === 'block') {
+      await updateTask({ id: params.id, status: TaskStatus.BLOCKED });
+      return Response.json({ ok: true });
     }
 
     await mutateTaskFromAction(params.id, body.action);
