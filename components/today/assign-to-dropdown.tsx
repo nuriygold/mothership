@@ -38,7 +38,7 @@ export function AssignToDropdown({ currentBot, taskTitle: _taskTitle, onAssign }
           style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
         >
           {ALL_BOTS.filter((b) => b !== currentBot).map((bot) => {
-            const c = BOT_COLORS[bot] ?? BOT_COLORS.Adrian;
+            const c = BOT_COLORS[bot] ?? BOT_COLORS['Drake'];
             return (
               <button
                 key={bot}
