@@ -2,7 +2,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db/client';
 import { approvals, tasks, users, workflows } from '@/lib/db/schema';
-import { ApprovalDecision } from '@/lib/db/prisma-types';
+import { ApprovalDecision } from '@/lib/db/enums';
 
 type ApprovalRow = typeof approvals.$inferSelect;
 

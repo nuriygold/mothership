@@ -14,7 +14,9 @@
  * Emits LOW_CASH_FORECAST (deduplicated) when projected balance < $1,000.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, desc, eq, gte, ilike, inArray, lt, gt, notInArray, sql as drizzleSql } from 'drizzle-orm';
 import { createFinanceEvent } from '@/lib/finance/events';
 import { listIncomeSources, scanForIncomeSchedules, type DetectedIncomeSource } from '@/lib/finance/incomeDetector';
 
@@ -108,17 +110,20 @@ function isLiquidAccount(account: { type: string; liquid: boolean }): boolean {
 }
 
 async function hasOpenLowCashEvent(): Promise<boolean> {
-  return (await prisma.financeEvent.findFirst({
-    where: { type: 'LOW_CASH_FORECAST', resolved: false },
-  })) !== null;
+  const [event] = await db.select()
+    .from(schema.financeEvents)
+    .where(and(
+      eq(schema.financeEvents.type, 'LOW_CASH_FORECAST'),
+      eq(schema.financeEvents.resolved, false)
+    ))
+    .limit(1);
+  return !!event;
 }
 
 // ─── 1. Opening balance — liquid accounts only ────────────────────────────────
 
 async function loadOpeningBalance(): Promise<{ balance: number; liquidOnly: boolean }> {
-  const accounts = await prisma.account.findMany({
-    select: { balance: true, type: true, liquid: true },
-  });
+  const accounts = await db.select({ balance: schema.accounts.balance, type: schema.accounts.type, liquid: schema.accounts.liquid }).from(schema.accounts);
 
   const liquidAccounts = accounts.filter(isLiquidAccount);
 
@@ -142,10 +147,12 @@ async function loadPayableOutflows(): Promise<Map<string, ForecastOutflow[]>> {
   const now = new Date();
   const horizon = addDays(now, FORECAST_DAYS);
 
-  const payables = await prisma.payable.findMany({
-    where: { dueDate: { gte: now, lte: horizon } },
-    select: { vendor: true, amount: true, dueDate: true, status: true },
-  });
+  const payables = await db.select({ vendor: schema.payables.vendor, amount: schema.payables.amount, dueDate: schema.payables.dueDate, status: schema.payables.status })
+    .from(schema.payables)
+    .where(and(
+      gte(schema.payables.dueDate, now),
+      lt(schema.payables.dueDate, horizon)
+    ));
 
   const map = new Map<string, ForecastOutflow[]>();
   for (const p of payables) {
@@ -163,14 +170,13 @@ async function loadPayableOutflows(): Promise<Map<string, ForecastOutflow[]>> {
 async function loadSubscriptionOutflows(): Promise<Map<string, ForecastOutflow[]>> {
   const now = new Date();
 
-  const subscriptions = await prisma.merchantProfile.findMany({
-    where: {
-      isSubscription: true,
-      subscriptionConfirmed: true,
-      billingInterval: { not: null },
-    },
-    select: { merchantName: true, billingInterval: true },
-  });
+  const subscriptions = await db.select({ merchantName: schema.merchantProfiles.merchantName, billingInterval: schema.merchantProfiles.billingInterval })
+    .from(schema.merchantProfiles)
+    .where(and(
+      eq(schema.merchantProfiles.isSubscription, true),
+      eq(schema.merchantProfiles.subscriptionConfirmed, true),
+      drizzleSql`${schema.merchantProfiles.billingInterval} IS NOT NULL`
+    ));
 
   const map = new Map<string, ForecastOutflow[]>();
 
@@ -180,14 +186,14 @@ async function loadSubscriptionOutflows(): Promise<Map<string, ForecastOutflow[]
         const intervalDays = SUBSCRIPTION_INTERVAL_DAYS[sub.billingInterval ?? ''];
         if (!intervalDays) return;
 
-        const lastTx = await prisma.transaction.findFirst({
-          where: {
-            description: { equals: sub.merchantName, mode: 'insensitive' },
-            amount: { lt: 0 },
-          },
-          orderBy: { occurredAt: 'desc' },
-          select: { amount: true, occurredAt: true },
-        });
+        const [lastTx] = await db.select({ amount: schema.transactions.amount, occurredAt: schema.transactions.occurredAt })
+          .from(schema.transactions)
+          .where(and(
+            ilike(schema.transactions.description, sub.merchantName),
+            lt(schema.transactions.amount, 0)
+          ))
+          .orderBy(desc(schema.transactions.occurredAt))
+          .limit(1);
         if (!lastTx) return;
 
         const amount = Math.abs(lastTx.amount);
@@ -256,23 +262,13 @@ function buildIncomeMap(
 async function loadResidualDailyIncome(knownSources: string[]): Promise<number> {
   const since = new Date(Date.now() - INCOME_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
-  const txs =
-    knownSources.length > 0
-      ? await prisma.transaction.findMany({
-          where: {
-            amount: { gt: 0 },
-            occurredAt: { gte: since },
-            description: { notIn: knownSources },
-          },
-          select: { amount: true },
-        })
-      : await prisma.transaction.findMany({
-          where: {
-            amount: { gt: 0 },
-            occurredAt: { gte: since },
-          },
-          select: { amount: true },
-        });
+  const txs = await db.select({ amount: schema.transactions.amount })
+    .from(schema.transactions)
+    .where(and(
+      gt(schema.transactions.amount, 0),
+      gte(schema.transactions.occurredAt, since),
+      knownSources.length > 0 ? notInArray(schema.transactions.description, knownSources) : undefined
+    ));
 
   if (txs.length === 0) return 0;
   const total = txs.reduce((s, t) => s + t.amount, 0);
@@ -283,7 +279,7 @@ async function loadResidualDailyIncome(knownSources: string[]): Promise<number> 
 
 async function loadDailySpendRate(): Promise<number> {
   try {
-    const cats = await prisma.budgetCategory.findMany({ select: { monthlyTarget: true } });
+    const cats = await db.select({ monthlyTarget: schema.budgetCategories.monthlyTarget }).from(schema.budgetCategories);
     const total = cats.reduce((s, c) => s + c.monthlyTarget, 0);
     return total > 0 ? total / 30 : 0;
   } catch {
@@ -400,13 +396,20 @@ export async function buildCashFlowForecast(): Promise<CashFlowForecast> {
 
   // Inputs needed for confidence scoring
   const confirmedPaydays = incomeSources.filter((s) => (s as { confirmed?: boolean }).confirmed).length;
-  const subscriptionCount = subscriptionMap.size > 0
-    ? (await prisma.merchantProfile.count({ where: { isSubscription: true, subscriptionConfirmed: true } }))
-    : 0;
+  
+  const [subCountResult] = await db.select({ count: drizzleSql<number>`count(*)` })
+    .from(schema.merchantProfiles)
+    .where(and(
+      eq(schema.merchantProfiles.isSubscription, true),
+      eq(schema.merchantProfiles.subscriptionConfirmed, true)
+    ));
+  const subscriptionCount = Number(subCountResult.count);
+
   const payableCount = payableMap.size;
-  const budgetCategoryCount = dailySpend > 0
-    ? (await prisma.budgetCategory.count())
-    : 0;
+  
+  const [catCountResult] = await db.select({ count: drizzleSql<number>`count(*)` })
+    .from(schema.budgetCategories);
+  const budgetCategoryCount = Number(catCountResult.count);
 
   // ── Walk the 60-day timeline ─────────────────────────────────────────────
 
@@ -480,7 +483,7 @@ export async function buildCashFlowForecast(): Promise<CashFlowForecast> {
   return {
     generatedAt: now.toISOString(),
     openingBalance: Math.round(openingBalance * 100) / 100,
-    liquidAccountsOnly: liquidOnly,
+    liquidOnly,
     days,
     lowestPoint,
     paydaySchedules,
@@ -500,7 +503,7 @@ export async function runCashFlowForecast(): Promise<CashFlowForecast> {
         lowestBalance: forecast.lowestPoint.balance,
         lowestDate: forecast.lowestPoint.date,
         openingBalance: forecast.openingBalance,
-        liquidAccountsOnly: forecast.liquidAccountsOnly,
+        liquidAccountsOnly: forecast.liquidOnly,
         threshold: LOW_CASH_THRESHOLD,
         priority: 'high',
       });

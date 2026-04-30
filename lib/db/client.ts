@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from '@/lib/db/schema';
+import * as schema from './schema';
 
 function resolveDatabaseUrl() {
   return process.env.DATABASE_URL ?? process.env.PRISMA_DATABASE_URL ?? process.env.DATABASE_POOLER_URL;

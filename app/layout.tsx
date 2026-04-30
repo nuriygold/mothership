@@ -20,16 +20,11 @@ export const viewport: Viewport = {
 };
 
 const navItems = [
-  // Sidebar anchor — directly under the Mothership logo.
+  { label: 'Dispatch', href: '/dispatch' },
+  { label: 'Scorpion', href: '/scorpion' },
   { label: 'Trophies', href: '/trophy' },
   { label: 'Today', href: '/today' },
   { label: 'Ops', href: '/ops' },
-  { label: 'Marco', href: '/marco' },
-  { label: 'Claude', href: '/claude' },
-  { label: 'Ruby', href: '/ruby' },
-  { label: 'Marvin', href: '/marvin' },
-  { label: 'Iceman', href: '/iceman' },
-  { label: 'Scorpion', href: '/scorpion' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },
@@ -37,13 +32,14 @@ const navItems = [
   { label: 'Finance', href: '/finance' },
   { label: 'Streams', href: '/revenue-streams' },
   { label: 'Activity (Log)', href: '/activity' },
-  { label: 'Drizzy', href: '/ruby' },
   { label: 'Vision', href: '/vision' },
-  { label: 'Dispatch', href: '/dispatch' },
-  { label: "Marvin's Room", href: '/marvin' },
   { label: 'Projects', href: '/projects' },
+  // Personas
   { label: 'Marco', href: '/marco' },
   { label: 'Claude', href: '/claude' },
+  { label: 'Ruby', href: '/ruby' },
+  { label: 'Marvin', href: '/marvin' },
+  { label: 'Iceman', href: '/iceman' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

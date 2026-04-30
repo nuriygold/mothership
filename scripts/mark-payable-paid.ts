@@ -22,9 +22,9 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { db } from '../lib/db/client';
+import * as schema from '../lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -45,16 +45,18 @@ async function main() {
     process.exit(1);
   }
 
-  const payable = await prisma.payable.findFirst({ where: { vendor } });
+  const payable = await db.query.payables.findFirst({
+    where: eq(schema.payables.vendor, vendor),
+  });
   if (!payable) {
     console.error(`Error: No payable found with vendor "${vendor}"`);
     process.exit(1);
   }
 
-  const updated = await prisma.payable.update({
-    where: { id: payable.id },
-    data: { status: 'paid' },
-  });
+  const [updated] = await db.update(schema.payables)
+    .set({ status: 'paid', updatedAt: new Date() })
+    .where(eq(schema.payables.id, payable.id))
+    .returning();
 
   console.log(`[mark-paid] "${updated.vendor}" → status: ${updated.status}`);
 }
@@ -62,6 +64,5 @@ async function main() {
 main()
   .catch((err) => {
     console.error('[mark-paid] Fatal error:', err);
-    prisma.$disconnect().finally(() => process.exit(1));
-  })
-  .finally(() => prisma.$disconnect());
+    process.exit(1);
+  });

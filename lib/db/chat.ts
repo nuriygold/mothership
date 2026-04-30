@@ -1,7 +1,7 @@
 import { asc, desc, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { db } from '@/lib/db/client';
-import { chatMessages, chatSessions } from '@/lib/db/schema';
+import { db } from './client';
+import { chatMessages, chatSessions } from './schema';
 
 type ChatSessionRow = typeof chatSessions.$inferSelect;
 type ChatMessageRow = typeof chatMessages.$inferSelect;

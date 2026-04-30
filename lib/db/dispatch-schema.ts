@@ -23,7 +23,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { JsonValue } from '@/lib/db/json';
+import type { JsonValue } from './json';
 
 // ── Status / type literal unions (mirrors of the SQL CHECK constraints) ──────
 export type CampaignType =

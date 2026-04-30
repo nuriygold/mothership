@@ -8,8 +8,11 @@
  *   - Once a category is set             → all future transactions auto-categorize
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, desc, eq, sql as drizzleSql } from 'drizzle-orm';
 import { runSubscriptionDetection } from '@/lib/finance/subscriptionDetector';
+import { randomUUID } from 'node:crypto';
 
 // Normalize merchant names before storing / looking up:
 // "  UBER* TRIP  " → "uber* trip"
@@ -31,19 +34,20 @@ export async function touchMerchant(rawName: string): Promise<MerchantLookupResu
   const merchantName = normalizeMerchantName(rawName);
   if (!merchantName) return { found: false };
 
-  const existing = await prisma.merchantProfile.findUnique({
-    where: { merchantName },
-  });
+  const [existing] = await db.select()
+    .from(schema.merchantProfiles)
+    .where(eq(schema.merchantProfiles.merchantName, merchantName))
+    .limit(1);
 
   if (existing) {
     // Bump count + lastSeen regardless of whether we have a category
-    const updated = await prisma.merchantProfile.update({
-      where: { merchantName },
-      data: {
-        transactionCount: { increment: 1 },
+    const [updated] = await db.update(schema.merchantProfiles)
+      .set({
+        transactionCount: drizzleSql`${schema.merchantProfiles.transactionCount} + 1`,
         lastSeen: new Date(),
-      },
-    });
+      })
+      .where(eq(schema.merchantProfiles.merchantName, merchantName))
+      .returning();
 
     // Run subscription detection once we have enough data, fire-and-forget
     if (updated.transactionCount >= 3 && !updated.isSubscription) {
@@ -58,14 +62,13 @@ export async function touchMerchant(rawName: string): Promise<MerchantLookupResu
   }
 
   // First time seeing this merchant — create stub, leave category null
-  await prisma.merchantProfile.create({
-    data: {
-      merchantName,
-      defaultCategory: null,
-      isSubscription: false,
-      transactionCount: 1,
-      lastSeen: new Date(),
-    },
+  await db.insert(schema.merchantProfiles).values({
+    id: randomUUID(),
+    merchantName,
+    defaultCategory: null,
+    isSubscription: false,
+    transactionCount: 1,
+    lastSeen: new Date(),
   });
 
   return { found: false };
@@ -82,21 +85,24 @@ export async function categorizeMerchant(
 ) {
   const merchantName = normalizeMerchantName(rawName);
 
-  return prisma.merchantProfile.upsert({
-    where: { merchantName },
-    update: {
-      defaultCategory: category.trim().toLowerCase(),
-      ...(isSubscription !== undefined && { isSubscription }),
-      lastSeen: new Date(),
-    },
-    create: {
+  return db.insert(schema.merchantProfiles)
+    .values({
+      id: randomUUID(),
       merchantName,
       defaultCategory: category.trim().toLowerCase(),
       isSubscription: isSubscription ?? false,
       transactionCount: 0,
       lastSeen: new Date(),
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: schema.merchantProfiles.merchantName,
+      set: {
+        defaultCategory: category.trim().toLowerCase(),
+        ...(isSubscription !== undefined && { isSubscription }),
+        lastSeen: new Date(),
+      }
+    })
+    .returning();
 }
 
 /**
@@ -106,9 +112,10 @@ export async function listMerchantProfiles(opts: {
   uncategorizedOnly?: boolean;
   limit?: number;
 } = {}) {
-  return prisma.merchantProfile.findMany({
-    where: opts.uncategorizedOnly ? { defaultCategory: null } : undefined,
-    orderBy: { lastSeen: 'desc' },
-    take: opts.limit ?? 100,
-  });
+  const where = opts.uncategorizedOnly ? drizzleSql`${schema.merchantProfiles.defaultCategory} IS NULL` : undefined;
+  return db.select()
+    .from(schema.merchantProfiles)
+    .where(where)
+    .orderBy(desc(schema.merchantProfiles.lastSeen))
+    .limit(opts.limit ?? 100);
 }

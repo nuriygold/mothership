@@ -22,9 +22,9 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { db } from '../lib/db/client';
+import * as schema from '../lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -51,16 +51,18 @@ async function main() {
     process.exit(1);
   }
 
-  const account = await prisma.account.findFirst({ where: { name } });
+  const account = await db.query.accounts.findFirst({
+    where: eq(schema.accounts.name, name),
+  });
   if (!account) {
     console.error(`Error: No account found with name "${name}"`);
     process.exit(1);
   }
 
-  const updated = await prisma.account.update({
-    where: { id: account.id },
-    data: { balance },
-  });
+  const [updated] = await db.update(schema.accounts)
+    .set({ balance, updatedAt: new Date() })
+    .where(eq(schema.accounts.id, account.id))
+    .returning();
 
   console.log(`[update-balance] "${updated.name}" → $${updated.balance}`);
 }
@@ -68,6 +70,5 @@ async function main() {
 main()
   .catch((err) => {
     console.error('[update-balance] Fatal error:', err);
-    prisma.$disconnect().finally(() => process.exit(1));
-  })
-  .finally(() => prisma.$disconnect());
+    process.exit(1);
+  });

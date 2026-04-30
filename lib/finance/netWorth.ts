@@ -11,7 +11,10 @@
  * Called fire-and-forget from the finance orchestrator.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, asc, desc, eq, gte, sql as drizzleSql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 
 export type NetWorthPoint = {
   date: string;       // YYYY-MM-DD
@@ -28,14 +31,16 @@ export async function recordNetWorthSnapshot(): Promise<void> {
   const dateKey = today.toISOString().slice(0, 10);
 
   // Skip if already recorded today
-  const existing = await prisma.netWorthSnapshot.findUnique({
-    where: { date: today },
-  });
+  const [existing] = await db.select()
+    .from(schema.netWorthSnapshots)
+    .where(eq(schema.netWorthSnapshots.date, today))
+    .limit(1);
   if (existing) return;
 
-  const accounts = await prisma.account.findMany({
-    select: { balance: true, type: true },
-  });
+  const accounts = await db.select({
+    balance: schema.accounts.balance,
+    type: schema.accounts.type
+  }).from(schema.accounts);
 
   let assets = 0;
   let liabilities = 0;
@@ -52,13 +57,12 @@ export async function recordNetWorthSnapshot(): Promise<void> {
 
   const netWorth = assets - liabilities;
 
-  await prisma.netWorthSnapshot.create({
-    data: {
-      date: today,
-      assets: Math.round(assets * 100) / 100,
-      liabilities: Math.round(liabilities * 100) / 100,
-      netWorth: Math.round(netWorth * 100) / 100,
-    },
+  await db.insert(schema.netWorthSnapshots).values({
+    id: randomUUID(),
+    date: today,
+    assets: Math.round(assets * 100) / 100,
+    liabilities: Math.round(liabilities * 100) / 100,
+    netWorth: Math.round(netWorth * 100) / 100,
   });
 
   console.log(
@@ -73,11 +77,11 @@ export async function getNetWorthHistory(days = 30): Promise<NetWorthPoint[]> {
   since.setDate(since.getDate() - days);
   since.setUTCHours(0, 0, 0, 0);
 
-  const rows = await prisma.netWorthSnapshot.findMany({
-    where: { date: { gte: since } },
-    orderBy: { date: 'asc' },
-    take: days,
-  });
+  const rows = await db.select()
+    .from(schema.netWorthSnapshots)
+    .where(gte(schema.netWorthSnapshots.date, since))
+    .orderBy(asc(schema.netWorthSnapshots.date))
+    .limit(days);
 
   return rows.map((r) => ({
     date: r.date.toISOString().slice(0, 10),
@@ -106,7 +110,7 @@ export async function backfillNetWorthHistory(days = 30): Promise<void> {
   now.setUTCHours(0, 0, 0, 0);
 
   // Current net worth baseline
-  const accounts = await prisma.account.findMany({ select: { balance: true, type: true } });
+  const accounts = await db.select({ balance: schema.accounts.balance, type: schema.accounts.type }).from(schema.accounts);
   let currentAssets = 0;
   let currentLiabilities = 0;
   for (const acc of accounts) {
@@ -118,19 +122,19 @@ export async function backfillNetWorthHistory(days = 30): Promise<void> {
 
   // Transactions in the lookback window (all of them, not just expenses)
   const since = new Date(now.getTime() - days * 86400000);
-  const txs = await prisma.transaction.findMany({
-    where: { occurredAt: { gte: since } },
-    orderBy: { occurredAt: 'desc' },
-    select: { amount: true, occurredAt: true },
-  });
+  const txs = await db.select({
+    amount: schema.transactions.amount,
+    occurredAt: schema.transactions.occurredAt
+  })
+  .from(schema.transactions)
+  .where(gte(schema.transactions.occurredAt, since))
+  .orderBy(desc(schema.transactions.occurredAt));
 
   // Existing snapshot dates — skip these to stay idempotent
-  const existingDates = new Set(
-    (await prisma.netWorthSnapshot.findMany({
-      where: { date: { gte: since } },
-      select: { date: true },
-    })).map((r) => r.date.toISOString().slice(0, 10))
-  );
+  const existingRows = await db.select({ date: schema.netWorthSnapshots.date })
+    .from(schema.netWorthSnapshots)
+    .where(gte(schema.netWorthSnapshots.date, since));
+  const existingDates = new Set(existingRows.map((r) => r.date.toISOString().slice(0, 10)));
 
   // Walk backwards from yesterday, reconstructing balance
   let cumulativeDelta = 0; // sum of transactions AFTER the current day
@@ -159,7 +163,6 @@ export async function backfillNetWorthHistory(days = 30): Promise<void> {
     const estimatedNetWorth = Math.round((currentNetWorth - cumulativeDelta) * 100) / 100;
     // Approximate assets/liabilities split — keep the ratio, adjust total
     const ratio = currentNetWorth !== 0 ? currentAssets / (currentAssets + currentLiabilities || 1) : 0.8;
-    const estTotal = Math.abs(estimatedNetWorth) / (2 * ratio - 1 || 1);
     const estAssets      = Math.round(Math.max(0, estimatedNetWorth + currentLiabilities - cumulativeDelta * (1 - ratio)) * 100) / 100;
     const estLiabilities = Math.round(Math.max(0, estAssets - estimatedNetWorth) * 100) / 100;
 
@@ -174,7 +177,10 @@ export async function backfillNetWorthHistory(days = 30): Promise<void> {
   // Batch insert — skip any failures (race conditions etc.)
   for (const row of inserts) {
     try {
-      await prisma.netWorthSnapshot.create({ data: row });
+      await db.insert(schema.netWorthSnapshots).values({
+        id: randomUUID(),
+        ...row
+      });
     } catch {
       // Skip duplicate / constraint errors
     }
@@ -188,7 +194,8 @@ export async function backfillNetWorthHistory(days = 30): Promise<void> {
  * Safe to call every request — the count check makes it cheap.
  */
 export async function ensureNetWorthHistory(days = 30): Promise<void> {
-  const count = await prisma.netWorthSnapshot.count();
+  const [result] = await db.select({ count: drizzleSql<number>`count(*)` }).from(schema.netWorthSnapshots);
+  const count = Number(result.count);
   if (count < 2) {
     await backfillNetWorthHistory(days);
   }

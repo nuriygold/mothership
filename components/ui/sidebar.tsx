@@ -34,12 +34,13 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/vision':           Telescope,
   '/dispatch':         Send,
   '/projects':         FolderKanban,
+  '/scorpion':         Bot, // Placeholder icon
 };
 
 // Routes that live in the top header instead of the desktop sidebar.
 // Drizzy (Ruby) moved up here with the personas. Trophies moved out — it now
 // anchors the sidebar directly under the logo.
-const HEADER_ROUTES = new Set(['/iceman', '/marvin', '/ruby', '/claude', '/marco']);
+const HEADER_ROUTES = new Set(['/iceman', '/marvin', ' /ruby', '/claude', '/marco', '/scorpion']);
 
 export function Sidebar({ items }: { items: SidebarItem[] }) {
   const pathname = usePathname();

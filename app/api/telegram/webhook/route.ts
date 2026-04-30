@@ -8,7 +8,7 @@ import { getV2FinanceOverview } from '@/lib/v2/orchestrator';
 import { createDispatchCampaign } from '@/lib/services/dispatch';
 import { createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { createVisionItem, getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
-import { TaskStatus, TaskPriority } from '@/lib/db/prisma-types';
+import { TaskStatus, TaskPriority } from '@/lib/db/enums';
 import { db } from '@/lib/db/client';
 import { payables } from '@/lib/db/schema';
 
@@ -349,7 +349,11 @@ const HELP_TEXT =
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as TelegramUpdate;
+    const url = new URL(req.url);
+    const queryBotKey = url.searchParams.get('botKey');
+    const body = (await req.json()) as any;
+    const botKey = queryBotKey || body.botKey || 'webhook';
+
     const message = body.message;
     if (!message?.text) return NextResponse.json({ ok: true });
 
@@ -363,14 +367,14 @@ export async function POST(req: Request) {
         text: message.text,
         chatId: String(chatId),
         username: message.from?.username ?? message.from?.first_name ?? 'unknown',
-        botKey: 'webhook',
+        botKey,
       },
     });
 
     const command = parseCommand(message.text);
 
     if (!command) {
-      await sendTelegramMessage({ text: 'Unrecognized input. Try /help for a full command list.', chatId: String(chatId) });
+      await sendTelegramMessage({ text: 'Unrecognized input. Try /help for a full command list.', chatId: String(chatId), botKey: botKey as any });
       return NextResponse.json({ ok: true });
     }
 
@@ -407,7 +411,17 @@ export async function POST(req: Request) {
 
     // null reply = silent drop (exec from unauthorised chat)
     if (reply !== null) {
-      await sendTelegramMessage({ text: reply, chatId: String(chatId) });
+      const result = await sendTelegramMessage({ text: reply, chatId: String(chatId), botKey: botKey as any });
+      await createAuditEvent({
+        entityType: 'telegram',
+        entityId: String(result?.result?.message_id ?? Date.now()),
+        eventType: 'telegram_outbound',
+        metadata: {
+          text: reply,
+          chatId: String(chatId),
+          botKey,
+        },
+      });
     }
 
     return NextResponse.json({ ok: true });

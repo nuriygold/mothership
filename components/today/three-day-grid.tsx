@@ -409,10 +409,10 @@ export function ThreeDayGrid({ events, initialView = '3day' }: ThreeDayGridProps
                           cursor: 'pointer',
                         }}
                       >
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: color.text, fontWeight: 500, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: color.text, fontWeight: 500, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {ev.title}
                         </div>
-                        {heightPx > 28 && ev.startTime && (
+                        {heightPx > 36 && ev.startTime && (
                           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '7px', color: color.text, opacity: 0.7, marginTop: '1px' }}>
                             {ev.startTime}{ev.endTime ? ` – ${ev.endTime}` : ''}
                           </div>
@@ -473,6 +473,10 @@ export function ThreeDayGrid({ events, initialView = '3day' }: ThreeDayGridProps
           </div>
         </div>
       </div>
+    </>
+  );
+}
+/div>
     </>
   );
 }

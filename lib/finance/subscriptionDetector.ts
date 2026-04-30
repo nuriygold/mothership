@@ -7,7 +7,9 @@
  *   2. Emits a SUBSCRIPTION_DETECTED FinanceEvent (once — not on every charge)
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, desc, eq, ilike, lt } from 'drizzle-orm';
 import { normalizeMerchantName } from '@/lib/finance/merchantProfile';
 import { createFinanceEvent } from '@/lib/finance/events';
 
@@ -43,14 +45,16 @@ export async function detectSubscription(merchantName: string): Promise<Subscrip
   const normalized = normalizeMerchantName(merchantName);
 
   // Fetch all matching transactions, oldest first
-  const txs = await prisma.transaction.findMany({
-    where: {
-      description: { equals: normalized, mode: 'insensitive' },
-      amount: { lt: 0 },  // Only expenses (negative amounts)
-    },
-    orderBy: { occurredAt: 'asc' },
-    select: { occurredAt: true, amount: true },
-  });
+  const txs = await db.select({ occurredAt: schema.transactions.occurredAt, amount: schema.transactions.amount })
+    .from(schema.transactions)
+    .where(and(
+      ilike(schema.transactions.description, normalized),
+      lt(schema.transactions.amount, 0)
+    ))
+    .orderBy(desc(schema.transactions.occurredAt));
+
+  // Correct ordering for gap calculation
+  txs.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
 
   if (txs.length < MIN_TRANSACTIONS) {
     return { detected: false, reason: `Only ${txs.length} transaction(s) — need ${MIN_TRANSACTIONS}` };
@@ -111,9 +115,10 @@ export async function detectSubscription(merchantName: string): Promise<Subscrip
  */
 export async function runSubscriptionDetection(merchantName: string): Promise<void> {
   try {
-    const profile = await prisma.merchantProfile.findUnique({
-      where: { merchantName: normalizeMerchantName(merchantName) },
-    });
+    const [profile] = await db.select()
+      .from(schema.merchantProfiles)
+      .where(eq(schema.merchantProfiles.merchantName, normalizeMerchantName(merchantName)))
+      .limit(1);
 
     if (!profile) return;
 
@@ -127,13 +132,12 @@ export async function runSubscriptionDetection(merchantName: string): Promise<vo
     }
 
     // Update profile
-    await prisma.merchantProfile.update({
-      where: { id: profile.id },
-      data: {
+    await db.update(schema.merchantProfiles)
+      .set({
         isSubscription: true,
         billingInterval: result.interval,
-      },
-    });
+      })
+      .where(eq(schema.merchantProfiles.id, profile.id));
 
     // Emit event — medium priority, stays in feed until confirmed or ignored
     await createFinanceEvent('SUBSCRIPTION_DETECTED', 'merchant-profile', {

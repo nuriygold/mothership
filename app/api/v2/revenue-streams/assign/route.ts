@@ -4,7 +4,7 @@ import { notifications, tasks } from '@/lib/db/schema';
 import { getStreamDefs } from '@/lib/v2/revenue-streams-server';
 import { publishV2Event } from '@/lib/v2/event-bus';
 import { sendTelegramMessage } from '@/lib/services/telegram';
-import { TaskPriority, TaskStatus } from '@/lib/db/prisma-types';
+import { TaskPriority, TaskStatus } from '@/lib/db/enums';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

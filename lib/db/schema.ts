@@ -1,10 +1,10 @@
 import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import type { JsonValue } from '@/lib/db/json';
+import type { JsonValue } from './json';
 
 // Re-export the canonical Dispatch / Mission Control schema so consumers can
 // continue to import everything from a single entry point. New code should
 // prefer the `mc*` exports for the generic agent-orchestration data model.
-export * from '@/lib/db/dispatch-schema';
+export * from './dispatch-schema';
 
 // Transitional Drizzle schema. Expand this file while migrating each Prisma model.
 export const users = pgTable('User', {
@@ -123,6 +123,17 @@ export const approvals = pgTable('Approval', {
   workflowCreatedAtIdx: index('Approval_workflowId_createdAt_idx').on(table.workflowId, table.createdAt),
 }));
 
+export const connectors = pgTable('Connector', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  status: text('status').default('DISCONNECTED').notNull(),
+  config: jsonb('config').$type<JsonValue>(),
+  workflowId: text('workflowId'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+});
+
 export const commands = pgTable('Command', {
   id: text('id').primaryKey(),
   input: text('input').notNull(),
@@ -180,6 +191,7 @@ export const visionCampaignLinks = pgTable('VisionCampaignLink', {
   campaignId: uuid('campaignId').notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
+  itemCampaignIdx: uniqueIndex('VisionCampaignLink_visionItemId_campaignId_key').on(table.visionItemId, table.campaignId),
   campaignIdx: index('VisionCampaignLink_campaignId_idx').on(table.campaignId),
 }));
 
@@ -189,6 +201,7 @@ export const visionFinancePlanLinks = pgTable('VisionFinancePlanLink', {
   financePlanId: uuid('financePlanId').notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
+  itemFinancePlanIdx: uniqueIndex('VisionFinancePlanLink_visionItemId_financePlanId_key').on(table.visionItemId, table.financePlanId),
   financePlanIdx: index('VisionFinancePlanLink_financePlanId_idx').on(table.financePlanId),
 }));
 
@@ -198,6 +211,7 @@ export const visionTaskLinks = pgTable('VisionTaskLink', {
   taskId: uuid('taskId').notNull(),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
+  itemTaskIdx: uniqueIndex('VisionTaskLink_visionItemId_taskId_key').on(table.visionItemId, table.taskId),
   taskIdx: index('VisionTaskLink_taskId_idx').on(table.taskId),
 }));
 
@@ -332,3 +346,160 @@ export const payables = pgTable('Payable', {
 }, (table) => ({
   statusDueIdx: index('Payable_status_dueDate_idx').on(table.status, table.dueDate),
 }));
+
+export const accounts = pgTable('Account', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  currency: text('currency').default('USD').notNull(),
+  balance: doublePrecision('balance').default(0).notNull(),
+  liquid: boolean('liquid').default(true).notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+});
+
+export const transactions = pgTable('Transaction', {
+  id: text('id').primaryKey(),
+  accountId: text('accountId').notNull(),
+  amount: doublePrecision('amount').notNull(),
+  description: text('description'),
+  category: text('category'),
+  handledByBot: text('handledByBot').default('Emerald').notNull(),
+  occurredAt: timestamp('occurredAt', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  accountIdx: index('Transaction_accountId_idx').on(table.accountId),
+  occurredAtIdx: index('Transaction_occurredAt_idx').on(table.occurredAt),
+}));
+
+import { FinancePlanStatus, FinancePlanType } from './enums';
+
+export const financePlans = pgTable('FinancePlan', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  type: text('type').$type<FinancePlanType>().default('CUSTOM').notNull(),
+  status: text('status').$type<FinancePlanStatus>().default('ACTIVE').notNull(),
+  description: text('description'),
+  goal: text('goal'),
+  currentValue: doublePrecision('currentValue'),
+  targetValue: doublePrecision('targetValue'),
+  unit: text('unit'),
+  startDate: timestamp('startDate', { withTimezone: true }),
+  targetDate: timestamp('targetDate', { withTimezone: true }),
+  managedByBot: text('managedByBot').default('adrian').notNull(),
+  milestones: jsonb('milestones').$type<JsonValue>(),
+  notes: text('notes'),
+  sourceFile: text('sourceFile'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+});
+
+export const budgetCategories = pgTable('BudgetCategory', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  monthlyTarget: doublePrecision('monthlyTarget').notNull(),
+  emoji: text('emoji'),
+});
+
+export const merchantProfiles = pgTable('MerchantProfile', {
+  id: text('id').primaryKey(),
+  merchantName: text('merchantName').notNull().unique(),
+  defaultCategory: text('defaultCategory'),
+  isSubscription: boolean('isSubscription').default(false).notNull(),
+  billingInterval: text('billingInterval'),
+  subscriptionConfirmed: boolean('subscriptionConfirmed').default(false).notNull(),
+  transactionCount: integer('transactionCount').default(0).notNull(),
+  lastSeen: timestamp('lastSeen', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const netWorthSnapshots = pgTable('NetWorthSnapshot', {
+  id: text('id').primaryKey(),
+  date: timestamp('date', { withTimezone: true }).notNull().unique(),
+  assets: doublePrecision('assets').notNull(),
+  liabilities: doublePrecision('liabilities').notNull(),
+  netWorth: doublePrecision('netWorth').notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const incomeSources = pgTable('IncomeSource', {
+  id: text('id').primaryKey(),
+  source: text('source').notNull().unique(),
+  amount: doublePrecision('amount').notNull(),
+  interval: text('interval').notNull(),
+  avgDays: integer('avgDays').notNull(),
+  lastSeenDate: timestamp('lastSeenDate', { withTimezone: true }).notNull(),
+  confirmed: boolean('confirmed').default(false).notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+});
+
+export const emailDraftSuggestions = pgTable('EmailDraftSuggestion', {
+  id: text('id').primaryKey(),
+  emailExternalId: text('emailExternalId').notNull(),
+  tone: text('tone').notNull(),
+  body: text('body').notNull(),
+  source: text('source').notNull(),
+  approvedAt: timestamp('approvedAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const emailAgentTriages = pgTable('EmailAgentTriage', {
+  id: text('id').primaryKey(),
+  bucket: text('bucket').notNull(),
+  status: text('status').default('PENDING').notNull(),
+  emailIds: jsonb('emailIds').$type<JsonValue>().notNull(),
+  emailSummaries: jsonb('emailSummaries').$type<JsonValue>().notNull(),
+  agentName: text('agentName').notNull(),
+  recommendation: text('recommendation').notNull(),
+  actionLabel: text('actionLabel').notNull(),
+  actionPayload: jsonb('actionPayload').$type<JsonValue>(),
+  approvedAt: timestamp('approvedAt', { withTimezone: true }),
+  deniedAt: timestamp('deniedAt', { withTimezone: true }),
+  executedAt: timestamp('executedAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+}, (table) => ({
+  statusCreatedAtIdx: index('EmailAgentTriage_status_createdAt_idx').on(table.status, table.createdAt),
+}));
+
+export const shoppingItems = pgTable('ShoppingItem', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  notes: text('notes'),
+  source: text('source'),
+  emailId: text('emailId'),
+  emailSubject: text('emailSubject'),
+  completedAt: timestamp('completedAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+}, (table) => ({
+  completedAtIdx: index('ShoppingItem_completedAt_idx').on(table.completedAt),
+}));
+
+export const agentInboxItems = pgTable('AgentInboxItem', {
+  id: text('id').primaryKey(),
+  agentKey: text('agentKey').notNull(),
+  note: text('note').notNull(),
+  source: text('source').default('email').notNull(),
+  bucket: text('bucket'),
+  emailIds: jsonb('emailIds').$type<JsonValue>().default([]).notNull(),
+  emailSummaries: jsonb('emailSummaries').$type<JsonValue>().default([]).notNull(),
+  status: text('status').default('PENDING').notNull(),
+  handledAt: timestamp('handledAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+}, (table) => ({
+  agentStatusCreatedAtIdx: index('AgentInboxItem_agentKey_status_createdAt_idx').on(table.agentKey, table.status, table.createdAt),
+}));
+
+export const plaidItems = pgTable('PlaidItem', {
+  id: text('id').primaryKey(),
+  itemId: text('itemId').notNull().unique(),
+  accessToken: text('accessToken').notNull(),
+  institutionName: text('institutionName'),
+  cursor: text('cursor'),
+  status: text('status').default('good').notNull(),
+  errorCode: text('errorCode'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+});

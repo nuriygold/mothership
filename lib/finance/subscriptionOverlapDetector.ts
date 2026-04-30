@@ -13,7 +13,9 @@
  * Resolves stale overlap events automatically when the overlap no longer exists.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, desc, eq, ilike, lt, sql as drizzleSql } from 'drizzle-orm';
 import { createFinanceEvent, resolveFinanceEvent } from '@/lib/finance/events';
 
 // ─── Service clusters ────────────────────────────────────────────────────────
@@ -91,27 +93,29 @@ function matchesCluster(merchantName: string, cluster: ServiceCluster): boolean 
 // ─── Deduplication ───────────────────────────────────────────────────────────
 
 async function getOpenOverlapEvent(clusterName: string) {
-  return prisma.financeEvent.findFirst({
-    where: {
-      type: 'SUBSCRIPTION_OVERLAP',
-      resolved: false,
-    },
-  }).then((event) => {
-    if (!event) return null;
-    // Check payload matches this cluster
-    const p = event.payload as Record<string, unknown>;
-    return p.clusterName === clusterName ? event : null;
-  });
+  const [event] = await db.select()
+    .from(schema.financeEvents)
+    .where(and(
+      eq(schema.financeEvents.type, 'SUBSCRIPTION_OVERLAP'),
+      eq(schema.financeEvents.resolved, false)
+    ))
+    .limit(1);
+
+  if (!event) return null;
+  // Check payload matches this cluster
+  const p = event.payload as Record<string, unknown>;
+  return p.clusterName === clusterName ? event : null;
 }
 
 // We need to search through all unresolved overlap events for this cluster
 async function findOpenOverlapEventForCluster(clusterName: string) {
-  const events = await prisma.financeEvent.findMany({
-    where: {
-      type: 'SUBSCRIPTION_OVERLAP',
-      resolved: false,
-    },
-  });
+  const events = await db.select()
+    .from(schema.financeEvents)
+    .where(and(
+      eq(schema.financeEvents.type, 'SUBSCRIPTION_OVERLAP'),
+      eq(schema.financeEvents.resolved, false)
+    ));
+
   return events.find((e) => {
     const p = e.payload as Record<string, unknown>;
     return p.clusterName === clusterName;
@@ -127,25 +131,25 @@ type OverlapResult = {
 };
 
 async function detectOverlaps(): Promise<OverlapResult[]> {
-  const confirmed = await prisma.merchantProfile.findMany({
-    where: {
-      isSubscription: true,
-      subscriptionConfirmed: true,
-    },
-    select: { merchantName: true, billingInterval: true },
-  });
+  const confirmed = await db.select({ merchantName: schema.merchantProfiles.merchantName, billingInterval: schema.merchantProfiles.billingInterval })
+    .from(schema.merchantProfiles)
+    .where(and(
+      eq(schema.merchantProfiles.isSubscription, true),
+      eq(schema.merchantProfiles.subscriptionConfirmed, true)
+    ));
 
   // Get amounts from most recent transaction for each
   const withAmounts = await Promise.all(
     confirmed.map(async (sub) => {
-      const lastTx = await prisma.transaction.findFirst({
-        where: {
-          description: { equals: sub.merchantName, mode: 'insensitive' },
-          amount: { lt: 0 },
-        },
-        orderBy: { occurredAt: 'desc' },
-        select: { amount: true },
-      });
+      const [lastTx] = await db.select({ amount: schema.transactions.amount })
+        .from(schema.transactions)
+        .where(and(
+          ilike(schema.transactions.description, sub.merchantName),
+          lt(schema.transactions.amount, 0)
+        ))
+        .orderBy(desc(schema.transactions.occurredAt))
+        .limit(1);
+
       return {
         merchantName: sub.merchantName,
         billingInterval: sub.billingInterval,
@@ -216,17 +220,17 @@ export async function scanSubscriptionOverlaps(): Promise<void> {
         const costChanged = p.monthlyCost !== overlap.monthlyCost;
 
         if (servicesChanged || costChanged) {
-          await prisma.financeEvent.update({
-            where: { id: existing.id },
-            data: {
+          await db.update(schema.financeEvents)
+            .set({
               payload: {
                 clusterName: overlap.clusterName,
                 services: overlap.services,
                 monthlyCost: overlap.monthlyCost,
                 priority: 'normal',
               },
-            },
-          });
+            })
+            .where(eq(schema.financeEvents.id, existing.id));
+
           console.log(
             `[overlapDetector:${overlap.clusterName}] updated — ${overlap.services.join(', ')}`
           );
@@ -235,9 +239,12 @@ export async function scanSubscriptionOverlaps(): Promise<void> {
     }
 
     // Auto-resolve stale events for clusters that no longer overlap
-    const allOpenOverlaps = await prisma.financeEvent.findMany({
-      where: { type: 'SUBSCRIPTION_OVERLAP', resolved: false },
-    });
+    const allOpenOverlaps = await db.select()
+      .from(schema.financeEvents)
+      .where(and(
+        eq(schema.financeEvents.type, 'SUBSCRIPTION_OVERLAP'),
+        eq(schema.financeEvents.resolved, false)
+      ));
 
     for (const event of allOpenOverlaps) {
       const p = event.payload as Record<string, unknown>;

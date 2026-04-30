@@ -11,7 +11,9 @@
  * at a time, so the Action Feed doesn't flood on repeated triggers.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { eq, and, lt, gte, desc, sql } from 'drizzle-orm';
 import { createFinanceEvent } from '@/lib/finance/events';
 import { normalizeMerchantName } from '@/lib/finance/merchantProfile';
 
@@ -54,14 +56,14 @@ async function hasOpenEvent(
   payloadKey: 'merchant' | 'categoryName',
   value: string
 ): Promise<boolean> {
-  const existing = await prisma.financeEvent.findFirst({
-    where: {
-      type,
-      resolved: false,
-      payload: { path: [payloadKey], equals: value },
-    },
+  const existing = await db.query.financeEvents.findFirst({
+    where: and(
+      eq(schema.financeEvents.type, type),
+      eq(schema.financeEvents.resolved, false),
+      sql`${schema.financeEvents.payload}->>${payloadKey} = ${value}`
+    ),
   });
-  return existing !== null;
+  return existing !== undefined;
 }
 
 // ─── 1. Unusual charge ────────────────────────────────────────────────────────
@@ -74,14 +76,14 @@ export async function detectUnusualCharge(
     const normalized = normalizeMerchantName(merchantName);
 
     // Fetch prior transactions for this merchant (excluding the most recent)
-    const history = await prisma.transaction.findMany({
-      where: {
-        description: { equals: normalized, mode: 'insensitive' },
-        amount: { lt: 0 },
-      },
-      orderBy: { occurredAt: 'desc' },
-      take: 20,
-      select: { amount: true },
+    const history = await db.query.transactions.findMany({
+      where: and(
+        sql`lower(${schema.transactions.description}) = ${normalized.toLowerCase()}`,
+        lt(schema.transactions.amount, 0)
+      ),
+      orderBy: [desc(schema.transactions.occurredAt)],
+      limit: 20,
+      columns: { amount: true },
     });
 
     // Drop the newest entry (the one we're currently evaluating)
@@ -122,20 +124,20 @@ export async function detectSubscriptionPriceChange(
     const normalized = normalizeMerchantName(merchantName);
 
     // Only run for confirmed subscription merchants
-    const profile = await prisma.merchantProfile.findUnique({
-      where: { merchantName: normalized },
-      select: { isSubscription: true, subscriptionConfirmed: true },
+    const profile = await db.query.merchantProfiles.findFirst({
+      where: eq(schema.merchantProfiles.merchantName, normalized),
+      columns: { isSubscription: true, subscriptionConfirmed: true },
     });
     if (!profile?.isSubscription) return;
 
-    const history = await prisma.transaction.findMany({
-      where: {
-        description: { equals: normalized, mode: 'insensitive' },
-        amount: { lt: 0 },
-      },
-      orderBy: { occurredAt: 'desc' },
-      take: 12,
-      select: { amount: true },
+    const history = await db.query.transactions.findMany({
+      where: and(
+        sql`lower(${schema.transactions.description}) = ${normalized.toLowerCase()}`,
+        lt(schema.transactions.amount, 0)
+      ),
+      orderBy: [desc(schema.transactions.occurredAt)],
+      limit: 12,
+      columns: { amount: true },
     });
 
     const prior = history.slice(1).map((t) => Math.abs(t.amount));
@@ -175,25 +177,26 @@ export async function detectCategorySpike(category: string): Promise<void> {
     const fourWeeksAgo = weeksAgo(4);
 
     // Current week spend for this category
-    const thisWeekTxs = await prisma.transaction.findMany({
-      where: {
-        category: { equals: category, mode: 'insensitive' },
-        amount: { lt: 0 },
-        occurredAt: { gte: weekStart },
-      },
-      select: { amount: true },
+    const thisWeekTxs = await db.query.transactions.findMany({
+      where: and(
+        sql`lower(${schema.transactions.category}) = ${category.toLowerCase()}`,
+        lt(schema.transactions.amount, 0),
+        gte(schema.transactions.occurredAt, weekStart)
+      ),
+      columns: { amount: true },
     });
     const thisWeekSpend = thisWeekTxs.reduce((s, t) => s + Math.abs(t.amount), 0);
     if (thisWeekSpend === 0) return;
 
     // Historical weekly totals — last 4 complete weeks
-    const historicalTxs = await prisma.transaction.findMany({
-      where: {
-        category: { equals: category, mode: 'insensitive' },
-        amount: { lt: 0 },
-        occurredAt: { gte: fourWeeksAgo, lt: weekStart },
-      },
-      select: { amount: true, occurredAt: true },
+    const historicalTxs = await db.query.transactions.findMany({
+      where: and(
+        sql`lower(${schema.transactions.category}) = ${category.toLowerCase()}`,
+        lt(schema.transactions.amount, 0),
+        gte(schema.transactions.occurredAt, fourWeeksAgo),
+        lt(schema.transactions.occurredAt, weekStart)
+      ),
+      columns: { amount: true, occurredAt: true },
     });
 
     if (historicalTxs.length === 0) return;

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { dispatchCampaigns, dispatchTasks } from '@/lib/db/schema';
-import { DispatchCampaignStatus } from '@/lib/db/prisma-types';
+import { DispatchCampaignStatus } from '@/lib/db/enums';
 import { createAuditEvent } from '@/lib/services/audit';
 import { writeCampaignOutput, pingTelegramCampaignComplete } from '@/lib/services/campaign-output';
 

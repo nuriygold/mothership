@@ -20,7 +20,7 @@
 import fs from 'fs';
 import path from 'path';
 
-// Load .env from project root before Prisma client initializes
+// Load .env from project root before Drizzle initialises
 const envPath = path.resolve(__dirname, '../.env');
 if (fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
@@ -33,10 +33,11 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '../lib/db/client';
+import * as schema from '../lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { FinancePlanStatus, FinancePlanType } from '../lib/db/enums';
-
-const prisma = new PrismaClient();
+import crypto from 'crypto';
 
 interface PlanFile {
   title: string;
@@ -92,12 +93,13 @@ async function ingestFile(filePath: string): Promise<void> {
   // Relative path stored as sourceFile for idempotency
   const sourceFile = path.relative(process.cwd(), absolutePath);
 
-  const existing = await prisma.financePlan.findFirst({ where: { sourceFile } });
+  const existing = await db.query.financePlans.findFirst({
+    where: eq(schema.financePlans.sourceFile, sourceFile),
+  });
 
   if (existing) {
-    await prisma.financePlan.update({
-      where: { id: existing.id },
-      data: {
+    await db.update(schema.financePlans)
+      .set({
         title: data.title,
         type: resolvePlanType(data.type),
         status: resolvePlanStatus(data.status),
@@ -111,27 +113,28 @@ async function ingestFile(filePath: string): Promise<void> {
         managedByBot: data.managedByBot ?? 'emerald',
         milestones: data.milestones ?? [],
         notes: data.notes ?? null,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.financePlans.id, existing.id));
     console.log(`[ingest] Updated plan: "${data.title}" (${sourceFile})`);
   } else {
-    await prisma.financePlan.create({
-      data: {
-        title: data.title,
-        type: resolvePlanType(data.type),
-        status: resolvePlanStatus(data.status),
-        description: data.description ?? null,
-        goal: data.goal ?? null,
-        currentValue: data.currentValue ?? null,
-        targetValue: data.targetValue ?? null,
-        unit: data.unit ?? null,
-        startDate: data.startDate ? new Date(data.startDate) : null,
-        targetDate: data.targetDate ? new Date(data.targetDate) : null,
-        managedByBot: data.managedByBot ?? 'emerald',
-        milestones: data.milestones ?? [],
-        notes: data.notes ?? null,
-        sourceFile,
-      },
+    await db.insert(schema.financePlans).values({
+      id: crypto.randomUUID(),
+      title: data.title,
+      type: resolvePlanType(data.type),
+      status: resolvePlanStatus(data.status),
+      description: data.description ?? null,
+      goal: data.goal ?? null,
+      currentValue: data.currentValue ?? null,
+      targetValue: data.targetValue ?? null,
+      unit: data.unit ?? null,
+      startDate: data.startDate ? new Date(data.startDate) : null,
+      targetDate: data.targetDate ? new Date(data.targetDate) : null,
+      managedByBot: data.managedByBot ?? 'emerald',
+      milestones: data.milestones ?? [],
+      notes: data.notes ?? null,
+      sourceFile,
+      updatedAt: new Date(),
     });
     console.log(`[ingest] Created plan: "${data.title}" (${sourceFile})`);
   }
@@ -161,11 +164,10 @@ async function main() {
     }
   }
 
-  await prisma.$disconnect();
   console.log('[ingest] Done.');
 }
 
 main().catch((err) => {
   console.error('[ingest] Fatal error:', err);
-  prisma.$disconnect().finally(() => process.exit(1));
+  process.exit(1);
 });

@@ -1,5 +1,9 @@
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
+import { desc } from 'drizzle-orm';
 
 export async function listConnectors() {
-  return prisma.connector.findMany({ orderBy: { createdAt: 'desc' } });
+  return db.query.connectors.findMany({
+    orderBy: desc(schema.connectors.createdAt),
+  });
 }

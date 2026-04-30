@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { auditEvents, commands, runs, users } from '@/lib/db/schema';
-import { CommandStatus } from '@/lib/db/prisma-types';
+import { CommandStatus } from '@/lib/db/enums';
 
 export async function listCommands(limit = 20) {
   return db
