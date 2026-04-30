@@ -343,7 +343,7 @@ export async function generateDispatchPlans(campaignId: string) {
   try {
     const result = await dispatchToOpenClaw({
       text: prompt,
-      agentId: 'adrian',
+      agentId: process.env.OPENCLAW_AGENT_DISPATCH ?? 'iceman',
       timeoutMs: 90_000,
     });
 
