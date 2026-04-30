@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Search, X, MousePointerClick, CheckCheck, ShieldX, UserRound, XCircle, ChevronDown } from 'lucide-react';
 import type { V2TaskItem, V2TasksFeed, V2DashboardPriorityItem } from '@/lib/v2/types';
@@ -138,15 +138,18 @@ export default function TasksPage() {
   // When set, only the matching status column is shown (hard filter from summary-bar chip click).
   const [statusFilter, setStatusFilter] = useState<KanbanColumnKey | null>(null);
 
-  // ── Search state ─────────────────────────────────────────────────────────────
+  // ── Search state ──────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ── Multi-select state ────────────────────────────────────────────────────────
+  // ── Multi-select state ───────────────────────────────────────────────────────
   const [selectMode, setSelectMode]           = useState(false);
   const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set());
   const [assignDropdownOpen, setAssignDropdownOpen] = useState(false);
 
-  // ── Modal state ──────────────────────────────────────────────────────────────
+  // Ref for the assign dropdown container — used to detect outside clicks.
+  const assignDropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Modal state ───────────────────────────────────────────────────────────────
   const [actionModalTask, setActionModalTask] = useState<V2TaskItem | null>(null);
   const [detailModalTask, setDetailModalTask] = useState<V2TaskItem | null>(null);
 
@@ -156,10 +159,23 @@ export default function TasksPage() {
   // ── Board ref for summary-bar scroll navigation ──────────────────────────────
   const boardRef = useRef<HTMLDivElement>(null);
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // ── Close assign dropdown when clicking outside ───────────────────────────────
+  useEffect(() => {
+    if (!assignDropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (assignDropdownRef.current && !assignDropdownRef.current.contains(e.target as Node)) {
+        setAssignDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [assignDropdownOpen]);
+
+  // ── Derived data ──────────────────────────────────────────────────────────────
   const counters = data?.counters;
-  const done     = counters
-    ? counters.tracked - counters.active - counters.blocked - (counters.queued ?? 0)
+  // Guard against negative values in case counters are momentarily inconsistent.
+  const done = counters
+    ? Math.max(0, counters.tracked - counters.active - counters.blocked - (counters.queued ?? 0))
     : 0;
   const grouped  = data ? groupIntoColumns(data, timeFilter, sort) : null;
 
@@ -264,7 +280,7 @@ export default function TasksPage() {
   }, []);
 
   const handleBulkPatch = useCallback(async (body: object) => {
-    await Promise.all(
+    const results = await Promise.all(
       [...selectedIds].map((id) =>
         fetch(`/api/v2/tasks/${id}`, {
           method: 'PATCH',
@@ -273,6 +289,10 @@ export default function TasksPage() {
         })
       )
     );
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      console.error(`[bulk patch] ${failed.length} of ${results.length} requests failed`);
+    }
     setSelectedIds(new Set());
     void mutate();
   }, [selectedIds, mutate]);
@@ -505,7 +525,7 @@ export default function TasksPage() {
           </button>
 
           {/* Assign to dropdown */}
-          <div className="relative flex-shrink-0">
+          <div ref={assignDropdownRef} className="relative flex-shrink-0">
             <button
               onClick={() => setAssignDropdownOpen((v) => !v)}
               className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-80"
