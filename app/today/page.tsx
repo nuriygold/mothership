@@ -134,6 +134,57 @@ function SseLiveBox({ streamStatus }: { streamStatus: 'live' | 'fallback' }) {
   );
 }
 
+
+// ── Daily Briefing ─────────────────────────────────────────────────────────
+function DailyBriefing({
+  tasksData,
+  campaigns,
+}: {
+  tasksData: V2TasksFeed | undefined;
+  campaigns: CampaignListItem[];
+}) {
+  const taskCount = tasksData?.today?.length ?? 0;
+  const activeCampaigns = campaigns.filter(
+    (c) => c.status && c.status !== 'COMPLETED'
+  ).length;
+
+  if (!tasksData && campaigns.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        background: 'rgba(255,255,255,0.65)',
+        border: '1px solid #b8d8e8',
+        borderRadius: '10px',
+        padding: '10px 14px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px',
+        color: 'var(--ice-text2)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        flexWrap: 'wrap',
+      }}
+    >
+      {taskCount > 0 && (
+        <span>
+          <span style={{ fontWeight: 700, color: 'var(--ice-text)' }}>{taskCount}</span>{' '}
+          task{taskCount !== 1 ? 's' : ''} due today
+        </span>
+      )}
+      {activeCampaigns > 0 && (
+        <span>
+          <span style={{ fontWeight: 700, color: 'var(--ice-text)' }}>{activeCampaigns}</span>{' '}
+          active campaign{activeCampaigns !== 1 ? 's' : ''}
+        </span>
+      )}
+      {taskCount === 0 && activeCampaigns === 0 && (
+        <span style={{ color: 'var(--ice-text3)', opacity: 0.75 }}>All clear — no urgent items today.</span>
+      )}
+    </div>
+  );
+}
+
 export default function TodayPage() {
   const { data, mutate } = useSWR<V2TodayFeed>('/api/v2/dashboard/today', fetcher, { refreshInterval: 30000 });
   const { data: calData } = useSWR<{ events: CalendarEvent[]; configured: boolean }>('/api/v2/calendar/events', fetcher, { refreshInterval: 60000 });
@@ -549,7 +600,7 @@ export default function TodayPage() {
       <ThreeDayGrid events={calEvents} initialView="day" />
 
       {/* ── SSE Stream ── */}
-      <SseLiveBox streamStatus={streamStatus} logs={sseLogs} />
+      <SseLiveBox streamStatus={streamStatus} />
 
 
       {/* ── Quick Actions ── */}
@@ -727,53 +778,6 @@ function KpiBox({
               letterSpacing: '0.1em',
               color: 'var(--ice2)',
               opacity: 0.85,
-              marginBottom: '2px',
-            }}
-          >
-            {subLabel}
-          </div>
-        )}
-        <div
-          style={{
-            fontFamily: 'var(--font-rajdhani)',
-            fontSize: '34px',
-            fontWeight: 700,
-            color: 'var(--ice-text)',
-            lineHeight: 1,
-            letterSpacing: '0.5px',
-          }}
-        >
-          {count === null ? '—' : count}
-        </div>
-        <div
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '10px',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            color: 'var(--ice-text3)',
-            marginTop: '4px',
-          }}
-        >
-          {label}
-        </div>
-        <div
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '10px',
-            color: 'var(--ice2)',
-            marginTop: '2px',
-            opacity: 0.75,
-          }}
-        >
-          {sub}
-        </div>
-      </div>
-    </Link>
-  );
-}
-         opacity: 0.85,
               marginBottom: '2px',
             }}
           >
