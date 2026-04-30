@@ -1,4 +1,0 @@
--- RevenueStreamStatus and RevenueStreamStatusLog were fully created in
--- 20260423000001_revenue_stream_models (complete schema with lastReportAt,
--- lastReport, and the log table). This migration is intentionally a no-op to
--- avoid a "relation already exists" error that blocked 000003 and 000004.

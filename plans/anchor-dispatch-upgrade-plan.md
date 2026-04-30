@@ -95,7 +95,7 @@ For each delegation, show:
 ## Phase 1 — Data model + contracts
 
 ### 1.1 Add dispatch artifacts
-Add new records (Prisma + API DTOs) for:
+Add new records (Drizzle schema + API DTOs) for:
 - `AnchorSessionPreference`
   - `timezone`, `dispatchMode`, `noLoopEnabled`, `defaultResearchPolicy`
 - `DispatchDelegation`
@@ -207,8 +207,8 @@ Add unit tests for:
 
 ## Suggested File-Level Change List
 
-1. `prisma/schema.prisma`
-   - add Anchor session/delegation/intake models.
+1. `lib/db/schema.ts`
+   - add Anchor session/delegation/intake tables.
 2. `lib/services/dispatch.ts`
    - add intake-to-delegation pipeline.
 3. `lib/v2/orchestrator.ts`
@@ -265,4 +265,3 @@ When writing Anchor system prompts, pin these constraints:
 - "Always include 2-5 concrete outcomes."
 - "Avoid research expansion unless explicitly requested."
 - "If manual mode, output exact bot commands."
-
