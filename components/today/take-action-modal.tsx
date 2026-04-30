@@ -210,7 +210,7 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
       color: botC.bg,
       textColor: botC.text,
       fn: async () => {
-        const botKey = BOT_TELEGRAM_KEY[normalizedBot] ?? BOT_TELEGRAM_KEY.Adrian ?? 'bot1';
+        const botKey = BOT_TELEGRAM_KEY[normalizedBot] ?? BOT_TELEGRAM_KEY['Drake'] ?? 'bot1';
         const res = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
