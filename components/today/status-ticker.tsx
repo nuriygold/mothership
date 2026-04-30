@@ -29,7 +29,7 @@ const SERVICE_KEYS = [
   { key: 'github',   label: 'GITHUB' },
   { key: 'zoho',     label: 'ZOHO' },
   { key: 'gmail',    label: 'GMAIL' },
-  { key: 'ruby',     label: 'OPENCLAW' },
+  { key: 'openclaw', label: 'OPENCLAW' },
   { key: 'supabase', label: 'SUPABASE' },
 ];
 
