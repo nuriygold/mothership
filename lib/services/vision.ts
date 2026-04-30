@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
-import { db } from '@/lib/db/client';
+import { db } from '../db/client';
 import {
   auditEvents,
   dispatchCampaigns,
@@ -10,8 +10,8 @@ import {
   visionItems,
   visionPillars,
   visionTaskLinks,
-} from '@/lib/db/schema';
-import { VisionPillarColor, VisionItemStatus } from '@/lib/db/prisma-types';
+} from '../db/schema';
+import { VisionPillarColor, VisionItemStatus } from '../db/enums';
 import { randomUUID } from 'node:crypto';
 
 const DEFAULT_PILLARS: Array<{

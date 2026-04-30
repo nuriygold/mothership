@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, desc, eq, gte, isNull, isNotNull, lt, or } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { auditEvents, commands, tasks } from '@/lib/db/schema';
-import { TaskStatus } from '@/lib/db/prisma-types';
+import { TaskStatus } from '@/lib/db/enums';
 import { isTaskPoolRepositorySource, listTaskPoolTasks } from '@/lib/integrations/task-pool';
 
 export const dynamic = 'force-dynamic';

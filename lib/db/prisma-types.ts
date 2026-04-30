@@ -5,11 +5,11 @@ export type InputJsonValue = any;
 export type InputJsonObject = Record<string, any>;
 
 export namespace Prisma {
-  export type JsonValue = import('@/lib/db/prisma-types').JsonValue;
-  export type JsonObject = import('@/lib/db/prisma-types').JsonObject;
-  export type JsonArray = import('@/lib/db/prisma-types').JsonArray;
-  export type InputJsonValue = import('@/lib/db/prisma-types').InputJsonValue;
-  export type InputJsonObject = import('@/lib/db/prisma-types').InputJsonObject;
+  export type JsonValue = import('./prisma-types').JsonValue;
+  export type JsonObject = import('./prisma-types').JsonObject;
+  export type JsonArray = import('./prisma-types').JsonArray;
+  export type InputJsonValue = import('./prisma-types').InputJsonValue;
+  export type InputJsonObject = import('./prisma-types').InputJsonObject;
 }
 
 function makeEnum<const T extends string>(values: readonly T[]) {

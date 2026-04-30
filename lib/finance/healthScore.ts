@@ -11,7 +11,9 @@
  *   10%  Anomaly load      — count of unresolved anomaly events
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, desc, eq, ilike, inArray, lt, sql as drizzleSql } from 'drizzle-orm';
 import type { BudgetCategoryRow } from '@/lib/finance/budget';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -34,13 +36,13 @@ const POOR_SUBSCRIPTION_RATIO      = 0.25;  // 25%+ → 0 on this component
 // Anomaly events beyond this count → 0 on the anomaly component
 const MAX_ANOMALIES = 5;
 
-const ANOMALY_TYPES = new Set([
+const ANOMALY_TYPES = [
   'UNUSUAL_CHARGE',
   'SUBSCRIPTION_PRICE_CHANGE',
   'CATEGORY_SPIKE',
   'LOW_CASH_FORECAST',
   'SUBSCRIPTION_OVERLAP',
-]);
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,8 +80,8 @@ function scoreMessage(score: number): string {
 /** 35% — Months of liquid cash vs monthly burn */
 async function liquidityScore(): Promise<number> {
   const [accounts, budgetCategories] = await Promise.all([
-    prisma.account.findMany({ select: { balance: true, type: true, liquid: true } }),
-    prisma.budgetCategory.findMany({ select: { monthlyTarget: true } }),
+    db.select({ balance: schema.accounts.balance, type: schema.accounts.type, liquid: schema.accounts.liquid }).from(schema.accounts),
+    db.select({ monthlyTarget: schema.budgetCategories.monthlyTarget }).from(schema.budgetCategories),
   ]);
 
   const liquidBalance = accounts
@@ -118,11 +120,15 @@ function budgetComplianceScore(budgetRows: BudgetCategoryRow[]): number {
 /** 15% — Subscription cost as a fraction of detected monthly income */
 async function subscriptionBurdenScore(): Promise<number> {
   const [subscriptions, incomeSources] = await Promise.all([
-    prisma.merchantProfile.findMany({
-      where: { isSubscription: true, subscriptionConfirmed: true, billingInterval: { not: null } },
-      select: { merchantName: true, billingInterval: true },
-    }),
-    prisma.incomeSource.findMany({ select: { amount: true, interval: true, avgDays: true } }),
+    db.select({ merchantName: schema.merchantProfiles.merchantName, billingInterval: schema.merchantProfiles.billingInterval })
+      .from(schema.merchantProfiles)
+      .where(and(
+        eq(schema.merchantProfiles.isSubscription, true),
+        eq(schema.merchantProfiles.subscriptionConfirmed, true),
+        drizzleSql`${schema.merchantProfiles.billingInterval} IS NOT NULL`
+      )),
+    db.select({ amount: schema.incomeSources.amount, interval: schema.incomeSources.interval })
+      .from(schema.incomeSources),
   ]);
 
   // Monthly income
@@ -144,11 +150,15 @@ async function subscriptionBurdenScore(): Promise<number> {
   let monthlySubCost = 0;
   await Promise.all(
     subscriptions.map(async (sub) => {
-      const lastTx = await prisma.transaction.findFirst({
-        where: { description: { equals: sub.merchantName, mode: 'insensitive' }, amount: { lt: 0 } },
-        orderBy: { occurredAt: 'desc' },
-        select: { amount: true },
-      });
+      const [lastTx] = await db.select({ amount: schema.transactions.amount })
+        .from(schema.transactions)
+        .where(and(
+          ilike(schema.transactions.description, sub.merchantName),
+          lt(schema.transactions.amount, 0)
+        ))
+        .orderBy(desc(schema.transactions.occurredAt))
+        .limit(1);
+
       if (lastTx) {
         const mult = SUB_MULT[sub.billingInterval ?? 'monthly'] ?? 1;
         monthlySubCost += Math.abs(lastTx.amount) * mult;
@@ -167,20 +177,25 @@ async function subscriptionBurdenScore(): Promise<number> {
 
 /** 15% — Forecast risk: 0 if LOW_CASH_FORECAST open, 100 if clear */
 async function forecastRiskScore(): Promise<number> {
-  const openAlert = await prisma.financeEvent.findFirst({
-    where: { type: 'LOW_CASH_FORECAST', resolved: false },
-  });
+  const [openAlert] = await db.select()
+    .from(schema.financeEvents)
+    .where(and(
+      eq(schema.financeEvents.type, 'LOW_CASH_FORECAST'),
+      eq(schema.financeEvents.resolved, false)
+    ))
+    .limit(1);
   return openAlert ? 0 : 100;
 }
 
 /** 10% — Unresolved anomaly events (more anomalies → lower score) */
 async function anomalyLoadScore(): Promise<number> {
-  const count = await prisma.financeEvent.count({
-    where: {
-      type: { in: [...ANOMALY_TYPES] },
-      resolved: false,
-    },
-  });
+  const [result] = await db.select({ count: drizzleSql<number>`count(*)` })
+    .from(schema.financeEvents)
+    .where(and(
+      inArray(schema.financeEvents.type, ANOMALY_TYPES),
+      eq(schema.financeEvents.resolved, false)
+    ));
+  const count = Number(result.count);
   if (count === 0) return 100;
   return clamp(100 - (count / MAX_ANOMALIES) * 100);
 }

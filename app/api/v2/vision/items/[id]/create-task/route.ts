@@ -3,7 +3,7 @@ import { tasks } from '@/lib/db/schema';
 import { createTask } from '@/lib/services/tasks';
 import { getVisionItem, linkTaskToItem } from '@/lib/services/vision';
 import { createTaskPoolIssue, isTaskPoolRepositorySource } from '@/lib/integrations/task-pool';
-import { TaskPriority } from '@/lib/db/prisma-types';
+import { TaskPriority } from '@/lib/db/enums';
 import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';

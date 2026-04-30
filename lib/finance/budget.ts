@@ -9,7 +9,9 @@
  *   3. Emitting BUDGET_THRESHOLD events when a category crosses 80% (once per month)
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, asc, desc, eq, gte, lt, sql as drizzleSql } from 'drizzle-orm';
 import { createFinanceEvent } from '@/lib/finance/events';
 
 export type BudgetCategoryRow = {
@@ -46,18 +48,26 @@ export async function calculateBudget(): Promise<BudgetCategoryRow[]> {
 
   // Fetch budget categories + all expense transactions this month in parallel
   const [categories, transactions, subscriptionMerchants] = await Promise.all([
-    prisma.budgetCategory.findMany({ orderBy: { monthlyTarget: 'desc' } }),
-    prisma.transaction.findMany({
-      where: {
-        amount: { lt: 0 },
-        occurredAt: { gte: start, lt: end },
-      },
-      select: { amount: true, category: true, description: true },
-    }),
-    prisma.merchantProfile.findMany({
-      where: { isSubscription: true, subscriptionConfirmed: true },
-      select: { merchantName: true },
-    }),
+    db.select().from(schema.budgetCategories).orderBy(desc(schema.budgetCategories.monthlyTarget)),
+    db.select({
+      amount: schema.transactions.amount,
+      category: schema.transactions.category,
+      description: schema.transactions.description,
+    })
+    .from(schema.transactions)
+    .where(and(
+      lt(schema.transactions.amount, 0),
+      gte(schema.transactions.occurredAt, start),
+      lt(schema.transactions.occurredAt, end)
+    )),
+    db.select({
+      merchantName: schema.merchantProfiles.merchantName,
+    })
+    .from(schema.merchantProfiles)
+    .where(and(
+      eq(schema.merchantProfiles.isSubscription, true),
+      eq(schema.merchantProfiles.subscriptionConfirmed, true)
+    )),
   ]);
 
   // Build a set of confirmed subscription merchant names for fast lookup
@@ -119,14 +129,15 @@ export async function checkBudgetThresholds(): Promise<void> {
       if (row.percentUsed < THRESHOLD_PCT) continue;
 
       // Check if we already have an open threshold event for this category this month
-      const existing = await prisma.financeEvent.findFirst({
-        where: {
-          type: 'BUDGET_THRESHOLD',
-          resolved: false,
-          createdAt: { gte: start },
-          payload: { path: ['categoryName'], equals: row.name },
-        },
-      });
+      const [existing] = await db.select()
+        .from(schema.financeEvents)
+        .where(and(
+          eq(schema.financeEvents.type, 'BUDGET_THRESHOLD'),
+          eq(schema.financeEvents.resolved, false),
+          gte(schema.financeEvents.createdAt, start),
+          drizzleSql`${schema.financeEvents.payload}->>'categoryName' = ${row.name}`
+        ))
+        .limit(1);
 
       if (existing) continue;
 

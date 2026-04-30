@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { asc, and, desc, eq, inArray, lte } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { auditEvents, dispatchCampaigns, dispatchTasks, projects } from '@/lib/db/schema';
-import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/prisma-types';
+import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/enums';
 import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';

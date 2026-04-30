@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db/client';
 import type { InputJsonValue } from '@/lib/db/json';
 import { submissions, tasks, users, workflowSchemaVersions, workflows, runs } from '@/lib/db/schema';
-import { WorkflowStatus, WorkflowType } from '@/lib/db/prisma-types';
+import { WorkflowStatus, WorkflowType } from '@/lib/db/enums';
 import { getTaskPoolWorkflow, isTaskPoolRepositorySource, listTaskPoolWorkflows } from '@/lib/integrations/task-pool';
 
 function keyById<T extends { id: string }>(rows: T[]) {

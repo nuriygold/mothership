@@ -111,12 +111,12 @@ export default function TelegramStreamsPage() {
                       key={event.id}
                       className="rounded-lg px-3 py-2 text-sm"
                       style={{
-                        background: event.direction === 'outbound' ? 'rgba(4,112,160,0.15)' : 'rgba(139,92,246,0.13)',
+                        background: event.direction === 'inbound' ? 'rgba(4,112,160,0.15)' : 'rgba(139,92,246,0.13)',
                         border: '1px solid var(--border)',
                       }}
                     >
                       <div className="flex items-center justify-between gap-2 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
-                        <span>{event.direction === 'outbound' ? 'Sent' : 'Received'} · chat {event.chatId}</span>
+                        <span>{event.direction === 'inbound' ? 'To Bot' : 'From Bot'} · chat {event.chatId}</span>
                         <span>{timeAgo(event.timestamp)}</span>
                       </div>
                       <p className="mt-1 whitespace-pre-wrap" style={{ color: 'var(--foreground)' }}>{event.text}</p>

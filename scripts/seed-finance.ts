@@ -31,13 +31,11 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { PrismaClient } from '@prisma/client';
-
-// Use string literals to avoid dependency on generated Prisma enum exports
-type PlanType   = 'CREDIT_SCORE' | 'BUDGET' | 'SAVINGS' | 'DEBT_PAYOFF' | 'INVESTMENT' | 'EXPENSE_REDUCTION' | 'CUSTOM';
-type PlanStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
-
-const prisma = new PrismaClient();
+import { db } from '../lib/db/client';
+import * as schema from '../lib/db/schema';
+import { eq, notInArray, sql } from 'drizzle-orm';
+import crypto from 'crypto';
+import { FinancePlanType, FinancePlanStatus } from '../lib/db/enums';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,24 +48,33 @@ async function upsertAccount(data: {
   liquid?: boolean;
   currency?: string;
 }) {
-  const existing = await prisma.account.findFirst({ where: { name: data.name } });
+  const existing = await db.query.accounts.findFirst({
+    where: eq(schema.accounts.name, data.name),
+  });
+
   if (existing) {
-    const updated = await prisma.account.update({
-      where: { id: existing.id },
-      data: { type: data.type, balance: data.balance, liquid: data.liquid ?? true },
-    });
+    const [updated] = await db.update(schema.accounts)
+      .set({
+        type: data.type,
+        balance: data.balance,
+        liquid: data.liquid ?? true,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.accounts.id, existing.id))
+      .returning();
     console.log(`  [account] updated  "${data.name}" → $${data.balance} (liquid: ${data.liquid ?? true})`);
     return updated;
   }
-  const created = await prisma.account.create({
-    data: {
-      name: data.name,
-      type: data.type,
-      balance: data.balance,
-      liquid: data.liquid ?? true,
-      currency: data.currency ?? 'USD',
-    },
-  });
+
+  const [created] = await db.insert(schema.accounts).values({
+    id: crypto.randomUUID(),
+    name: data.name,
+    type: data.type,
+    balance: data.balance,
+    liquid: data.liquid ?? true,
+    currency: data.currency ?? 'USD',
+    updatedAt: new Date(),
+  }).returning();
   console.log(`  [account] created  "${data.name}" → $${data.balance} (liquid: ${data.liquid ?? true})`);
   return created;
 }
@@ -79,37 +86,42 @@ async function upsertPayable(data: {
   description?: string;
   status?: string;
 }) {
-  const existing = await prisma.payable.findFirst({ where: { vendor: data.vendor } });
+  const existing = await db.query.payables.findFirst({
+    where: eq(schema.payables.vendor, data.vendor),
+  });
+
   if (existing) {
-    const updated = await prisma.payable.update({
-      where: { id: existing.id },
-      data: {
+    const [updated] = await db.update(schema.payables)
+      .set({
         amount: data.amount,
         dueDate: data.dueDate ?? null,
         description: data.description ?? null,
         status: data.status ?? existing.status,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.payables.id, existing.id))
+      .returning();
     console.log(`  [payable] updated  "${data.vendor}" → $${data.amount}`);
     return updated;
   }
-  const created = await prisma.payable.create({
-    data: {
-      vendor: data.vendor,
-      amount: data.amount,
-      dueDate: data.dueDate ?? null,
-      description: data.description ?? null,
-      status: data.status ?? 'pending',
-    },
-  });
+
+  const [created] = await db.insert(schema.payables).values({
+    id: crypto.randomUUID(),
+    vendor: data.vendor,
+    amount: data.amount,
+    dueDate: data.dueDate ?? null,
+    description: data.description ?? null,
+    status: data.status ?? 'pending',
+    updatedAt: new Date(),
+  }).returning();
   console.log(`  [payable] created  "${data.vendor}" → $${data.amount}`);
   return created;
 }
 
 async function upsertPlan(data: {
   title: string;
-  type: PlanType;
-  status: PlanStatus;
+  type: FinancePlanType;
+  status: FinancePlanStatus;
   goal?: string;
   currentValue?: number;
   targetValue?: number;
@@ -117,14 +129,16 @@ async function upsertPlan(data: {
   startDate?: Date;
   targetDate?: Date;
   managedByBot?: string;
-  milestones?: Array<{ label: string; targetValue?: number; completedAt?: string }>;
+  milestones?: any;
   notes?: string;
 }) {
-  const existing = await prisma.financePlan.findFirst({ where: { title: data.title } });
+  const existing = await db.query.financePlans.findFirst({
+    where: eq(schema.financePlans.title, data.title),
+  });
+
   if (existing) {
-    const updated = await prisma.financePlan.update({
-      where: { id: existing.id },
-      data: {
+    const [updated] = await db.update(schema.financePlans)
+      .set({
         type: data.type,
         status: data.status,
         goal: data.goal ?? null,
@@ -136,27 +150,30 @@ async function upsertPlan(data: {
         managedByBot: data.managedByBot ?? 'emerald',
         milestones: data.milestones ?? [],
         notes: data.notes ?? null,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.financePlans.id, existing.id))
+      .returning();
     console.log(`  [plan]    updated  "${data.title}"`);
     return updated;
   }
-  const created = await prisma.financePlan.create({
-    data: {
-      title: data.title,
-      type: data.type,
-      status: data.status,
-      goal: data.goal ?? null,
-      currentValue: data.currentValue ?? null,
-      targetValue: data.targetValue ?? null,
-      unit: data.unit ?? null,
-      startDate: data.startDate ?? null,
-      targetDate: data.targetDate ?? null,
-      managedByBot: data.managedByBot ?? 'emerald',
-      milestones: data.milestones ?? [],
-      notes: data.notes ?? null,
-    },
-  });
+
+  const [created] = await db.insert(schema.financePlans).values({
+    id: crypto.randomUUID(),
+    title: data.title,
+    type: data.type,
+    status: data.status,
+    goal: data.goal ?? null,
+    currentValue: data.currentValue ?? null,
+    targetValue: data.targetValue ?? null,
+    unit: data.unit ?? null,
+    startDate: data.startDate ?? null,
+    targetDate: data.targetDate ?? null,
+    managedByBot: data.managedByBot ?? 'emerald',
+    milestones: data.milestones ?? [],
+    notes: data.notes ?? null,
+    updatedAt: new Date(),
+  }).returning();
   console.log(`  [plan]    created  "${data.title}"`);
   return created;
 }
@@ -224,8 +241,8 @@ const PAYABLES = [
 const PLANS = [
   {
     title: 'Storage Unit Liquidation',
-    type: 'CUSTOM' as PlanType,
-    status: 'ACTIVE' as PlanStatus,
+    type: 'CUSTOM' as FinancePlanType,
+    status: 'ACTIVE' as FinancePlanStatus,
     goal: 'Generate $1,000+ by selling storage unit contents before April 19, 2026',
     currentValue: 0,
     targetValue: 1000,
@@ -242,8 +259,8 @@ const PLANS = [
   },
   {
     title: 'Cash Flow Stabilization',
-    type: 'BUDGET' as PlanType,
-    status: 'ACTIVE' as PlanStatus,
+    type: 'BUDGET' as FinancePlanType,
+    status: 'ACTIVE' as FinancePlanStatus,
     goal: 'Increase liquid cash and reduce short-term financial pressure',
     currentValue: 4503.07,
     targetValue: 5000,
@@ -266,8 +283,8 @@ const PLANS = [
   },
   {
     title: 'Mortgage Stabilization',
-    type: 'CUSTOM' as PlanType,
-    status: 'ACTIVE' as PlanStatus,
+    type: 'CUSTOM' as FinancePlanType,
+    status: 'ACTIVE' as FinancePlanStatus,
     goal: 'Maintain Planet Home mortgage current while resolving Freedom Mortgage loss mitigation outcome',
     currentValue: 1,
     targetValue: 3,
@@ -287,8 +304,8 @@ const PLANS = [
   },
   {
     title: 'Finance System Implementation',
-    type: 'CUSTOM' as PlanType,
-    status: 'ACTIVE' as PlanStatus,
+    type: 'CUSTOM' as FinancePlanType,
+    status: 'ACTIVE' as FinancePlanStatus,
     goal: 'Populate the Mothership finance dashboard with structured real-world data',
     currentValue: 1,
     targetValue: 4,
@@ -316,31 +333,28 @@ async function main() {
   const keepVendorNames  = PAYABLES.map((p) => p.vendor);
   const keepPlanTitles   = PLANS.map((p) => p.title);
 
-  const staleAccounts = await prisma.account.findMany({
-    where: { name: { notIn: keepAccountNames } },
-    select: { id: true, name: true },
+  const staleAccounts = await db.query.accounts.findMany({
+    where: notInArray(schema.accounts.name, keepAccountNames),
   });
-  const stalePayables = await prisma.payable.findMany({
-    where: { vendor: { notIn: keepVendorNames } },
-    select: { id: true, vendor: true },
+  const stalePayables = await db.query.payables.findMany({
+    where: notInArray(schema.payables.vendor, keepVendorNames),
   });
-  const stalePlans = await prisma.financePlan.findMany({
-    where: { title: { notIn: keepPlanTitles } },
-    select: { id: true, title: true },
+  const stalePlans = await db.query.financePlans.findMany({
+    where: notInArray(schema.financePlans.title, keepPlanTitles),
   });
 
   if (staleAccounts.length || stalePayables.length || stalePlans.length) {
     console.log('\n── Cleanup ───────────────────────────────────────');
     for (const a of staleAccounts) {
-      await prisma.account.delete({ where: { id: a.id } });
+      await db.delete(schema.accounts).where(eq(schema.accounts.id, a.id));
       console.log(`  [account] deleted  "${a.name}"`);
     }
     for (const p of stalePayables) {
-      await prisma.payable.delete({ where: { id: p.id } });
+      await db.delete(schema.payables).where(eq(schema.payables.id, p.id));
       console.log(`  [payable] deleted  "${p.vendor}"`);
     }
     for (const p of stalePlans) {
-      await prisma.financePlan.delete({ where: { id: p.id } });
+      await db.delete(schema.financePlans).where(eq(schema.financePlans.id, p.id));
       console.log(`  [plan]    deleted  "${p.title}"`);
     }
   }
@@ -361,18 +375,18 @@ async function main() {
   }
 
   console.log('\n── Summary ──────────────────────────────────────');
-  const accounts  = await prisma.account.count();
-  const payables  = await prisma.payable.count();
-  const plans     = await prisma.financePlan.count();
-  console.log(`  Accounts:  ${accounts}`);
-  console.log(`  Payables:  ${payables}`);
-  console.log(`  Plans:     ${plans}`);
+  const accountsResult = await db.select({ count: sql<number>`count(*)` }).from(schema.accounts);
+  const payablesResult = await db.select({ count: sql<number>`count(*)` }).from(schema.payables);
+  const plansResult    = await db.select({ count: sql<number>`count(*)` }).from(schema.financePlans);
+  
+  console.log(`  Accounts:  ${accountsResult[0].count}`);
+  console.log(`  Payables:  ${payablesResult[0].count}`);
+  console.log(`  Plans:     ${plansResult[0].count}`);
   console.log('\n[seed] Done.\n');
 }
 
 main()
   .catch((err) => {
     console.error('[seed] Fatal error:', err);
-    prisma.$disconnect().finally(() => process.exit(1));
-  })
-  .finally(() => prisma.$disconnect());
+    process.exit(1);
+  });

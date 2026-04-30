@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { TaskPriority, TaskStatus, VisionItemStatus, VisionPillarColor } from '@/lib/db/prisma-types';
+import { TaskPriority, TaskStatus, VisionItemStatus, VisionPillarColor } from '@/lib/db/enums';
 import { listTasks, updateTask } from '@/lib/services/tasks';
 import { isTaskPoolRepositorySource, addVisionBoardLabelToIssue } from '@/lib/integrations/task-pool';
 import { listFinancePlans } from '@/lib/services/finance';
@@ -9,6 +9,9 @@ import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
 import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/client';
+import * as schema from '@/lib/db/schema';
+import { and, asc, desc, eq, ilike, inArray, lt, sql as drizzleSql } from 'drizzle-orm';
 import { getOrCreateVisionBoard, listVisionPillars } from '@/lib/services/vision';
 import type {
   BotRouteKey,
@@ -272,15 +275,16 @@ async function generateRubyDraft(emailId: string, subject: string, preview: stri
   rubyDraftStore.set(emailId, rubyDraft);
   // Persist to DB so draft survives serverless cold starts
   try {
-    await prisma.emailDraftSuggestion.create({
-      data: {
-        emailExternalId: emailId,
-        tone: 'Ruby Custom',
-        body,
-        source: 'ruby_custom',
-      },
+    await db.insert(schema.emailDraftSuggestions).values({
+      id: crypto.randomUUID(),
+      emailExternalId: emailId,
+      tone: 'Ruby Custom',
+      body,
+      source: 'ruby_custom',
     });
-  } catch { /* best-effort — in-memory cache is still populated */ }
+  } catch (err) {
+    console.warn('[generateRubyDraft] failed to persist draft:', err instanceof Error ? err.message : String(err));
+  }
   publishV2Event(`email-drafts:${emailId}`, 'draft.generated', {
     emailId,
     draft: rubyDraft,
@@ -292,10 +296,10 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
   const tasks = (await listTasks()) as any[];
 
   // Build taskId → visionItemId map for badge display
-  // Wrapped in try-catch: DB may be unreachable when using task-pool source
-  let visionLinks: { taskId: string; visionItemId: string }[] = [];
+  let visionLinks: Array<{ taskId: string; visionItemId: string }> = [];
   try {
-    visionLinks = await prisma.visionTaskLink.findMany();
+    const rawLinks = await db.select().from(schema.visionTaskLinks);
+    visionLinks = rawLinks.map(l => ({ taskId: String(l.taskId), visionItemId: String(l.visionItemId) }));
   } catch (err) {
     console.warn('[getV2TasksFeed] visionTaskLink query failed, skipping vision badges:', err instanceof Error ? err.message : String(err));
   }
@@ -462,7 +466,7 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
   await Promise.all([
     (async () => {
       try {
-        accounts = await prisma.account.findMany({ orderBy: { createdAt: 'asc' } });
+        accounts = await db.select().from(schema.accounts).orderBy(asc(schema.accounts.createdAt));
       } catch (error) {
         systemStatus = 'partial'; console.error('[finance_adapter:accounts]', error);
         accounts = [];
@@ -470,11 +474,11 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     })(),
     (async () => {
       try {
-        payables = await prisma.payable.findMany({
-          where: { status: { in: ['pending', 'overdue'], mode: 'insensitive' } },
-          orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
-          take: 10,
-        });
+        payables = await db.select()
+          .from(schema.payables)
+          .where(inArray(drizzleSql`lower(${schema.payables.status})`, ['pending', 'overdue']))
+          .orderBy(asc(schema.payables.dueDate), asc(schema.payables.createdAt))
+          .limit(10);
       } catch (error) {
         systemStatus = 'partial'; console.error('[finance_adapter:payables]', error);
         payables = [];
@@ -482,11 +486,23 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     })(),
     (async () => {
       try {
-        transactions = await prisma.transaction.findMany({
-          orderBy: { occurredAt: 'desc' },
-          take: 20,
-          include: { account: true },
-        });
+        transactions = await db.select({
+          id: schema.transactions.id,
+          accountId: schema.transactions.accountId,
+          amount: schema.transactions.amount,
+          description: schema.transactions.description,
+          category: schema.transactions.category,
+          handledByBot: schema.transactions.handledByBot,
+          occurredAt: schema.transactions.occurredAt,
+          createdAt: schema.transactions.createdAt,
+          account: {
+            name: schema.accounts.name,
+          }
+        })
+        .from(schema.transactions)
+        .leftJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
+        .orderBy(desc(schema.transactions.occurredAt))
+        .limit(20);
       } catch (error) {
         systemStatus = 'partial'; console.error('[finance_adapter:transactions]', error);
         transactions = [];
@@ -502,11 +518,11 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     })(),
     (async () => {
       try {
-        events = await prisma.financeEvent.findMany({
-          where: { resolved: false },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        });
+        events = await db.select()
+          .from(schema.financeEvents)
+          .where(eq(schema.financeEvents.resolved, false))
+          .orderBy(desc(schema.financeEvents.createdAt))
+          .limit(20);
       } catch (error) {
         systemStatus = 'partial'; console.error('[finance_adapter:events]', error);
         events = [];
@@ -514,14 +530,13 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
     })(),
     (async () => {
       try {
-        [merchantTotal, merchantsUncategorized] = await Promise.all([
-          prisma.merchantProfile.count(),
-          prisma.merchantProfile.findMany({
-            where: { defaultCategory: null },
-            orderBy: { transactionCount: 'desc' },
-            take: 10,
-          }),
-        ]);
+        const [totalCount] = await db.select({ count: drizzleSql<number>`count(*)` }).from(schema.merchantProfiles);
+        merchantTotal = Number(totalCount.count);
+        merchantsUncategorized = await db.select()
+          .from(schema.merchantProfiles)
+          .where(drizzleSql`${schema.merchantProfiles.defaultCategory} IS NULL`)
+          .orderBy(desc(schema.merchantProfiles.transactionCount))
+          .limit(10);
       } catch (error) {
         systemStatus = 'partial'; console.error('[finance_adapter:merchants]', error);
       }
@@ -563,18 +578,34 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
         const INTERVAL_DAYS: Record<string, number> = {
           weekly: 7, biweekly: 14, monthly: 30, quarterly: 91, annual: 365,
         };
-        const confirmed = await prisma.merchantProfile.findMany({
-          where: { isSubscription: true, subscriptionConfirmed: true, billingInterval: { not: null } },
-          select: { id: true, merchantName: true, billingInterval: true, defaultCategory: true },
-        });
+        const confirmed = await db.select({
+          id: schema.merchantProfiles.id,
+          merchantName: schema.merchantProfiles.merchantName,
+          billingInterval: schema.merchantProfiles.billingInterval,
+          defaultCategory: schema.merchantProfiles.defaultCategory,
+        })
+        .from(schema.merchantProfiles)
+        .where(and(
+          eq(schema.merchantProfiles.isSubscription, true),
+          eq(schema.merchantProfiles.subscriptionConfirmed, true),
+          drizzleSql`${schema.merchantProfiles.billingInterval} IS NOT NULL`
+        ));
+
         subscriptions = (
           await Promise.all(
             confirmed.map(async (sub) => {
-              const lastTx = await prisma.transaction.findFirst({
-                where: { description: { equals: sub.merchantName, mode: 'insensitive' }, amount: { lt: 0 } },
-                orderBy: { occurredAt: 'desc' },
-                select: { amount: true, occurredAt: true },
-              });
+              const [lastTx] = await db.select({
+                amount: schema.transactions.amount,
+                occurredAt: schema.transactions.occurredAt,
+              })
+              .from(schema.transactions)
+              .where(and(
+                ilike(schema.transactions.description, sub.merchantName),
+                lt(schema.transactions.amount, 0)
+              ))
+              .orderBy(desc(schema.transactions.occurredAt))
+              .limit(1);
+
               const amount = lastTx ? Math.abs(lastTx.amount) : 0;
               const intervalDays = INTERVAL_DAYS[sub.billingInterval ?? ''] ?? 30;
               const nextChargeDate = lastTx
@@ -651,15 +682,21 @@ export async function getV2FinanceOverview(): Promise<V2FinanceOverviewFeed> {
   let visionPlanLinkMap = new Map<string, string>(); // financePlanId → visionItemTitle
   if (planIds.length > 0) {
     try {
-      const visionLinks = await prisma.visionFinancePlanLink.findMany({
-        where: { financePlanId: { in: planIds } },
-        include: { visionItem: { select: { title: true } } },
-      });
+      const visionLinks = await db.select({
+        financePlanId: schema.visionFinancePlanLinks.financePlanId,
+        title: schema.visionItems.title,
+      })
+      .from(schema.visionFinancePlanLinks)
+      .leftJoin(schema.visionItems, eq(schema.visionFinancePlanLinks.visionItemId, schema.visionItems.id))
+      .where(inArray(schema.visionFinancePlanLinks.financePlanId, planIds));
+
       for (const link of visionLinks) {
-        visionPlanLinkMap.set(link.financePlanId, link.visionItem.title);
+        if (link.title) {
+          visionPlanLinkMap.set(link.financePlanId, link.title);
+        }
       }
-    } catch {
-      // non-fatal — vision badge is optional
+    } catch (err) {
+      console.warn('[getV2FinanceOverview] vision plan link query failed:', err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -942,9 +979,11 @@ export async function mutateTaskFromAction(taskId: string, action: 'start' | 'de
     await updateTask({ id: taskId, status: TaskStatus.DONE });
     if (!isTaskPoolRepositorySource()) {
       try {
-        await prisma.task.update({ where: { id: taskId }, data: { completedAt: new Date() } });
-      } catch {
-        // updateTask already succeeded; stamping completedAt is best-effort.
+        await db.update(schema.tasks)
+          .set({ completedAt: new Date() })
+          .where(eq(schema.tasks.id, taskId));
+      } catch (err) {
+        console.warn('[mutateTaskFromAction] failed to stamp completedAt:', err instanceof Error ? err.message : String(err));
       }
     }
   } else if (action === 'unblock') {
@@ -971,10 +1010,16 @@ export async function getRubyDraftWithFallback(emailId: string): Promise<V2Email
   if (mem) return mem;
 
   try {
-    const record = await prisma.emailDraftSuggestion.findFirst({
-      where: { emailExternalId: emailId, source: 'ruby_custom', approvedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [record] = await db.select()
+      .from(schema.emailDraftSuggestions)
+      .where(and(
+        eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+        eq(schema.emailDraftSuggestions.source, 'ruby_custom'),
+        drizzleSql`${schema.emailDraftSuggestions.approvedAt} IS NULL`
+      ))
+      .orderBy(desc(schema.emailDraftSuggestions.createdAt))
+      .limit(1);
+
     if (!record) return undefined;
     const draft: V2EmailDraft = {
       id: `${emailId}-ruby-custom`,
@@ -1001,10 +1046,12 @@ export async function markDraftSent(emailId: string, draftId?: string): Promise<
   pendingRubyDrafts.delete(emailId);
 
   try {
-    await prisma.emailDraftSuggestion.updateMany({
-      where: { emailExternalId: emailId, approvedAt: null },
-      data: { approvedAt: new Date() },
-    });
+    await db.update(schema.emailDraftSuggestions)
+      .set({ approvedAt: new Date() })
+      .where(and(
+        eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+        drizzleSql`${schema.emailDraftSuggestions.approvedAt} IS NULL`
+      ));
   } catch { /* best-effort */ }
 }
 
@@ -1041,17 +1088,19 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
   // Batch fetch campaigns, plans, dispatch task counts, and linked tasks
   const [campaigns, plans, taskGroupCounts, linkedTaskRecords] = await Promise.all([
     allCampaignIds.length
-      ? prisma.dispatchCampaign.findMany({ where: { id: { in: allCampaignIds } } })
+      ? db.select().from(schema.dispatchCampaigns).where(inArray(schema.dispatchCampaigns.id, allCampaignIds))
       : Promise.resolve([]),
     allPlanIds.length
-      ? prisma.financePlan.findMany({ where: { id: { in: allPlanIds } } })
+      ? db.select().from(schema.financePlans).where(inArray(schema.financePlans.id, allPlanIds))
       : Promise.resolve([]),
     allCampaignIds.length
-      ? prisma.dispatchTask.groupBy({
-          by: ['campaignId'],
-          where: { campaignId: { in: allCampaignIds } },
-          _count: { id: true },
+      ? db.select({
+          campaignId: schema.dispatchTasks.campaignId,
+          count: drizzleSql<number>`count(*)`
         })
+        .from(schema.dispatchTasks)
+        .where(inArray(schema.dispatchTasks.campaignId, allCampaignIds))
+        .groupBy(schema.dispatchTasks.campaignId)
       : Promise.resolve([]),
     allTaskIds.length
       ? listTasks().then(all => (all as any[]).filter(t => allTaskIds.includes(String(t.id))))
@@ -1059,19 +1108,24 @@ export async function getV2VisionBoardFeed(): Promise<V2VisionBoardFeed> {
   ]);
 
   const doneTaskCounts = allCampaignIds.length
-    ? await prisma.dispatchTask.groupBy({
-        by: ['campaignId'],
-        where: { campaignId: { in: allCampaignIds }, status: 'DONE' },
-        _count: { id: true },
+    ? await db.select({
+        campaignId: schema.dispatchTasks.campaignId,
+        count: drizzleSql<number>`count(*)`
       })
+      .from(schema.dispatchTasks)
+      .where(and(
+        inArray(schema.dispatchTasks.campaignId, allCampaignIds),
+        eq(schema.dispatchTasks.status, 'DONE')
+      ))
+      .groupBy(schema.dispatchTasks.campaignId)
     : [];
 
   // Build lookup maps
   const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
   const taskMap = new Map(linkedTaskRecords.map((t) => [t.id, t]));
   const planMap = new Map(plans.map((p) => [p.id, p]));
-  const totalTaskMap = new Map(taskGroupCounts.map((g) => [g.campaignId, g._count.id]));
-  const doneTaskMap = new Map(doneTaskCounts.map((g) => [g.campaignId, g._count.id]));
+  const totalTaskMap = new Map(taskGroupCounts.map((g) => [g.campaignId, Number(g.count)]));
+  const doneTaskMap = new Map(doneTaskCounts.map((g) => [g.campaignId, Number(g.count)]));
 
   function campaignProgress(campaignId: string): number {
     const campaign = campaignMap.get(campaignId);

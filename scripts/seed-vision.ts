@@ -2,32 +2,49 @@
  * Vision Board mock data seed
  * Run from the branch root: npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/seed-vision.ts
  */
-import { PrismaClient } from '@prisma/client';
+/**
+ * Vision Board mock data seed
+ * Run from the branch root: npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/seed-vision.ts
+ */
+import fs from 'fs';
+import path from 'path';
 
-const prisma = new PrismaClient();
+// Load .env before Drizzle initialises
+const envPath = path.resolve(__dirname, '../.env');
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
+    const m = line.match(/^([^#=]+)=(.*)$/);
+    if (m) {
+      const key = m[1].trim();
+      const val = m[2].trim().replace(/^["']|["']$/g, '');
+      if (!process.env[key]) process.env[key] = val;
+    }
+  }
+}
+
+import { db } from '../lib/db/client';
+import * as schema from '../lib/db/schema';
+import { eq, sql } from 'drizzle-orm';
+import { getOrCreateVisionBoard, createVisionItem, linkFinancePlanToItem, linkCampaignToItem } from '../lib/services/vision';
+import { VisionItemStatus } from '../lib/db/enums';
 
 async function main() {
-  // Find the board (created automatically by the app on first visit)
-  let board = await prisma.visionBoard.findFirst();
-  if (!board) {
-    board = await prisma.visionBoard.create({ data: { title: 'My Vision' } });
-  }
-
-  // Get seeded pillars
-  const pillars = await prisma.visionPillar.findMany({
-    where: { boardId: board.id },
-    orderBy: { sortOrder: 'asc' },
+  const board = await getOrCreateVisionBoard();
+  const pillars = await db.query.visionPillars.findMany({
+    where: eq(schema.visionPillars.boardId, board.id),
+    orderBy: (pillars, { asc }) => [asc(pillars.sortOrder)],
   });
 
   if (pillars.length === 0) {
-    console.log('No pillars found — visit /vision first to seed the default pillars, then re-run.');
+    console.log('No pillars found. They should have been created by getOrCreateVisionBoard.');
     return;
   }
 
   const byLabel = Object.fromEntries(pillars.map((p) => [p.label, p]));
 
   // Check if already seeded
-  const existing = await prisma.visionItem.count();
+  const existingResult = await db.select({ count: sql<number>`count(*)` }).from(schema.visionItems);
+  const existing = existingResult[0].count;
   if (existing > 0) {
     console.log(`Already have ${existing} vision items — skipping seed.`);
     return;
@@ -35,198 +52,177 @@ async function main() {
 
   // ── Wealth ─────────────────────────────────────────────────────────────────
   if (byLabel['Wealth']) {
-    await prisma.visionItem.createMany({
-      data: [
-        {
-          pillarId: byLabel['Wealth'].id,
-          title: 'Build a 12-month cash runway',
-          description: 'Never be forced into a bad decision because of money pressure. Full optionality.',
-          status: 'ACTIVE',
-          imageEmoji: '🏦',
-          targetDate: new Date('2026-12-31'),
-          sortOrder: 0,
-        },
-        {
-          pillarId: byLabel['Wealth'].id,
-          title: 'Own income-producing real estate',
-          description: 'First rental property cash-flowing $1,500/mo minimum. Proof of concept for the portfolio.',
-          status: 'DREAMING',
-          imageEmoji: '🏠',
-          targetDate: new Date('2027-06-30'),
-          sortOrder: 1,
-        },
-        {
-          pillarId: byLabel['Wealth'].id,
-          title: 'Investment portfolio at $250k',
-          description: 'Diversified across index funds, growth equities, and alternatives.',
-          status: 'ACTIVE',
-          imageEmoji: '📈',
-          targetDate: new Date('2027-01-01'),
-          sortOrder: 2,
-        },
-      ],
-    });
+    const items = [
+      {
+        title: 'Build a 12-month cash runway',
+        description: 'Never be forced into a bad decision because of money pressure. Full optionality.',
+        status: VisionItemStatus.ACTIVE,
+        imageEmoji: '🏦',
+        targetDate: '2026-12-31',
+        sortOrder: 0,
+      },
+      {
+        title: 'Own income-producing real estate',
+        description: 'First rental property cash-flowing $1,500/mo minimum. Proof of concept for the portfolio.',
+        status: VisionItemStatus.DREAMING,
+        imageEmoji: '🏠',
+        targetDate: '2027-06-30',
+        sortOrder: 1,
+      },
+      {
+        title: 'Investment portfolio at $250k',
+        description: 'Diversified across index funds, growth equities, and alternatives.',
+        status: VisionItemStatus.ACTIVE,
+        imageEmoji: '📈',
+        targetDate: '2027-01-01',
+        sortOrder: 2,
+      },
+    ];
+    for (const item of items) {
+      await createVisionItem(byLabel['Wealth'].id, item);
+    }
   }
 
   // ── Freedom ────────────────────────────────────────────────────────────────
   if (byLabel['Freedom']) {
-    await prisma.visionItem.createMany({
-      data: [
-        {
-          pillarId: byLabel['Freedom'].id,
-          title: 'Fully location-independent income',
-          description: 'All revenue streams work from anywhere. No office, no hard tether.',
-          status: 'ACTIVE',
-          imageEmoji: '🌍',
-          sortOrder: 0,
-        },
-        {
-          pillarId: byLabel['Freedom'].id,
-          title: 'Work 30-hour weeks by design',
-          description: 'Not burnout-forced rest — intentional high-leverage 30 hours with real afternoons free.',
-          status: 'DREAMING',
-          imageEmoji: '⏳',
-          sortOrder: 1,
-        },
-      ],
-    });
+    const items = [
+      {
+        title: 'Fully location-independent income',
+        description: 'All revenue streams work from anywhere. No office, no hard tether.',
+        status: VisionItemStatus.ACTIVE,
+        imageEmoji: '🌍',
+        sortOrder: 0,
+      },
+      {
+        title: 'Work 30-hour weeks by design',
+        description: 'Not burnout-forced rest — intentional high-leverage 30 hours with real afternoons free.',
+        status: VisionItemStatus.DREAMING,
+        imageEmoji: '⏳',
+        sortOrder: 1,
+      },
+    ];
+    for (const item of items) {
+      await createVisionItem(byLabel['Freedom'].id, item);
+    }
   }
 
   // ── Health ─────────────────────────────────────────────────────────────────
   if (byLabel['Health']) {
-    await prisma.visionItem.createMany({
-      data: [
-        {
-          pillarId: byLabel['Health'].id,
-          title: 'Run a half marathon',
-          description: 'Not about the race — about proving the body is strong and the discipline is there.',
-          status: 'ACTIVE',
-          imageEmoji: '🏃',
-          targetDate: new Date('2026-10-01'),
-          sortOrder: 0,
-        },
-        {
-          pillarId: byLabel['Health'].id,
-          title: 'Sleep avg 7.5h tracked by Oura',
-          description: 'Consistency is the metric. 90-day rolling average.',
-          status: 'ACHIEVED',
-          imageEmoji: '😴',
-          sortOrder: 1,
-        },
-      ],
-    });
+    const items = [
+      {
+        title: 'Run a half marathon',
+        description: 'Not about the race — about proving the body is strong and the discipline is there.',
+        status: VisionItemStatus.ACTIVE,
+        imageEmoji: '🏃',
+        targetDate: '2026-10-01',
+        sortOrder: 0,
+      },
+      {
+        title: 'Sleep avg 7.5h tracked by Oura',
+        description: 'Consistency is the metric. 90-day rolling average.',
+        status: VisionItemStatus.ACHIEVED,
+        imageEmoji: '😴',
+        sortOrder: 1,
+      },
+    ];
+    for (const item of items) {
+      await createVisionItem(byLabel['Health'].id, item);
+    }
   }
 
   // ── Legacy ─────────────────────────────────────────────────────────────────
   if (byLabel['Legacy']) {
-    await prisma.visionItem.createMany({
-      data: [
-        {
-          pillarId: byLabel['Legacy'].id,
-          title: 'Ship something used by 10,000 people',
-          description: 'A product, tool, or piece of writing that meaningfully improves how people work or think.',
-          status: 'DREAMING',
-          imageEmoji: '🌱',
-          sortOrder: 0,
-        },
-        {
-          pillarId: byLabel['Legacy'].id,
-          title: 'Document the Mothership system publicly',
-          description: 'Open playbook for running a one-person operation with AI agents at the core.',
-          status: 'DREAMING',
-          imageEmoji: '📖',
-          sortOrder: 1,
-        },
-      ],
-    });
+    const items = [
+      {
+        title: 'Ship something used by 10,000 people',
+        description: 'A product, tool, or piece of writing that meaningfully improves how people work or think.',
+        status: VisionItemStatus.DREAMING,
+        imageEmoji: '🌱',
+        sortOrder: 0,
+      },
+      {
+        title: 'Document the Mothership system publicly',
+        description: 'Open playbook for running a one-person operation with AI agents at the core.',
+        status: VisionItemStatus.DREAMING,
+        imageEmoji: '📖',
+        sortOrder: 1,
+      },
+    ];
+    for (const item of items) {
+      await createVisionItem(byLabel['Legacy'].id, item);
+    }
   }
 
   // ── Creative ───────────────────────────────────────────────────────────────
   if (byLabel['Creative']) {
-    await prisma.visionItem.createMany({
-      data: [
-        {
-          pillarId: byLabel['Creative'].id,
-          title: 'Publish 50 essays',
-          description: 'Long-form thinking on AI, autonomy, and building. One per week, compounding.',
-          status: 'ACTIVE',
-          imageEmoji: '✍️',
-          sortOrder: 0,
-        },
-      ],
-    });
+    const items = [
+      {
+        title: 'Publish 50 essays',
+        description: 'Long-form thinking on AI, autonomy, and building. One per week, compounding.',
+        status: VisionItemStatus.ACTIVE,
+        imageEmoji: '✍️',
+        sortOrder: 0,
+      },
+    ];
+    for (const item of items) {
+      await createVisionItem(byLabel['Creative'].id, item);
+    }
   }
 
   // ── Business ───────────────────────────────────────────────────────────────
   if (byLabel['Business']) {
-    await prisma.visionItem.createMany({
-      data: [
-        {
-          pillarId: byLabel['Business'].id,
-          title: 'Reach $30k MRR',
-          description: 'Enough to feel the flywheel. Multiple streams, none over 50% of total.',
-          status: 'ACTIVE',
-          imageEmoji: '🚀',
-          targetDate: new Date('2027-01-01'),
-          sortOrder: 0,
-        },
-        {
-          pillarId: byLabel['Business'].id,
-          title: 'Launch Mothership as a product',
-          description: 'Package the agent OS for other operators. Waitlist → private beta → public.',
-          status: 'DREAMING',
-          imageEmoji: '🛸',
-          sortOrder: 1,
-        },
-        {
-          pillarId: byLabel['Business'].id,
-          title: 'First enterprise client',
-          description: 'A company paying $5k+/mo for a custom agent deployment.',
-          status: 'DREAMING',
-          imageEmoji: '🏢',
-          sortOrder: 2,
-        },
-      ],
-    });
+    const items = [
+      {
+        title: 'Reach $30k MRR',
+        description: 'Enough to feel the flywheel. Multiple streams, none over 50% of total.',
+        status: VisionItemStatus.ACTIVE,
+        imageEmoji: '🚀',
+        targetDate: '2027-01-01',
+        sortOrder: 0,
+      },
+      {
+        title: 'Launch Mothership as a product',
+        description: 'Package the agent OS for other operators. Waitlist → private beta → public.',
+        status: VisionItemStatus.DREAMING,
+        imageEmoji: '🛸',
+        sortOrder: 1,
+      },
+      {
+        title: 'First enterprise client',
+        description: 'A company paying $5k+/mo for a custom agent deployment.',
+        status: VisionItemStatus.DREAMING,
+        imageEmoji: '🏢',
+        sortOrder: 2,
+      },
+    ];
+    for (const item of items) {
+      await createVisionItem(byLabel['Business'].id, item);
+    }
   }
 
   // ── Link a few items to existing finance plans ─────────────────────────────
-  const plans = await prisma.financePlan.findMany({ take: 3 });
-  const items = await prisma.visionItem.findMany({ take: 3 });
+  const plans = await db.query.financePlans.findMany({ limit: 3 });
+  const itemsCreated = await db.query.visionItems.findMany({ limit: 3 });
 
-  for (let i = 0; i < Math.min(plans.length, items.length); i++) {
-    await prisma.visionFinancePlanLink.upsert({
-      where: { visionItemId_financePlanId: { visionItemId: items[i].id, financePlanId: plans[i].id } },
-      create: { visionItemId: items[i].id, financePlanId: plans[i].id },
-      update: {},
-    });
-    await prisma.visionItem.update({
-      where: { id: items[i].id },
-      data: { status: 'ACTIVE' },
-    });
+  for (let i = 0; i < Math.min(plans.length, itemsCreated.length); i++) {
+    await linkFinancePlanToItem(itemsCreated[i].id, plans[i].id);
   }
 
   // ── Link a few items to existing campaigns ─────────────────────────────────
-  const campaigns = await prisma.dispatchCampaign.findMany({ take: 2 });
-  const activeItems = await prisma.visionItem.findMany({ where: { status: 'ACTIVE' }, take: 2 });
+  const campaigns = await db.query.dispatchCampaigns.findMany({ limit: 2 });
+  const activeItems = await db.query.visionItems.findMany({
+    where: eq(schema.visionItems.status, VisionItemStatus.ACTIVE),
+    limit: 2,
+  });
 
   for (let i = 0; i < Math.min(campaigns.length, activeItems.length); i++) {
-    await prisma.visionCampaignLink.upsert({
-      where: { visionItemId_campaignId: { visionItemId: activeItems[i].id, campaignId: campaigns[i].id } },
-      create: { visionItemId: activeItems[i].id, campaignId: campaigns[i].id },
-      update: {},
-    });
-    await prisma.dispatchCampaign.update({
-      where: { id: campaigns[i].id },
-      data: { visionItemId: activeItems[i].id },
-    });
+    await linkCampaignToItem(activeItems[i].id, campaigns[i].id);
   }
 
-  const total = await prisma.visionItem.count();
-  console.log(`✓ Seeded ${total} vision items across ${pillars.length} pillars.`);
+  const finalCountResult = await db.select({ count: sql<number>`count(*)` }).from(schema.visionItems);
+  console.log(`✓ Seeded ${finalCountResult[0].count} vision items across ${pillars.length} pillars.`);
   console.log('✓ Linked available finance plans and campaigns where they exist.');
 }
 
 main()
-  .catch((e) => { console.error(e); process.exit(1); })
-  .finally(() => prisma.$disconnect());
+  .catch((e) => { console.error(e); process.exit(1); });
