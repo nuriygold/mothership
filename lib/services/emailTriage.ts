@@ -12,7 +12,6 @@ import { createCalendarEvent } from '@/lib/services/calendar';
 import { createTask } from '@/lib/services/tasks';
 import { getV2EmailFeed, markDraftSent } from '@/lib/v2/orchestrator';
 import type { EmailTriageConfidence } from '@/lib/v2/types';
-import { v4 as uuidv4 } from 'uuid';
 
 type TriageEmailMeta = {
   id: string;
@@ -308,7 +307,7 @@ export async function runEmailAgentTriage(): Promise<{ created: number; dismisse
     };
 
     await db.insert(schema.emailAgentTriages).values({
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       bucket,
       emailIds: bucketEmails.map((e) => e.id),
       emailSummaries: bucketEmails,

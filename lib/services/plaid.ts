@@ -10,7 +10,6 @@ import { db } from '@/lib/db';
 import * as schema from '@/lib/db/schema';
 import { eq, and, ne, inArray, sql } from 'drizzle-orm';
 import { encrypt, decrypt } from '@/lib/utils/encryption';
-import { v4 as uuidv4 } from 'uuid';
 
 function buildClient(): PlaidApi {
   const clientId = process.env.PLAID_CLIENT_ID;
@@ -66,7 +65,7 @@ export async function exchangePublicToken(
   const encryptedToken = encrypt(access_token);
 
   await db.insert(schema.plaidItems).values({
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     itemId: item_id,
     accessToken: encryptedToken,
     institutionName: institutionName ?? null,

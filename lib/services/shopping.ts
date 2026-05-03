@@ -1,7 +1,6 @@
 import { db } from '@/lib/db';
 import * as schema from '@/lib/db/schema';
 import { eq, isNull, desc } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 export async function addShoppingItem(input: {
   name: string;
@@ -11,7 +10,7 @@ export async function addShoppingItem(input: {
   emailSubject?: string;
 }) {
   const [item] = await db.insert(schema.shoppingItems).values({
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     name: input.name.trim(),
     notes: input.notes?.trim() || null,
     source: input.source ?? 'manual',
