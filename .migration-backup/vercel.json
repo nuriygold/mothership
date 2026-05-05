@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "npm run vercel-build",
+  "installCommand": "npm install --ignore-scripts",
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/dispatch/worker",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/v2/email/triage/worker",
+      "schedule": "*/30 * * * *"
+    }
+  ]
+}

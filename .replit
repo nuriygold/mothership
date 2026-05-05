@@ -1,0 +1,39 @@
+modules = ["nodejs-24", "python-3.11"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 24076
+externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+DATABASE_URL = "postgresql://postgres:4!July311988!!!!@db.ejmkliupmkqmougvkpai.supabase.co:5432/postgres"
+DATABASE_URL_POOLER_SESSION = "postgresql://postgres.ejmkliupmkqmougvkpai:4!July311988!!!!@aws-1-us-east-1.pooler.supabase.com:5432/postgres"
+DATABASE_URL_POOLER_TRANS = "postgresql://postgres.ejmkliupmkqmougvkpai:4!July311988!!!!@aws-1-us-east-1.pooler.supabase.com:6543/postgres"
+
+[userenv.development]
+
+[userenv.production]
