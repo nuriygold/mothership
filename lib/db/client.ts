@@ -3,7 +3,15 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 function resolveDatabaseUrl() {
-  return process.env.DATABASE_URL ?? process.env.PRISMA_DATABASE_URL ?? process.env.DATABASE_POOLER_URL;
+  return (
+    process.env.POSTGRES_URL_NON_POOLING ??
+    process.env.POSTGRES_URL ??
+    process.env.DATABASE_URL ??
+    process.env.PRISMA_DATABASE_URL ??
+    process.env.DATABASE_POOLER_URL ??
+    process.env.DATABASE_URL_POOLER_TRANS ??
+    process.env.DATABASE_URL_POOLER_SESSION
+  );
 }
 
 const globalForDb = globalThis as unknown as {
@@ -16,7 +24,7 @@ function getSql() {
 
   const connectionString = resolveDatabaseUrl();
   if (!connectionString) {
-    throw new Error('DATABASE_URL (or PRISMA_DATABASE_URL / DATABASE_POOLER_URL) must be set.');
+    throw new Error('A Postgres connection string must be set.');
   }
 
   const client = postgres(connectionString, { prepare: false });

@@ -100,7 +100,7 @@ GET  /api/v2/stream/bots
 
 ### Required
 ```
-DATABASE_URL               # Supabase pooler URL (postgres://...)
+DATABASE_URL               # Primary database URL for app + Drizzle CLI
 OPENCLAW_INFERENCE_GATEWAY # AI gateway base URL
 OPENCLAW_TOKEN             # Gateway auth token
 OPENCLAW_AGENT_EMERALD     # Emerald agent ID (required — others fall back to this)
@@ -108,11 +108,16 @@ OPENCLAW_AGENT_EMERALD     # Emerald agent ID (required — others fall back to 
 
 ### Database URL precedence (important)
 ```
-DATABASE_URL               # Primary DB URL for app + Drizzle CLI
-DATABASE_POOLER_URL        # Legacy fallback only when DATABASE_URL is not set
+POSTGRES_URL_NON_POOLING   # Preferred direct Postgres URL when available
+POSTGRES_URL               # Fallback direct Postgres URL
+DATABASE_URL               # Primary app URL if direct Postgres URL is not set
+PRISMA_DATABASE_URL        # Legacy fallback
+DATABASE_POOLER_URL        # Legacy fallback
+DATABASE_URL_POOLER_TRANS  # Pooler fallback
+DATABASE_URL_POOLER_SESSION # Last-resort pooler fallback
 ```
 
-Use the **same database** for every configured connection string (or leave unused values blank). Mixing different
+Use the **same database** for every configured connection string. Mixing different
 hosts/databases causes data drift symptoms like items showing in one surface but missing in Vision/Dispatch.
 
 ### Owner Auth
