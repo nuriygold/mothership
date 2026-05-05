@@ -1,4 +1,4 @@
-name: Apply Prisma Migrations
+name: Apply Drizzle Migrations
 
 on:
   workflow_dispatch:
@@ -6,6 +6,8 @@ on:
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -18,6 +20,6 @@ jobs:
         run: npm ci
 
       - name: Apply migrations
-        run: npx prisma migrate deploy
+        run: npm run migrate:deploy
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL || secrets.DATABASE_URL }}
