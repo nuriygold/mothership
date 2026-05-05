@@ -1,0 +1,154 @@
+You are working in a Next.js + TypeScript + Drizzle codebase.
+
+  Goal:
+  Build the actual execution engine agent system layer, not the UI shell. The current /ops page is only the control
+  room. The real work is to create a durable agent runtime underneath it.
+
+  Core principle:
+  No in-memory state as source of truth. All campaign, agent, event, artifact, blocker, attempt, and resume state must
+  be durable in Postgres.
+
+  What already exists:
+  - A /ops dashboard and related API routes
+  - A mission-control schema with tables like agents, campaigns, campaign_agents, campaign_events, blockers,
+  execution_attempts, resume_directives, artifacts
+  - A workflow layer that currently has placeholder step functions and a thin runtime bridge
+
+  What to build:
+  1. Durable agent model
+  - Create a first-class agent entity model persisted in Postgres.
+  - Agents need identity, display name, role, capabilities, status, ownership, and metadata.
+  - Support lead agents and worker agents.
+  - Support agent lifecycle states like active, blocked, unavailable, retired, and running.
+
+  2. Durable execution engine
+  - Build the agent execution system that actually runs work.
+  - It should handle:
+    - campaign creation
+    - agent assignment
+    - tool execution
+    - event emission
+    - artifact writes
+    - blocker creation and resolution
+    - resume directives
+    - execution attempts
+    - status transitions
+  - Persist everything durably.
+  - Support restart and rehydration from the database after server reload.
+
+  3. Real tool layer
+  - Add a tool registry and adapters for:
+    - file writes
+    - artifact creation
+    - web/browser extraction
+    - MCP tool calls
+    - database reads/writes when appropriate
+  - If a tool is not actually available, return a deterministic structured failure, not fake success.
+  - The agent loop should be able to recover, retry, or escalate.
+
+  4. Agent memory and traces
+  - Persist per-campaign and per-agent memory, not just a single feed.
+  - Keep a full audit trail of:
+    - prompts
+    - tool calls
+    - tool results
+    - status changes
+    - blockers
+    - resumes
+    - retries
+  - The feed should be a projection of this durable history.
+
+  5. Orchestration and handoff
+  - Support a minimal multi-agent handoff model.
+  - One lead agent may dispatch work to worker agents.
+  - The orchestration layer should know how to:
+    - start a campaign
+    - assign work
+    - pause on blockers
+    - resume after approval
+    - restart failed attempts
+    - mark completion only when required outputs exist
+
+  6. Service layer first
+  - Put the logic in a dedicated service layer, not inside API routes or React components.
+  - Keep the UI contract stable.
+  - The service should own reads, writes, normalization, and durable event appends.
+  - The page and API routes should only consume the service.
+
+  7. Demo seed behavior
+  - Demo campaigns must be durable and marked as demo in metadata.
+  - Demo deletion must remove only demo-marked records.
+  - Do not rely on name prefixes as the only marker.
+
+  8. Keep the existing API surface stable for now
+  - Preserve the current /ops routes unless a route is clearly broken.
+  - Keep response shapes stable where possible.
+  - If you need to add new fields, add them compatibly.
+
+  Non-goals for this task:
+  - Do not redesign the /ops UI.
+  - Do not spend time on visual polish.
+  - Do not build a fake in-memory simulator.
+  - Do not build only scaffolding or type definitions.
+  - Do not stop at "the code compiles" if the system cannot survive reloads.
+
+  Implementation guidance:
+  - Start by auditing the current ops and mission-control files.
+  - Create a clean durable service layer for agents and campaigns.
+  - Wire the workflow step functions to the durable service.
+  - Wire the runtime bridge to the durable service.
+  - Replace any in-memory registry logic with Postgres-backed reads and writes.
+  - Make sure campaign feeds, artifacts, blockers, and execution attempts survive reloads.
+  - Ensure the system can be restarted and still rehydrate the same state from Postgres.
+
+  Suggested minimal first pass:
+  - Create campaign
+  - Assign lead agent
+  - Start execution attempt
+  - Append feed event
+  - Write artifact
+  - Create blocker
+  - Resolve blocker
+  - Mark completed
+  - Reload and confirm state is still there
+
+  Required output:
+  - Code changes in the appropriate service and route files
+  - Any needed schema or migration changes
+  - A focused test or verification path for the ops contract
+  - A short summary of what was built and what remains
+
+  Acceptance criteria:
+  - Create a mission, reload the app, and the mission is still there
+  - Feed events persist across reloads
+  - Artifacts persist across reloads
+  - Blockers persist across reloads
+  - Demo campaigns persist and can be deleted by demo marker
+  - The engine uses Postgres as source of truth
+  - No critical logic depends on module memory
+  - The current /ops surface still works after the swap
+Start it in the mothership repo.
+
+  Best shape:
+
+  - Build the execution engine as a new internal package or service layer inside this repo.
+  - Keep it integrated with the existing Next app, Drizzle schema, auth, and workflow code.
+  - Do not make Replit a separate repo if the goal is to ship something we can actually plug into /ops.
+
+  Why:
+
+  - The engine needs direct access to the same Postgres schema and route contract the app already uses.
+  - A separate repo would turn the hard part into integration work later: auth, schema drift, DTO mismatch, deployment
+    wiring, and workflow hooks.
+  - We already need the engine to line up with the existing mc* tables and /api/ops contract, so staying in-repo keeps
+    that seam honest.
+
+  Best compromise:
+
+  - Use Replit as the implementation environment.
+  - Have it create an isolated module boundary inside mothership, for example lib/ops/engine/ plus
+    related files.
+  - Keep the public API routes stable, and swap internals behind that seam.
+
+  So: build in mothership, not beside it. If you want, I can give you a Replit prompt that is specifically framed as
+  “add the engine inside this repo, behind a service boundary,” which is the safest version for this milestone.
