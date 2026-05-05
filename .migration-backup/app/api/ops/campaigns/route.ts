@@ -1,13 +1,12 @@
 // /api/ops/campaigns
 //
-// GET   — list campaigns + ticker summary (mirrors workflow state from the
-//         in-memory registry; the workflow itself is the source of truth).
+// GET   — list campaigns + ticker summary from the durable Ops service.
 // POST  — dispatch a new mission. This calls into the runtime adapter,
 //         which starts a durable WDK workflow run and links its runId to
 //         the campaign so control actions can find it later.
 
 import { NextResponse } from 'next/server';
-import { getTickerSummary, listCampaigns } from '@/lib/ops/store';
+import { getTickerSummary, listCampaigns } from '@/lib/ops/service';
 import { dispatchMission } from '@/lib/ops/runtime';
 import { requireOpsAuth } from '@/lib/ops/auth';
 import type { ExecutionMode } from '@/lib/ops/types';
@@ -17,9 +16,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const auth = await requireOpsAuth();
   if (!auth.ok) return auth.response;
+  const [campaigns, ticker] = await Promise.all([listCampaigns(), getTickerSummary()]);
   return NextResponse.json({
-    campaigns: listCampaigns(),
-    ticker: getTickerSummary(),
+    campaigns,
+    ticker,
   });
 }
 

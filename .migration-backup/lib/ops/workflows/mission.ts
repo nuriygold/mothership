@@ -30,7 +30,7 @@ import {
   validateArtifact,
   writeArtifact,
 } from './steps';
-import { opsControlHookToken, type OpsControlPayload } from '@/lib/ops/control-hook';
+import { opsControlHookToken } from '@/lib/ops/control-hook';
 
 const DEFAULT_MODEL =
   (typeof process !== 'undefined' && process.env?.MISSION_MODEL) ||
@@ -85,7 +85,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
             .nullable()
             .describe('Optional row count if the artifact is tabular'),
         }),
-        execute: async ({ name, content, rows }) =>
+        execute: async ({ name, content, rows }: { name: string; content: string; rows: number | null }) =>
           writeArtifact(input.campaignId, {
             name,
             content,
@@ -100,7 +100,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
           name: z.string(),
           minSize: z.number().nullable().describe('Minimum byte size'),
         }),
-        execute: async ({ name, minSize }) =>
+        execute: async ({ name, minSize }: { name: string; minSize: number | null }) =>
           validateArtifact(input.campaignId, name, minSize ?? 1),
       },
 
@@ -111,7 +111,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
           progress: z.number().min(0).max(1),
           message: z.string(),
         }),
-        execute: async ({ progress, message }) =>
+        execute: async ({ progress, message }: { progress: number; message: string }) =>
           emitFeedEvent(input.campaignId, 'info', message, progress),
       },
 
@@ -123,7 +123,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
           rowCount: z.number().int().min(0),
           message: z.string().nullable(),
         }),
-        execute: async ({ batchIndex, rowCount, message }) =>
+        execute: async ({ batchIndex, rowCount, message }: { batchIndex: number; rowCount: number; message: string | null }) =>
           recordBatch(input.campaignId, {
             batchIndex,
             rowCount,
@@ -141,7 +141,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
             .nullable()
             .describe('Optional CSS selector to scope extraction'),
         }),
-        execute: async ({ url, selector }) =>
+        execute: async ({ url, selector }: { url: string; selector: string | null }) =>
           extractWebContent(input.campaignId, {
             url,
             selector: selector ?? undefined,
@@ -156,7 +156,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
           tool: z.string(),
           input: z.unknown().describe('Arbitrary JSON-serializable input'),
         }),
-        execute: async ({ server, tool, input: toolInput }) =>
+        execute: async ({ server, tool, input: toolInput }: { server: string; tool: string; input: unknown }) =>
           mcpInvoke(input.campaignId, { server, tool, input: toolInput }),
       },
 
@@ -172,7 +172,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
               'If escalation is gated on a specific input (e.g. an API key), name it'
             ),
         }),
-        execute: async ({ reason, requiredInput }) =>
+        execute: async ({ reason, requiredInput }: { reason: string; requiredInput: string | null }) =>
           escalate(input.campaignId, reason, requiredInput ?? undefined),
       },
     },
@@ -281,7 +281,7 @@ export async function missionWorkflow(input: MissionInput): Promise<MissionResul
     0.85
   );
 
-  const hook = createHook<OpsControlPayload>({ token });
+  const hook = createHook({ token });
   const decision = await hook;
   hook.dispose();
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSystemRules, updateSystemRules } from '@/lib/ops/store';
+import { getSystemRules, updateSystemRules } from '@/lib/ops/service';
 import { requireOpsAuth } from '@/lib/ops/auth';
 import type { SystemRules } from '@/lib/ops/types';
 
