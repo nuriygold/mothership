@@ -64,6 +64,13 @@ export async function setBlockerStatus(
   return row;
 }
 
+export async function resolveBlocker(
+  blockerId: string,
+  resolverNote?: string,
+): Promise<McBlocker | undefined> {
+  return setBlockerStatus(blockerId, 'resolved', resolverNote);
+}
+
 export async function resolveAllBlockersForCampaign(campaignId: string): Promise<number> {
   const open = await listOpenBlockers(campaignId);
   for (const b of open) {

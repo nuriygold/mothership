@@ -66,7 +66,7 @@ router.get(
 router.get(
   "/ops/campaigns/:id",
   wrap(async (req, res) => {
-    const row = await campaignsSvc.getCampaign(req.params.id);
+    const row = await campaignsSvc.getCampaign(String(req.params.id));
     if (!row) {
       res.status(404).json({ message: "Campaign not found" });
       return;
@@ -97,7 +97,7 @@ router.post(
 router.post(
   "/ops/campaigns/:id/control",
   wrap(async (req, res) => {
-    const id = req.params.id;
+    const id = String(req.params.id);
     const action = String(req.body?.action ?? "");
     const row = await campaignsSvc.getCampaign(id);
     if (!row) {

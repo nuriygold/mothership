@@ -71,7 +71,9 @@ export async function runCampaign(campaignId: string): Promise<void> {
     const campaign = await getCampaign(campaignId);
     if (!campaign) return;
 
-    const startable: ReadonlyArray<string> = ['draft', 'queued', 'approved', 'paused', 'blocked', 'running'];
+    // `blocked` is intentionally excluded — resumption clears blockers via
+    // `resumeCampaign` first, then re-enters this loop with a clear queue.
+    const startable: ReadonlyArray<string> = ['draft', 'queued', 'approved', 'paused', 'running'];
     if (!startable.includes(campaign.status)) return;
 
     const openBlockers = await listOpenBlockers(campaignId);

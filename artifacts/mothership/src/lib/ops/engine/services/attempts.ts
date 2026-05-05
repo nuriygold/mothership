@@ -58,7 +58,7 @@ export async function finishAttempt(
   await record(row.campaignId, evType, `Attempt ${row.attemptNumber} ${status}`, {
     attemptId: row.id,
     status,
-    errorMessage,
+    errorMessage: errorMessage ?? null,
   });
   return row;
 }

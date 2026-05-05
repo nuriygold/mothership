@@ -32,7 +32,18 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   imports are aliased to no-op shims under `src/shims/` (see `vite.config.ts`). The original
   `app/api/**` route handlers were stripped — backend functionality is out of scope; pages render
   with full Tailwind v4 styling and any data fetches simply fail with 502/undefined.
-- **api-server** (`artifacts/api-server`): Express API server (template default).
+  - **Durable Ops Engine** (`src/lib/ops/engine/`): Postgres-backed agent execution engine
+    consumed by `/ops` UI. Lives in mothership and is exported as `@workspace/mothership/ops-engine`
+    so the api-server can import it across the workspace boundary. Drives campaigns through a
+    deterministic step plan; every state change appends a durable event so the UI feed projects
+    from real history. Uses Supabase via `DATABASE_URL_POOLER_SESSION` (the regional Supavisor
+    pooler — direct `db.<ref>.supabase.co` is IPv6-only and unreachable from Replit). Schema is
+    `mc*` tables in `src/lib/db/dispatch-schema.ts`; push with
+    `pnpm --filter @workspace/mothership run db:push`. Browser bundle is protected by Vite shims
+    that alias `drizzle-orm`/`postgres`/`pg` to no-ops.
+- **api-server** (`artifacts/api-server`): Express API server. Mounts `/api/ops/*` routes that
+  delegate to the Durable Ops Engine; calls `bootstrap()` on listen so any `running`/`queued`
+  campaigns are rehydrated after a process restart.
 - **mockup-sandbox** (`artifacts/mockup-sandbox`): canvas component preview server.
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
