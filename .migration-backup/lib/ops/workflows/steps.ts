@@ -17,7 +17,7 @@ import {
   setCampaignProgress,
   setCampaignStatus,
   upsertArtifact,
-} from '../store';
+} from '../service';
 import type { CampaignStatus, FeedEvent } from '../types';
 
 // ── Feed events ─────────────────────────────────────────────────────────────
@@ -28,9 +28,9 @@ export async function emitFeedEvent(
   progress?: number
 ): Promise<{ ok: true }> {
   'use step';
-  recordEvent(campaignId, { level, message });
+  await recordEvent(campaignId, { level, message });
   if (typeof progress === 'number') {
-    setCampaignProgress(campaignId, progress);
+    await setCampaignProgress(campaignId, progress);
   }
   return { ok: true };
 }
@@ -41,7 +41,7 @@ export async function markCampaignStatus(
   status: CampaignStatus
 ): Promise<{ ok: true }> {
   'use step';
-  setCampaignStatus(campaignId, status);
+  await setCampaignStatus(campaignId, status);
   return { ok: true };
 }
 
@@ -54,8 +54,8 @@ export async function writeArtifact(
   args: { name: string; content: string; rows?: number }
 ): Promise<{ written: string; size: number }> {
   'use step';
-  const a = upsertArtifact(campaignId, args);
-  recordEvent(campaignId, {
+  const a = await upsertArtifact(campaignId, args);
+  await recordEvent(campaignId, {
     level: 'success',
     message: `Wrote ${args.name} (${a?.size ?? 0} bytes${args.rows ? `, ${args.rows} rows` : ''})`,
   });
@@ -71,7 +71,7 @@ export async function validateArtifact(
   minSize: number = 1
 ): Promise<{ valid: boolean; reason?: string }> {
   'use step';
-  const a = getCampaignArtifact(campaignId, name);
+  const a = await getCampaignArtifact(campaignId, name);
   if (!a) {
     return { valid: false, reason: `Artifact "${name}" not produced` };
   }
@@ -95,17 +95,17 @@ export async function escalate(
   requiredInput?: string
 ): Promise<{ escalated: true }> {
   'use step';
-  setCampaignBlocker(campaignId, {
+  await setCampaignBlocker(campaignId, {
     type: requiredInput ? 'MISSING_INPUT' : 'BLOCKER',
     requiredInput: requiredInput ?? '',
     attempts: 1,
     detectedAt: new Date().toISOString(),
   });
-  recordEvent(campaignId, {
+  await recordEvent(campaignId, {
     level: 'error',
     message: `Escalated: ${reason}${requiredInput ? ` (need: ${requiredInput})` : ''}`,
   });
-  setCampaignStatus(campaignId, 'BLOCKED');
+  await setCampaignStatus(campaignId, 'BLOCKED');
   return { escalated: true };
 }
 
@@ -115,8 +115,8 @@ export async function recordBatch(
   args: { batchIndex: number; rowCount: number; message?: string }
 ): Promise<{ ok: true }> {
   'use step';
-  incrementBatchCount(campaignId);
-  recordEvent(campaignId, {
+  await incrementBatchCount(campaignId);
+  await recordEvent(campaignId, {
     level: 'success',
     message:
       args.message ??
@@ -140,7 +140,7 @@ export async function extractWebContent(
   url: string;
 }> {
   'use step';
-  recordEvent(campaignId, {
+  await recordEvent(campaignId, {
     level: 'warn',
     message: `Web extraction not yet wired (${args.url})`,
   });
@@ -165,7 +165,7 @@ export async function mcpInvoke(
   tool: string;
 }> {
   'use step';
-  recordEvent(campaignId, {
+  await recordEvent(campaignId, {
     level: 'warn',
     message: `MCP tool not yet wired (${args.server}/${args.tool})`,
   });

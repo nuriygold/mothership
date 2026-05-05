@@ -51,7 +51,6 @@ function LoginForm() {
         className="w-full max-w-sm rounded-3xl p-8 flex flex-col gap-6"
         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
       >
-        {/* Logo / title */}
         <div className="flex flex-col items-center gap-4">
           <MothershipLogo size={52} />
           <div className="text-center">
@@ -64,7 +63,6 @@ function LoginForm() {
           </div>
         </div>
 
-        {/* Lock icon row */}
         <div className="flex justify-center">
           <div
             className="w-10 h-10 rounded-2xl flex items-center justify-center"
@@ -74,7 +72,6 @@ function LoginForm() {
           </div>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="relative">
             <input
@@ -117,19 +114,28 @@ function LoginForm() {
           </button>
         </form>
 
-        {/* Demo link */}
         <div className="flex flex-col items-center gap-2 pt-1" style={{ borderTop: '1px solid var(--border)' }}>
           <p className="text-xs pt-3" style={{ color: 'var(--muted-foreground)' }}>
-            Not the operator?
+            Demo links
           </p>
-          <a
-            href="/ops"
-            className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
-            style={{ color: 'var(--color-cyan)' }}
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            View Ops mission control
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              href="/demo.html"
+              className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+              style={{ color: 'var(--color-cyan)' }}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Demo HTML
+            </a>
+            <a
+              href="/ops"
+              className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+              style={{ color: 'var(--color-cyan)' }}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              OPS Demo
+            </a>
+          </div>
         </div>
       </div>
     </div>

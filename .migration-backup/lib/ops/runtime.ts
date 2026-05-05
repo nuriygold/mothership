@@ -25,7 +25,7 @@ import {
   recordEvent,
   setCampaignRunId,
   setCampaignStatus,
-} from './store';
+} from './service';
 import type {
   Campaign,
   CampaignControlAction,
@@ -76,7 +76,7 @@ export async function dispatchMission(
 ): Promise<Campaign> {
   // Always create the campaign record first so the UI sees the dispatch
   // even if the WDK runtime is offline.
-  const campaign = createCampaign(input);
+  const campaign = await createCampaign(input);
 
   const [api, workflowFn] = await Promise.all([
     loadWorkflowApi(),
@@ -84,7 +84,7 @@ export async function dispatchMission(
   ]);
 
   if (!api || !workflowFn) {
-    recordEvent(campaign.id, {
+    await recordEvent(campaign.id, {
       level: 'warn',
       message:
         'WDK runtime not available — mission queued but not yet started. Deploy with Workflow enabled or run `npx workflow dev` to pick this up.',
@@ -104,13 +104,13 @@ export async function dispatchMission(
         executionMode: campaign.executionMode,
       },
     ]);
-    setCampaignRunId(campaign.id, run.runId);
-    recordEvent(campaign.id, {
+    await setCampaignRunId(campaign.id, run.runId);
+    await recordEvent(campaign.id, {
       level: 'success',
       message: `Workflow started · run=${run.runId.slice(0, 8)}…`,
     });
   } catch (err) {
-    recordEvent(campaign.id, {
+    await recordEvent(campaign.id, {
       level: 'error',
       message: `Failed to start workflow: ${describe(err)}`,
     });
@@ -126,10 +126,10 @@ export async function controlMission(
   campaignId: string,
   action: CampaignControlAction
 ): Promise<Campaign | undefined> {
-  const local = applyLocalControl(campaignId, action);
+  const local = await applyLocalControl(campaignId, action);
   if (!local) return undefined;
 
-  const runId = getRunIdForCampaign(campaignId);
+  const runId = await getRunIdForCampaign(campaignId);
   const api = await loadWorkflowApi();
 
   // Hook-based controls (resume/approve/retry) work even when we don't have a
@@ -138,10 +138,10 @@ export async function controlMission(
     try {
       const token = opsControlHookToken(campaignId);
       await api.resumeHook(token, { action });
-      recordEvent(campaignId, { level: 'success', message: `Sent hook: ${action}` });
-      return getCampaign(campaignId) ?? local;
+      await recordEvent(campaignId, { level: 'success', message: `Sent hook: ${action}` });
+      return (await getCampaign(campaignId)) ?? local;
     } catch (err) {
-      recordEvent(campaignId, {
+      await recordEvent(campaignId, {
         level: 'warn',
         message: `Hook "${action}" not accepted (no active hook?): ${describe(err)}`,
       });
@@ -152,7 +152,7 @@ export async function controlMission(
   if (!runId) {
     // No durable run to act on. If operator requests a retry, attempt a fresh start.
     if (api && action === 'force_retry') {
-      const current = getCampaign(campaignId);
+      const current = await getCampaign(campaignId);
       if (current) {
         const workflowFn = await loadMissionWorkflow();
         if (workflowFn) {
@@ -168,10 +168,10 @@ export async function controlMission(
                 executionMode: current.executionMode,
               },
             ]);
-            setCampaignRunId(current.id, run.runId);
-            recordEvent(current.id, { level: 'success', message: `Workflow restarted · run=${run.runId.slice(0, 8)}…` });
+            await setCampaignRunId(current.id, run.runId);
+            await recordEvent(current.id, { level: 'success', message: `Workflow restarted · run=${run.runId.slice(0, 8)}…` });
           } catch (err) {
-            recordEvent(current.id, { level: 'error', message: `Failed to restart workflow: ${describe(err)}` });
+            await recordEvent(current.id, { level: 'error', message: `Failed to restart workflow: ${describe(err)}` });
           }
         }
       }
@@ -187,8 +187,8 @@ export async function controlMission(
       // Append a `run_cancelled` event — the runtime materializes this into
       // a cancelled run on the next consumer pass.
       await world.events.create(runId, { eventType: 'run_cancelled' });
-      setCampaignStatus(campaignId, 'CANCELLED');
-      recordEvent(campaignId, {
+      await setCampaignStatus(campaignId, 'CANCELLED');
+      await recordEvent(campaignId, {
         level: 'error',
         message: `Workflow run cancelled · run=${runId.slice(0, 8)}…`,
       });
@@ -198,7 +198,7 @@ export async function controlMission(
     // wire up in the next slice. The local state change above is enough
     // for the operator to see immediate feedback in the UI.
   } catch (err) {
-    recordEvent(campaignId, {
+    await recordEvent(campaignId, {
       level: 'warn',
       message: `Workflow control "${action}" failed: ${describe(err)}`,
     });

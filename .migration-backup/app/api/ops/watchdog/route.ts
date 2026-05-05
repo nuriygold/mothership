@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { escalateAllBlockers, forceResumeAll, getWatchdogState } from '@/lib/ops/store';
+import { escalateAllBlockers, forceResumeAll, getWatchdogState } from '@/lib/ops/service';
 import { requireOpsAuth } from '@/lib/ops/auth';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const auth = await requireOpsAuth();
   if (!auth.ok) return auth.response;
-  return NextResponse.json(getWatchdogState());
+  return NextResponse.json(await getWatchdogState());
 }
 
 export async function POST(req: Request) {
@@ -17,11 +17,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const action = String(body?.action ?? '');
     if (action === 'force_resume_all') {
-      const count = forceResumeAll();
+      const count = await forceResumeAll();
       return NextResponse.json({ ok: true, action, count });
     }
     if (action === 'escalate_all') {
-      const count = escalateAllBlockers();
+      const count = await escalateAllBlockers();
       return NextResponse.json({ ok: true, action, count });
     }
     return NextResponse.json({ ok: false, message: 'Unknown watchdog action' }, { status: 400 });
