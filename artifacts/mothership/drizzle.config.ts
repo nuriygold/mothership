@@ -1,8 +1,13 @@
 import type { Config } from 'drizzle-kit';
 
-const url = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
+const url =
+  process.env.DATABASE_MIGRATION_URL ??
+  process.env.DATABASE_URL_POOLER_SESSION ??
+  process.env.DATABASE_URL;
 if (!url) {
-  throw new Error('DATABASE_URL (or DATABASE_MIGRATION_URL) must be set for drizzle-kit push.');
+  throw new Error(
+    'No migration URL set (DATABASE_MIGRATION_URL / DATABASE_URL_POOLER_SESSION / DATABASE_URL).',
+  );
 }
 
 export default {

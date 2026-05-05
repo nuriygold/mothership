@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { bootstrap as bootstrapOpsEngine } from "@workspace/mothership/ops-engine";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,12 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  bootstrapOpsEngine()
+    .then(({ resumed }) => {
+      logger.info({ resumed }, "ops engine bootstrapped");
+    })
+    .catch((bootErr: unknown) => {
+      logger.error({ err: bootErr }, "ops engine bootstrap failed");
+    });
 });

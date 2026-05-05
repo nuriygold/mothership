@@ -2,10 +2,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../../db/dispatch-schema';
 
-const url = process.env.DATABASE_URL;
+const url =
+  process.env.DATABASE_URL_POOLER_SESSION ??
+  process.env.DATABASE_URL_POOLER_TRANS ??
+  process.env.DATABASE_URL;
 if (!url) {
   throw new Error(
-    '[ops/engine] DATABASE_URL is not set — the engine cannot connect to Postgres.',
+    '[ops/engine] No Postgres URL set (DATABASE_URL_POOLER_TRANS / DATABASE_URL_POOLER_SESSION / DATABASE_URL).',
   );
 }
 
