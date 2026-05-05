@@ -2,14 +2,22 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
+function firstNonEmpty(...values: Array<string | undefined | null>) {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) return normalized;
+  }
+  return undefined;
+}
+
 function resolveDatabaseUrl() {
-  return (
-    process.env.POSTGRES_URL_NON_POOLING ??
-    process.env.POSTGRES_URL ??
-    process.env.DATABASE_URL ??
-    process.env.PRISMA_DATABASE_URL ??
-    process.env.DATABASE_POOLER_URL ??
-    process.env.DATABASE_URL_POOLER_TRANS ??
+  return firstNonEmpty(
+    process.env.POSTGRES_URL_NON_POOLING,
+    process.env.POSTGRES_URL,
+    process.env.DATABASE_URL,
+    process.env.PRISMA_DATABASE_URL,
+    process.env.DATABASE_POOLER_URL,
+    process.env.DATABASE_URL_POOLER_TRANS,
     process.env.DATABASE_URL_POOLER_SESSION
   );
 }
