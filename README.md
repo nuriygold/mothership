@@ -16,6 +16,7 @@ Personal agentic operations platform — tasks, bots, finance, email, and daily 
 | `/revenue-streams` | Revenue stream workspace — SOPs, quick actions, activity log per stream |
 | `/activity` | System-wide event log with category filters and search |
 | `/dispatch` | Campaign workspace — plan, launch, and track execution |
+| `/ops` | Mission control — durable campaigns, agents, feed, blockers |
 | `/projects` | High-level project buckets — Creative, Robotic, Fund Dev, Home |
 | `/vision` | Vision board — pillars, linked tasks, goals |
 | `/trophy` | Win history — completed tasks grouped by day, week-over-week |
@@ -35,6 +36,12 @@ Personal agentic operations platform — tasks, bots, finance, email, and daily 
 | 6 God ⚡ | Anchor | Execution coordination, priority sequencing, follow-through |
 
 All bots maintain persistent conversation history via DB-backed `ChatSession` records. Sessions are keyed to owner identity (cross-browser, after `/login`) or device cookie (same-browser fallback).
+
+## Ops Mission Control
+
+- `/ops` now reads and writes durable mission-control state from the Postgres-backed `mc*` tables.
+- Campaign feed events, artifacts, blockers, execution attempts, and resume directives persist across reloads.
+- Demo missions are marked in metadata so they can be seeded and removed without relying on name prefixes.
 
 ---
 

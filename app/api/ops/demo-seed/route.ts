@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resetDemoMissions, seedDemoMissions } from '@/lib/ops/store';
+import { resetDemoMissions, seedDemoMissions } from '@/lib/ops/service';
 import { requireOpsAuth } from '@/lib/ops/auth';
 
 export const dynamic = 'force-dynamic';
@@ -11,15 +11,15 @@ export const runtime = 'nodejs';
 export async function POST() {
   const auth = await requireOpsAuth();
   if (!auth.ok) return auth.response;
-  const result = seedDemoMissions();
+  const result = await seedDemoMissions();
   return NextResponse.json({ ok: true, ...result });
 }
 
-// DELETE /api/ops/demo-seed — remove the demo missions, leaving any real
-// dispatched missions intact. Demo missions are identified by name prefix.
+// DELETE /api/ops/demo-seed — remove only demo-marked missions, leaving real
+// dispatched missions intact.
 export async function DELETE() {
   const auth = await requireOpsAuth();
   if (!auth.ok) return auth.response;
-  const result = resetDemoMissions();
+  const result = await resetDemoMissions();
   return NextResponse.json({ ok: true, ...result });
 }
