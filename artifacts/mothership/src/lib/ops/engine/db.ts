@@ -3,8 +3,8 @@ import postgres from 'postgres';
 import * as schema from '../../db/dispatch-schema';
 
 const url =
-  process.env.DATABASE_URL_POOLER_SESSION ??
   process.env.DATABASE_URL_POOLER_TRANS ??
+  process.env.DATABASE_URL_POOLER_SESSION ??
   process.env.DATABASE_URL;
 if (!url) {
   throw new Error(
