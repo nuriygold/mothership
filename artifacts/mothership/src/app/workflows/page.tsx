@@ -1,31 +1,11 @@
-import Link from 'next/link';
-import { listWorkflows } from '@/lib/services/workflows';
-import { Card, CardSubtitle, CardTitle } from '@/components/ui/card';
-
-export const dynamic = 'force-dynamic';
-
-export default async function WorkflowsPage() {
-  const workflows = await listWorkflows();
-
+export default function WorkflowsPage() {
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardTitle>Workflows</CardTitle>
-        <CardSubtitle>Live from task-pool repository domains</CardSubtitle>
-        <div className="mt-4 divide-y divide-border/80">
-          {workflows.map((wf) => (
-            <div key={wf.id} className="flex items-center justify-between py-3">
-              <div>
-                <p className="text-sm font-semibold text-white">{wf.name}</p>
-                <p className="text-xs text-slate-400">{wf.type} • {wf.status} • {wf.submissions.length} submissions</p>
-              </div>
-              <Link className="text-sm text-accent" href={`/workflows/${wf.id}`}>
-                Details
-              </Link>
-            </div>
-          ))}
-        </div>
-      </Card>
+    <div className="p-8 space-y-2">
+      <h1 className="text-2xl font-bold">Workflows</h1>
+      <p className="text-muted-foreground">
+        Server-side workflow data is not wired in this port. Connect a backend
+        to re-enable this view.
+      </p>
     </div>
   );
 }
