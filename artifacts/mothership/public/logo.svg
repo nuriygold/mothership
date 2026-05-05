@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#1a1060"/>
+      <stop offset="60%" stop-color="#060818"/>
+      <stop offset="100%" stop-color="#000408"/>
+    </radialGradient>
+    <radialGradient id="globe" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#a0e8ff"/>
+      <stop offset="40%" stop-color="#00D9FF"/>
+      <stop offset="100%" stop-color="#0050aa"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00D9FF" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#00D9FF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blur">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <filter id="gblur">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="99" fill="url(#bg)" stroke="#1e3a6e" stroke-width="1.5"/>
+
+  <!-- Stars -->
+  <circle cx="30" cy="35" r="1" fill="#ffffff" opacity="0.7"/>
+  <circle cx="55" cy="20" r="0.8" fill="#ffffff" opacity="0.5"/>
+  <circle cx="80" cy="28" r="1.2" fill="#00D9FF" opacity="0.6"/>
+  <circle cx="145" cy="25" r="1" fill="#ffffff" opacity="0.7"/>
+  <circle cx="165" cy="40" r="0.8" fill="#ffffff" opacity="0.5"/>
+  <circle cx="170" cy="60" r="1.2" fill="#00D9FF" opacity="0.4"/>
+  <circle cx="25" cy="70" r="0.8" fill="#ffffff" opacity="0.4"/>
+  <circle cx="40" cy="150" r="1" fill="#ffffff" opacity="0.3"/>
+  <circle cx="160" cy="145" r="0.8" fill="#ffffff" opacity="0.3"/>
+
+  <!-- Nebula glow -->
+  <ellipse cx="100" cy="80" rx="60" ry="50" fill="#3020a0" opacity="0.15" filter="url(#blur)"/>
+
+  <!-- Armored figure body -->
+  <!-- Hood/helmet -->
+  <ellipse cx="100" cy="55" rx="22" ry="26" fill="#1e2a50" stroke="#3a4a80" stroke-width="1"/>
+  <!-- Visor glow -->
+  <ellipse cx="100" cy="52" rx="14" ry="8" fill="#001030" stroke="#00D9FF" stroke-width="0.8"/>
+  <ellipse cx="100" cy="52" rx="12" ry="6" fill="#00D9FF" opacity="0.15"/>
+  <!-- Eye glows -->
+  <ellipse cx="94" cy="52" rx="3.5" ry="2" fill="#00D9FF" opacity="0.9"/>
+  <ellipse cx="106" cy="52" rx="3.5" ry="2" fill="#00D9FF" opacity="0.9"/>
+
+  <!-- Shoulder armor - left -->
+  <path d="M62 75 Q55 68 58 82 Q60 92 68 88 Q72 82 68 76 Z" fill="#2a3868" stroke="#4a5a9a" stroke-width="0.8"/>
+  <!-- Shoulder armor - right -->
+  <path d="M138 75 Q145 68 142 82 Q140 92 132 88 Q128 82 132 76 Z" fill="#2a3868" stroke="#4a5a9a" stroke-width="0.8"/>
+
+  <!-- Body armor -->
+  <path d="M78 78 Q100 72 122 78 L126 110 Q100 118 74 110 Z" fill="#1a2448" stroke="#3a4a80" stroke-width="0.8"/>
+  <!-- Chest detail lines -->
+  <path d="M90 82 L90 108" stroke="#00D9FF" stroke-width="0.5" opacity="0.4"/>
+  <path d="M110 82 L110 108" stroke="#00D9FF" stroke-width="0.5" opacity="0.4"/>
+  <path d="M80 92 L120 92" stroke="#00D9FF" stroke-width="0.5" opacity="0.3"/>
+
+  <!-- Left arm extending forward -->
+  <path d="M74 88 Q55 95 48 108 Q44 116 52 120 Q58 122 65 118 Q72 112 76 102"
+        fill="#1e2a50" stroke="#3a4a80" stroke-width="0.8"/>
+  <!-- Left hand -->
+  <ellipse cx="52" cy="120" rx="8" ry="5" fill="#c8d0e8" transform="rotate(-20 52 120)"/>
+
+  <!-- Right arm extending forward -->
+  <path d="M126 88 Q145 95 152 108 Q156 116 148 120 Q142 122 135 118 Q128 112 124 102"
+        fill="#1e2a50" stroke="#3a4a80" stroke-width="0.8"/>
+  <!-- Right hand -->
+  <ellipse cx="148" cy="120" rx="8" ry="5" fill="#c8d0e8" transform="rotate(20 148 120)"/>
+
+  <!-- Globe glow halo -->
+  <circle cx="100" cy="128" r="28" fill="url(#glow)" filter="url(#gblur)"/>
+
+  <!-- Globe -->
+  <circle cx="100" cy="128" r="18" fill="url(#globe)" stroke="#00D9FF" stroke-width="0.8"/>
+  <!-- Globe continents suggestion -->
+  <path d="M88 120 Q94 118 96 124 Q98 128 94 130 Q90 130 88 126 Z" fill="#1040a0" opacity="0.6"/>
+  <path d="M102 122 Q108 120 112 126 Q114 130 110 133 Q104 134 102 128 Z" fill="#1040a0" opacity="0.6"/>
+  <!-- Globe ring -->
+  <ellipse cx="100" cy="128" rx="26" ry="6" fill="none" stroke="#00D9FF" stroke-width="1" opacity="0.6"/>
+
+  <!-- Control panels on sides -->
+  <rect x="22" y="88" width="22" height="30" rx="3" fill="#0a1428" stroke="#1a3468" stroke-width="0.8"/>
+  <rect x="26" y="92" width="6" height="4" rx="1" fill="#00D9FF" opacity="0.5"/>
+  <rect x="34" y="92" width="6" height="4" rx="1" fill="#00D9FF" opacity="0.3"/>
+  <rect x="26" y="100" width="14" height="2" rx="1" fill="#00D9FF" opacity="0.3"/>
+  <rect x="26" y="106" width="10" height="2" rx="1" fill="#00D9FF" opacity="0.2"/>
+
+  <rect x="156" y="88" width="22" height="30" rx="3" fill="#0a1428" stroke="#1a3468" stroke-width="0.8"/>
+  <rect x="160" y="92" width="6" height="4" rx="1" fill="#00D9FF" opacity="0.5"/>
+  <rect x="168" y="92" width="6" height="4" rx="1" fill="#00D9FF" opacity="0.3"/>
+  <rect x="160" y="100" width="14" height="2" rx="1" fill="#00D9FF" opacity="0.3"/>
+  <rect x="164" y="106" width="10" height="2" rx="1" fill="#00D9FF" opacity="0.2"/>
+
+  <!-- Bottom emblem -->
+  <path d="M88 158 L100 148 L112 158 L108 172 L92 172 Z" fill="#1a2448" stroke="#3a4a80" stroke-width="0.8"/>
+  <path d="M94 158 L100 153 L106 158 L104 166 L96 166 Z" fill="#00D9FF" opacity="0.2"/>
+
+  <!-- Outer ring border glow -->
+  <circle cx="100" cy="100" r="97" fill="none" stroke="#00D9FF" stroke-width="0.5" opacity="0.3"/>
+</svg>

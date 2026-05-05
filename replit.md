@@ -24,4 +24,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
+## Artifacts
+
+- **mothership** (`artifacts/mothership`, `/`): Vite + React 19 port of an imported Next.js app
+  ("Mothership / Iceman Edition"). Pages are auto-routed from `src/app/**/page.tsx` via wouter +
+  `import.meta.glob`. Server-only Next.js, Drizzle, Postgres, Supabase, Workflow SDK, Plaid, etc.
+  imports are aliased to no-op shims under `src/shims/` (see `vite.config.ts`). The original
+  `app/api/**` route handlers were stripped — backend functionality is out of scope; pages render
+  with full Tailwind v4 styling and any data fetches simply fail with 502/undefined.
+- **api-server** (`artifacts/api-server`): Express API server (template default).
+- **mockup-sandbox** (`artifacts/mockup-sandbox`): canvas component preview server.
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
