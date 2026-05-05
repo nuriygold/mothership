@@ -108,12 +108,12 @@ OPENCLAW_AGENT_EMERALD     # Emerald agent ID (required — others fall back to 
 
 ### Database URL precedence (important)
 ```
-DATABASE_POOLER_URL        # Preferred Vercel runtime URL for production
-DATABASE_URL_POOLER_TRANS  # Transaction pooler fallback
-DATABASE_URL               # Legacy app URL if explicitly set
-POSTGRES_URL_NON_POOLING   # External tooling only when reachable
-POSTGRES_URL               # External tooling fallback
+POSTGRES_URL_NON_POOLING   # Preferred direct Postgres URL when available
+POSTGRES_URL               # Fallback direct Postgres URL
+DATABASE_URL               # Primary app URL if direct Postgres URL is not set
 PRISMA_DATABASE_URL        # Legacy fallback
+DATABASE_POOLER_URL        # Legacy fallback
+DATABASE_URL_POOLER_TRANS  # Pooler fallback
 DATABASE_URL_POOLER_SESSION # Last-resort pooler fallback
 ```
 
