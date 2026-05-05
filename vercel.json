@@ -1,0 +1,6 @@
+{
+  "framework": null,
+  "buildCommand": "pnpm --filter @workspace/mothership run build",
+  "outputDirectory": "artifacts/mothership/dist/public",
+  "installCommand": "pnpm install"
+}
