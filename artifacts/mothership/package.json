@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     "./ops-engine": "./src/lib/ops/engine/index.ts",
-    "./ops-engine/types": "./src/lib/ops/types.ts"
+    "./ops-engine/types": "./src/lib/ops/types.ts",
+    "./server/v2": "./src/server/v2.ts",
+    "./server/v2-auth": "./src/lib/v2/auth.ts"
   },
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
