@@ -23,10 +23,10 @@ export function ensureV2Authorized(req: Request) {
   return null;
 }
 
-export function withErrorEnvelope(handler: () => Promise<Response>) {
-  return async () => {
+export function withErrorEnvelope<TArgs extends unknown[]>(handler: (...args: TArgs) => Promise<Response>) {
+  return async (...args: TArgs) => {
     try {
-      return await handler();
+      return await handler(...args);
     } catch (error) {
       return jsonError(
         'INTERNAL_ERROR',
