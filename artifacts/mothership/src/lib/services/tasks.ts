@@ -70,7 +70,7 @@ export async function listTasks() {
   if (isTaskPoolRepositorySource()) {
     const repositoryTasks = await listTaskPoolTasks();
     if (repositoryTasks) return repositoryTasks;
-    return [];
+    console.warn('[listTasks] Task-pool repository unavailable, falling back to database tasks.');
   }
 
   try {
