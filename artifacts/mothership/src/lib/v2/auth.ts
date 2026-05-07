@@ -1,4 +1,8 @@
-import type { V2ErrorResponse } from '@/lib/v2/types';
+import type { V2ErrorResponse } from './types.js';
+
+
+type NodeEnvLike = Record<string, string | undefined>;
+declare const process: { env: NodeEnvLike };
 
 function jsonError(code: string, message: string, status: number) {
   return Response.json(
