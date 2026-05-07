@@ -3,7 +3,15 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 function resolveDatabaseUrl() {
-  return process.env.DATABASE_URL ?? process.env.PRISMA_DATABASE_URL ?? process.env.DATABASE_POOLER_URL;
+  return (
+    process.env.SUPABASE_DATABASE_URL ??
+    process.env.POSTGRES_URL_NON_POOLING ??
+    process.env.POSTGRES_URL ??
+    process.env.DATABASE_URL_POOLER_TRANS ??
+    process.env.DATABASE_URL_POOLER_SESSION ??
+    process.env.DATABASE_POOLER_URL ??
+    process.env.DATABASE_URL
+  );
 }
 
 const globalForDb = globalThis as unknown as {
@@ -16,7 +24,9 @@ function getSql() {
 
   const connectionString = resolveDatabaseUrl();
   if (!connectionString) {
-    throw new Error('DATABASE_URL (or PRISMA_DATABASE_URL / DATABASE_POOLER_URL) must be set.');
+    throw new Error(
+      'A Supabase/Postgres database URL must be set (SUPABASE_DATABASE_URL / POSTGRES_URL_NON_POOLING / POSTGRES_URL / DATABASE_URL_POOLER_TRANS / DATABASE_URL_POOLER_SESSION / DATABASE_POOLER_URL / DATABASE_URL).',
+    );
   }
 
   const client = postgres(connectionString, { prepare: false });

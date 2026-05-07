@@ -1,8 +1,8 @@
 import { and, desc, eq, ilike, or } from 'drizzle-orm';
-import { db } from '@/lib/db/client';
-import { tasks, users, workflows } from '@/lib/db/schema';
-import { TaskPriority, TaskStatus } from '@/lib/db/enums';
-import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks, updateTaskPoolIssue } from '@/lib/integrations/task-pool';
+import { db } from '../db/client';
+import { tasks, users, workflows } from '../db/schema';
+import { TaskPriority, TaskStatus } from '../db/enums';
+import { createTaskPoolIssue, isTaskPoolRepositorySource, listTaskPoolTasks, updateTaskPoolIssue } from '../integrations/task-pool';
 import { randomUUID } from 'node:crypto';
 
 async function resolveOwnerId(input: { ownerId?: string | null; ownerLogin?: string }) {

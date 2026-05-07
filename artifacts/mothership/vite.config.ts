@@ -10,6 +10,7 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT: "${rawPort}"`);
 
 const basePath = process.env.BASE_PATH ?? "/";
+const apiTarget = process.env.API_BASE_URL ?? "http://127.0.0.1:4000";
 
 export default defineConfig({
   base: basePath,
@@ -68,6 +69,12 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     fs: { strict: false },
+    proxy: {
+      "/api": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+    },
   },
   preview: { port, host: "0.0.0.0", allowedHosts: true },
 });

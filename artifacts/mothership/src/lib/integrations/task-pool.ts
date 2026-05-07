@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { TaskPriority, TaskStatus, WorkflowStatus, WorkflowType } from '@/lib/db/enums';
+import { TaskPriority, TaskStatus, WorkflowStatus, WorkflowType } from '../db/enums';
 
 const DEFAULT_OWNER = 'nuriygold';
 const DEFAULT_REPO = 'task-pool';
@@ -253,7 +253,7 @@ async function fetchSnapshotFromRawUrl(): Promise<TaskPoolSnapshot | null> {
   const { owner, repo, branch, snapshotPath } = getConfig();
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${snapshotPath}`;
   try {
-    const res = await fetch(url, { next: { revalidate: 60 } });
+    const res = await fetch(url);
     if (!res.ok) {
       logTaskPoolEvent('warn', 'snapshot_raw_fetch_failed', { status: res.status, url });
       return null;
@@ -280,7 +280,6 @@ async function fetchSnapshotFromContentsApi(): Promise<TaskPoolSnapshot | null> 
         Authorization: `Bearer ${token}`,
         'X-GitHub-Api-Version': '2022-11-28',
       },
-      next: { revalidate: 60 },
     });
 
     if (!res.ok) {
@@ -311,7 +310,7 @@ async function fetchIssuesFromGitHubApi(): Promise<GitHubIssue[] | null> {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
-    const res = await fetch(url, { headers, next: { revalidate: 60 } });
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       logTaskPoolEvent('warn', 'issues_fetch_failed', { status: res.status, owner, repo });
       return null;

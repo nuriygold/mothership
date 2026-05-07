@@ -115,7 +115,7 @@ export default function VisionPage() {
             <p style={{ color: 'var(--foreground)', opacity: 0.55 }}>
               {error?.message ?? 'Could not load the vision board.'} The database migration may need to be applied:{' '}
               <code className="rounded px-1" style={{ background: 'rgba(0,0,0,0.08)', fontSize: '11px' }}>
-              npm run db:migrate
+              pnpm --filter @workspace/mothership run db:push
               </code>
             </p>
         </div>

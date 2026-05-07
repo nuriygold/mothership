@@ -8,11 +8,16 @@ const crypto = require('node:crypto');
 const postgres = require('postgres');
 
 const ROOT = path.resolve(__dirname, '..');
-const MIGRATIONS_DIR = path.join(ROOT, 'drizzle', 'migrations');
-const JOURNAL_PATH = path.join(MIGRATIONS_DIR, 'meta', '_journal.json');
+const SUPABASE_MIGRATIONS_DIR = path.join(ROOT, 'supabase', 'migrations');
+const DRIZZLE_MIGRATIONS_DIR = path.join(ROOT, 'artifacts', 'mothership', 'drizzle', 'mc');
+const JOURNAL_CANDIDATES = [
+  path.join(ROOT, 'drizzle', 'migrations', 'meta', '_journal.json'),
+  path.join(DRIZZLE_MIGRATIONS_DIR, 'meta', '_journal.json'),
+];
 const SCHEMA_FILES = [
-  path.join(ROOT, 'lib', 'db', 'schema.ts'),
-  path.join(ROOT, 'lib', 'db', 'dispatch-schema.ts'),
+  path.join(ROOT, 'artifacts', 'mothership', 'src', 'lib', 'db', 'schema.ts'),
+  path.join(ROOT, 'artifacts', 'mothership', 'src', 'lib', 'db', 'dispatch-schema.ts'),
+  path.join(ROOT, 'lib', 'db', 'src', 'schema', 'index.ts'),
 ];
 
 function firstNonEmpty(...values) {
@@ -25,13 +30,12 @@ function firstNonEmpty(...values) {
 
 const DATABASE_URL = firstNonEmpty(
   process.env.SUPABASE_DATABASE_URL,
+  process.env.POSTGRES_URL_NON_POOLING,
+  process.env.POSTGRES_URL,
   process.env.DATABASE_URL,
   process.env.DATABASE_POOLER_URL,
   process.env.DATABASE_URL_POOLER_TRANS,
   process.env.DATABASE_URL_POOLER_SESSION,
-  process.env.POSTGRES_URL_NON_POOLING,
-  process.env.POSTGRES_URL,
-  process.env.PRISMA_DATABASE_URL
 );
 
 if (!DATABASE_URL) {
@@ -46,6 +50,17 @@ function sha256(filePath) {
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function resolveDrizzleJournalPath() {
+  return JOURNAL_CANDIDATES.find((candidate) => fs.existsSync(candidate));
+}
+
+function listSupabaseMigrationFiles() {
+  if (!fs.existsSync(SUPABASE_MIGRATIONS_DIR)) return [];
+  return fs.readdirSync(SUPABASE_MIGRATIONS_DIR)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
 }
 
 function migrationFilesFromJournal(journal) {
@@ -68,21 +83,36 @@ function tableNamesFromSchemaSource(source) {
 }
 
 async function main() {
-  const journal = readJson(JOURNAL_PATH);
-  const migrationFiles = migrationFilesFromJournal(journal);
-  const expectedHashes = migrationFiles.map((filename) => {
-    const migrationPath = path.join(MIGRATIONS_DIR, filename);
-    if (!fs.existsSync(migrationPath)) {
-      throw new Error(`Missing migration file: drizzle/migrations/${filename}`);
+  const journalPath = resolveDrizzleJournalPath();
+  const expectedHashes = [];
+
+  if (journalPath) {
+    const journal = readJson(journalPath);
+    const migrationsDir = path.dirname(path.dirname(journalPath));
+    const migrationFiles = migrationFilesFromJournal(journal);
+    for (const filename of migrationFiles) {
+      const migrationPath = path.join(migrationsDir, filename);
+      if (!fs.existsSync(migrationPath)) {
+        throw new Error(`Missing migration file: ${path.relative(ROOT, migrationPath)}`);
+      }
+      expectedHashes.push({
+        filename,
+        hash: sha256(migrationPath),
+      });
     }
-    return {
-      filename,
-      hash: sha256(migrationPath),
-    };
-  });
+  } else {
+    for (const filename of listSupabaseMigrationFiles()) {
+      const migrationPath = path.join(SUPABASE_MIGRATIONS_DIR, filename);
+      expectedHashes.push({
+        filename,
+        hash: sha256(migrationPath),
+      });
+    }
+  }
 
   const declaredTables = new Set();
   for (const schemaFile of SCHEMA_FILES) {
+    if (!fs.existsSync(schemaFile)) continue;
     const source = fs.readFileSync(schemaFile, 'utf8');
     for (const tableName of tableNamesFromSchemaSource(source)) {
       declaredTables.add(tableName);
@@ -104,7 +134,7 @@ async function main() {
     `;
     if (migrationTable.length === 0) {
       issues.push('Missing drizzle.__drizzle_migrations table');
-    } else {
+    } else if (expectedHashes.length > 0) {
       const applied = await sql`
         select hash
         from drizzle.__drizzle_migrations

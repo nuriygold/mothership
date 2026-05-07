@@ -27,6 +27,17 @@ export const notifications = pgTable('Notification', {
   readCreatedAtIdx: index('Notification_read_createdAt_idx').on(table.read, table.createdAt),
 }));
 
+export const wellnessLogs = pgTable('wellness_logs', {
+  date: text('date').primaryKey(),
+  water: integer('water').default(0).notNull(),
+  steps: integer('steps').default(0).notNull(),
+  workout: boolean('workout').default(false).notNull(),
+  prayer: boolean('prayer').default(false).notNull(),
+  journal: boolean('journal').default(false).notNull(),
+  vitamins: boolean('vitamins').default(false).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const tasks = pgTable('Task', {
   id: text('id').primaryKey(),
   workflowId: text('workflowId'),
