@@ -1,20 +1,7 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
+// LEGACY PLACEHOLDER ONLY.
 //
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
+// This package is not the canonical schema authority for the app.
+// Use artifacts/mothership/src/lib/db/schema.ts instead.
 //
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
-
-export {}
+// Keeping this file empty prevents accidental dual-schema ownership.
+export {};

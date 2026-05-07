@@ -6,7 +6,7 @@ const { Pool } = pg;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+    "DATABASE_URL must be set. This legacy package should not be used for Mothership runtime access; use artifacts/mothership/src/lib/db instead.",
   );
 }
 

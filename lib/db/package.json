@@ -9,7 +9,8 @@
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
+    "deprecated": "echo 'lib/db is legacy. Use artifacts/mothership/src/lib/db and pnpm db:push instead.'"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
