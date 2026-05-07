@@ -21,6 +21,7 @@
     "target": "es2022",
     "types": [],
     "paths": {
+      "@/*": ["./artifacts/mothership/src/*"],
       "@workspace/mothership/server/*": ["./artifacts/mothership/src/server/*"],
       "@workspace/mothership/server/v2-auth": ["./artifacts/mothership/src/lib/v2/auth.ts"]
     },

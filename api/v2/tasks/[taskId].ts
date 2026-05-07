@@ -1,5 +1,5 @@
-import { patchV2Task } from '@workspace/mothership/server/v2';
-import { ensureV2Authorized, withErrorEnvelope } from '@workspace/mothership/server/v2-auth';
+import { patchV2Task } from '../../../artifacts/mothership/src/server/v2';
+import { ensureV2Authorized, withErrorEnvelope } from '../../../artifacts/mothership/src/lib/v2/auth';
 
 function jsonError(code: string, message: string, status: number) {
   return Response.json({ error: { code, message } }, { status });
