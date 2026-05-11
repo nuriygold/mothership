@@ -14,11 +14,11 @@
     },
     "./server/v2": {
       "types": "./dist/server/v2.d.ts",
-      "default": "./src/server/v2.ts"
+      "default": "./dist/server/v2.js"
     },
     "./server/v2-auth": {
       "types": "./dist/lib/v2/auth.d.ts",
-      "default": "./src/lib/v2/auth.ts"
+      "default": "./dist/lib/v2/auth.js"
     },
     "./db": {
       "types": "./dist/lib/db/index.d.ts",
@@ -27,10 +27,11 @@
   },
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "build": "vite build --config vite.config.ts",
+    "build": "vite build --config vite.config.ts && tsc -p tsconfig.server.json",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "db:push": "drizzle-kit push --config ./drizzle.config.ts"
+    "db:push": "drizzle-kit push --config ./drizzle.config.ts",
+    "build:server": "tsc -p tsconfig.server.json"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
