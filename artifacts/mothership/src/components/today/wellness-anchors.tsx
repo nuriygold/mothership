@@ -1,7 +1,5 @@
-
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
 import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Pill } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 type AnchorDef = {
   key: string;
@@ -17,8 +15,8 @@ type AnchorDef = {
 };
 
 interface WellnessState {
-  water: number;    // 0–8 glasses
-  steps: number;    // 0–10 (thousands of steps)
+  water: number;
+  steps: number;
   workout: boolean;
   prayer: boolean;
   journal: boolean;
@@ -29,10 +27,8 @@ const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, pr
 
 function easternDateString(offsetDays = 0): string {
   const d = new Date();
-  if (offsetDays !== 0) {
-    d.setDate(d.getDate() + offsetDays);
-  }
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+  if (offsetDays !== 0) d.setDate(d.getDate() + offsetDays);
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
 function todayDate() {
@@ -43,83 +39,87 @@ function yesterdayDate() {
   return easternDateString(-1);
 }
 
-function wellnessKey() {
-  return `wellness-${easternDateString(0)}`;
+function wellnessKey(date = easternDateString(0)) {
+  return 'wellness-' + date;
 }
 
-// Tracks when we last saved locally so we can compare against Supabase's updated_at.
-// Stored separately to avoid changing the wellness data format.
-function wellnessSavedAtKey() {
-  return `wellness-savedAt-${easternDateString(0)}`;
+function wellnessSavedAtKey(date = easternDateString(0)) {
+  return 'wellness-savedAt-' + date;
 }
 
-function loadWellness(): WellnessState {
+function loadWellness(date = easternDateString(0)): WellnessState {
   if (typeof window === 'undefined') return WELLNESS_DEFAULT;
   try {
-    const s = localStorage.getItem(wellnessKey());
+    const s = localStorage.getItem(wellnessKey(date));
     return s ? { ...WELLNESS_DEFAULT, ...JSON.parse(s) } : WELLNESS_DEFAULT;
-  } catch { return WELLNESS_DEFAULT; }
+  } catch {
+    return WELLNESS_DEFAULT;
+  }
 }
 
-function loadLocalSavedAt(): string | null {
-  try { return localStorage.getItem(wellnessSavedAtKey()); } catch { return null; }
-}
-
-function saveWellness(s: WellnessState) {
+function loadSavedAt(date = easternDateString(0)): string | null {
   try {
-    localStorage.setItem(wellnessKey(), JSON.stringify(s));
-    // Record when we last wrote locally so Supabase can only win if it's newer.
-    localStorage.setItem(wellnessSavedAtKey(), new Date().toISOString());
-  } catch { /**/ }
+    return localStorage.getItem(wellnessSavedAtKey(date));
+  } catch {
+    return null;
+  }
 }
 
-async function fetchFromSupabase(date: string): Promise<{ state: WellnessState; updatedAt: string } | null> {
-  // Use select('*') so the query succeeds even if the vitamins column hasn't been
-  // added to the DB schema yet — PostgREST errors on explicit unknown column names.
-  const { data, error } = await supabase
-    .from('wellness_logs')
-    .select('*')
-    .eq('date', date)
-    .maybeSingle();
-  if (error || !data) return null;
+function saveWellness(date: string, state: WellnessState, savedAt = new Date().toISOString()) {
+  try {
+    localStorage.setItem(wellnessKey(date), JSON.stringify(state));
+    localStorage.setItem(wellnessSavedAtKey(date), savedAt);
+  } catch {}
+}
+
+function isRemoteNewer(remoteUpdatedAt: string, localSavedAt: string | null) {
+  if (!localSavedAt) return true;
+  const remoteTs = new Date(remoteUpdatedAt).getTime();
+  const localTs = new Date(localSavedAt).getTime();
+  if (Number.isNaN(remoteTs)) return false;
+  if (Number.isNaN(localTs)) return true;
+  return remoteTs >= localTs;
+}
+
+async function fetchWellness(date: string): Promise<{ state: WellnessState; updatedAt: string } | null> {
+  const response = await fetch('/api/v2/wellness?date=' + encodeURIComponent(date));
+  if (!response.ok) {
+    console.warn('[wellness] fetch failed', response.status, date);
+    return null;
+  }
+  const payload = await response.json() as { log?: Record<string, unknown> | null };
+  const data = payload.log;
+  if (!data) return null;
   return {
     state: {
-      water: data.water ?? 0,
-      steps: data.steps ?? 0,
-      workout: data.workout ?? false,
-      prayer: data.prayer ?? false,
-      journal: data.journal ?? false,
-      vitamins: data.vitamins ?? false,
+      water: typeof data.water === 'number' ? data.water : 0,
+      steps: typeof data.steps === 'number' ? data.steps : 0,
+      workout: data.workout === true,
+      prayer: data.prayer === true,
+      journal: data.journal === true,
+      vitamins: data.vitamins === true,
     },
-    updatedAt: data.updated_at as string,
+    updatedAt: typeof data.updated_at === 'string' ? data.updated_at : new Date(0).toISOString(),
   };
 }
 
-// Syncs to Supabase with up to `retries` attempts (1 s apart).
-// localStorage always has the correct state; Supabase is the cross-device store.
-async function syncToSupabase(state: WellnessState, retries = 2): Promise<void> {
-  const payload: Record<string, unknown> = {
-    date: todayDate(), ...state, updated_at: new Date().toISOString(),
-  };
+async function syncWellness(date: string, state: WellnessState, retries = 2): Promise<void> {
   try {
-    const { error } = await supabase.from('wellness_logs').upsert(payload, { onConflict: 'date' });
-    if (error) throw error;
-  } catch (err: unknown) {
-    const pgErr = err as { code?: string; message?: string };
-    // If a column in the payload doesn't exist in the DB schema yet (e.g. vitamins),
-    // PostgREST returns code 42703.  Retry once without that column so the rest of
-    // the data still gets saved.
-    if (pgErr?.code === '42703' && pgErr?.message?.includes('vitamins')) {
-      const { vitamins: _v, ...withoutVitamins } = payload;
-      await supabase.from('wellness_logs').upsert(withoutVitamins, { onConflict: 'date' });
-      return;
-    }
+    const response = await fetch('/api/v2/wellness', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, ...state }),
+    });
+    if (!response.ok) throw new Error('wellness sync failed: ' + response.status);
+    const payload = await response.json() as { log?: { updated_at?: string } | null };
+    const updatedAt = payload.log?.updated_at ?? new Date().toISOString();
+    saveWellness(date, state, updatedAt);
+  } catch (error) {
     if (retries > 0) {
-      await new Promise<void>((r) => setTimeout(r, 1000));
-      return syncToSupabase(state, retries - 1);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+      return syncWellness(date, state, retries - 1);
     }
-    // All retries exhausted — localStorage still holds the correct data and
-    // the savedAt timestamp will protect it from being overwritten on the next load.
+    console.warn('[wellness] sync failed after retries', { date, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -127,44 +127,37 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
   const [w, setW] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [yw, setYw] = useState<WellnessState>(WELLNESS_DEFAULT);
   const [celebrate, setCelebrate] = useState(false);
-  const celebrateTimer = useRef<ReturnType<typeof setTimeout>>();
+  const celebrateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Show local state immediately while Supabase loads
-    setW(loadWellness());
-
-    const ydate = yesterdayDate();
     const tdate = todayDate();
-
-    Promise.all([
-      fetchFromSupabase(tdate),
-      fetchFromSupabase(ydate),
-    ]).then(([remote, remoteYesterday]) => {
-      // Supabase is always the source of truth for cross-device consistency.
-      // Local state is only a display cache until this fetch completes.
-      if (remote) {
-        setW(remote.state);
-        saveWellness(remote.state);
-      }
-
-      // Yesterday — read-only; Supabase wins, fall back to localStorage.
-      const ylocal = (() => {
-        try {
-          const s = localStorage.getItem(`wellness-${ydate}`);
-          return s ? { ...WELLNESS_DEFAULT, ...JSON.parse(s) } : null;
-        } catch { return null; }
-      })();
-      setYw(remoteYesterday?.state ?? ylocal ?? WELLNESS_DEFAULT);
-    });
+    const ydate = yesterdayDate();
+    setW(loadWellness(tdate));
+    setYw(loadWellness(ydate));
+    Promise.all([fetchWellness(tdate), fetchWellness(ydate)])
+      .then(([remoteToday, remoteYesterday]) => {
+        if (remoteToday && isRemoteNewer(remoteToday.updatedAt, loadSavedAt(tdate))) {
+          setW(remoteToday.state);
+          saveWellness(tdate, remoteToday.state, remoteToday.updatedAt);
+        }
+        if (remoteYesterday && isRemoteNewer(remoteYesterday.updatedAt, loadSavedAt(ydate))) {
+          setYw(remoteYesterday.state);
+          saveWellness(ydate, remoteYesterday.state, remoteYesterday.updatedAt);
+        }
+      })
+      .catch((error) => {
+        console.warn('[wellness] hydration failed', error instanceof Error ? error.message : String(error));
+      });
   }, []);
 
   useEffect(() => () => clearTimeout(celebrateTimer.current), []);
 
   function update(patch: Partial<WellnessState>) {
+    const tdate = todayDate();
     setW((prev) => {
       const next = { ...prev, ...patch };
-      saveWellness(next);
-      void syncToSupabase(next);
+      saveWellness(tdate, next);
+      void syncWellness(tdate, next);
       const wasAllDone = prev.water >= 8 && prev.steps >= 10 && prev.workout && prev.prayer && prev.journal && prev.vitamins;
       const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal && next.vitamins;
       if (allDone) {
@@ -173,13 +166,11 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
         celebrateTimer.current = setTimeout(() => setCelebrate(false), 1800);
         if (!wasAllDone) {
           onAllComplete?.();
-          // Fire-and-forget: persists a trophy for today so it shows up on the Trophy page.
-          // Server endpoint is idempotent per date, so retries/re-renders are safe.
           void fetch('/api/v2/trophy/anchor', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: todayDate() }),
-          }).catch(() => { /* offline is fine — will retry on next flip if still all-done */ });
+            body: JSON.stringify({ date: tdate }),
+          }).catch(() => {});
         }
       }
       return next;
@@ -188,29 +179,16 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
 
   const done = [w.water >= 8, w.steps >= 10, w.workout, w.prayer, w.journal, w.vitamins].filter(Boolean).length;
   const pct = (done / 6) * 100;
-  const r = 9; const circ = 2 * Math.PI * r;
+  const r = 9;
+  const circ = 2 * Math.PI * r;
 
   const anchors: AnchorDef[] = [
     {
       key: 'water', label: 'Water', icon: Droplets,
       bg: 'var(--color-sky)', text: 'var(--color-sky-text)',
       todayActive: w.water >= 8, ydayActive: yw.water >= 8,
-      todaySub: (
-        <span className="flex gap-0.5 flex-wrap justify-center mt-0.5">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <span key={i} className="w-1 h-1 rounded-full transition-all"
-              style={{ background: i < w.water ? 'var(--color-sky-text)' : 'var(--border)' }} />
-          ))}
-        </span>
-      ),
-      ydaySub: (
-        <span className="flex gap-0.5 flex-wrap justify-center mt-0.5">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <span key={i} className="w-1 h-1 rounded-full"
-              style={{ background: i < yw.water ? 'var(--color-sky-text)' : 'var(--border)' }} />
-          ))}
-        </span>
-      ),
+      todaySub: (<span className="flex gap-0.5 flex-wrap justify-center mt-0.5">{Array.from({ length: 8 }).map((_, i) => (<span key={i} className="w-1 h-1 rounded-full transition-all" style={{ background: i < w.water ? 'var(--color-sky-text)' : 'var(--border)' }} />))}</span>),
+      ydaySub: (<span className="flex gap-0.5 flex-wrap justify-center mt-0.5">{Array.from({ length: 8 }).map((_, i) => (<span key={i} className="w-1 h-1 rounded-full" style={{ background: i < yw.water ? 'var(--color-sky-text)' : 'var(--border)' }} />))}</span>),
       onTap: () => update({ water: w.water >= 8 ? 0 : w.water + 1 }),
     },
     {
@@ -256,69 +234,41 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
   ];
 
   return (
-    <div className="rounded-2xl border p-2 transition-all"
-      style={{
-        background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : '#EDE8DC',
-        borderColor: celebrate ? '#F59E0B' : 'var(--border)',
-      }}>
+    <div className="rounded-2xl border p-2 transition-all" style={{ background: celebrate ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)' : '#EDE8DC', borderColor: celebrate ? '#F59E0B' : 'var(--border)' }}>
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
           <svg width="24" height="24" viewBox="0 0 24 24" className="-rotate-90">
             <circle cx="12" cy="12" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
-            <circle cx="12" cy="12" r={r} fill="none"
-              stroke={done === 6 ? '#F59E0B' : 'var(--color-cyan)'}
-              strokeWidth="2"
-              strokeDasharray={circ}
-              strokeDashoffset={circ - (circ * pct) / 100}
-              strokeLinecap="round"
-              style={{ transition: 'stroke-dashoffset 0.4s ease' }}
-            />
-            <text x="12" y="12" textAnchor="middle" dominantBaseline="central"
-              className="rotate-90" style={{ fontSize: 7, fontWeight: 700, fill: done === 6 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '12px 12px' }}>
+            <circle cx="12" cy="12" r={r} fill="none" stroke={done === 6 ? '#F59E0B' : 'var(--color-cyan)'} strokeWidth="2" strokeDasharray={circ} strokeDashoffset={circ - (circ * pct) / 100} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.4s ease' }} />
+            <text x="12" y="12" textAnchor="middle" dominantBaseline="central" className="rotate-90" style={{ fontSize: 7, fontWeight: 700, fill: done === 6 ? '#B45309' : 'var(--foreground)', transform: 'rotate(90deg)', transformOrigin: '12px 12px' }}>
               {done}/6
             </text>
           </svg>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wide leading-tight" style={{ color: 'var(--muted-foreground)' }}>Daily Anchors</p>
             <p className="text-[8px] leading-tight" style={{ color: 'var(--muted-foreground)' }}>
-              {done === 6 ? '🏆 All done — you\'re on fire!' : `${6 - done} left today`}
+              {done === 6 ? '🏆 All done — you\'re on fire!' : (6 - done) + ' left today'}
             </p>
           </div>
         </div>
         {celebrate && <span className="text-sm animate-bounce">🎉</span>}
       </div>
-
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
         {anchors.map((a) => {
           const Icon = a.icon;
           return (
-            <div key={a.key} className="rounded-xl overflow-hidden flex flex-col sm:flex-row"
-              style={{
-                border: `1px solid ${a.todayActive ? a.text : 'transparent'}`,
-                boxShadow: a.todayActive ? `0 1px 4px rgba(0,0,0,0.08)` : 'none',
-              }}>
-              {/* Yesterday — read-only */}
-              <div className="flex flex-col items-center gap-0 py-1 px-0.5 flex-1 opacity-55"
-                style={{ background: a.ydayActive ? a.bg : 'rgba(0,0,0,0.05)' }}>
-                <span className="text-[6px] font-semibold uppercase tracking-wide"
-                  style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>Yday</span>
+            <div key={a.key} className="rounded-xl overflow-hidden flex flex-col sm:flex-row" style={{ border: '1px solid ' + (a.todayActive ? a.text : 'transparent'), boxShadow: a.todayActive ? '0 1px 4px rgba(0,0,0,0.08)' : 'none' }}>
+              <div className="flex flex-col items-center gap-0 py-1 px-0.5 flex-1 opacity-55" style={{ background: a.ydayActive ? a.bg : 'rgba(0,0,0,0.05)' }}>
+                <span className="text-[6px] font-semibold uppercase tracking-wide" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>Yday</span>
                 <Icon className="w-2.5 h-2.5" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }} />
-                <span className="text-[7px] font-semibold leading-tight"
-                  style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
+                <span className="text-[7px] font-semibold leading-tight" style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
                 <div style={{ color: a.ydayActive ? a.text : 'var(--muted-foreground)' }}>{a.ydaySub}</div>
               </div>
-              {/* Divider */}
-              <div className="h-px w-full sm:h-auto sm:w-px"
-                style={{ background: a.todayActive ? a.text : 'rgba(0,0,0,0.1)', opacity: 0.3 }} />
-              {/* Today — interactive */}
-              <button onClick={a.onTap}
-                className="flex flex-col items-center gap-0 py-1 px-0.5 transition-all hover:brightness-95 active:scale-95 flex-1"
-                style={{ background: a.todayActive ? a.bg : 'var(--muted)' }}>
-                <span className="text-[6px] font-semibold uppercase tracking-wide"
-                  style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>Today</span>
+              <div className="h-px w-full sm:h-auto sm:w-px" style={{ background: a.todayActive ? a.text : 'rgba(0,0,0,0.1)', opacity: 0.3 }} />
+              <button onClick={a.onTap} className="flex flex-col items-center gap-0 py-1 px-0.5 transition-all hover:brightness-95 active:scale-95 flex-1" style={{ background: a.todayActive ? a.bg : 'var(--muted)' }}>
+                <span className="text-[6px] font-semibold uppercase tracking-wide" style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>Today</span>
                 <Icon className="w-2.5 h-2.5" style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }} />
-                <span className="text-[7px] font-semibold leading-tight"
-                  style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
+                <span className="text-[7px] font-semibold leading-tight" style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.label}</span>
                 <div style={{ color: a.todayActive ? a.text : 'var(--muted-foreground)' }}>{a.todaySub}</div>
               </button>
             </div>

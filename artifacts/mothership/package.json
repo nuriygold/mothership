@@ -4,10 +4,26 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./ops-engine": "./src/lib/ops/engine/index.ts",
-    "./ops-engine/types": "./src/lib/ops/types.ts",
-    "./server/v2": "./src/server/v2.ts",
-    "./server/v2-auth": "./src/lib/v2/auth.ts"
+    "./ops-engine": {
+      "types": "./dist/lib/ops/engine/index.d.ts",
+      "default": "./src/lib/ops/engine/index.ts"
+    },
+    "./ops-engine/types": {
+      "types": "./dist/lib/ops/types.d.ts",
+      "default": "./src/lib/ops/types.ts"
+    },
+    "./server/v2": {
+      "types": "./dist/server/v2.d.ts",
+      "default": "./src/server/v2.ts"
+    },
+    "./server/v2-auth": {
+      "types": "./dist/lib/v2/auth.d.ts",
+      "default": "./src/lib/v2/auth.ts"
+    },
+    "./db": {
+      "types": "./dist/lib/db/index.d.ts",
+      "default": "./src/lib/db/index.ts"
+    }
   },
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
