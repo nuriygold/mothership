@@ -73,7 +73,7 @@ export type ForecastConfidence = {
 export type CashFlowForecast = {
   generatedAt: string;
   openingBalance: number;
-  liquidAccountsOnly: boolean;
+  liquidOnly: boolean;
   days: ForecastDay[];
   lowestPoint: { date: string; balance: number };
   paydaySchedules: PaydaySchedule[];

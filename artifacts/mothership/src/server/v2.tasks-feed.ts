@@ -1,8 +1,8 @@
-import { TaskPriority, TaskStatus } from '../lib/db/enums';
-import { db } from '../lib/db/client';
-import * as schema from '../lib/db/schema';
-import { listTasks } from '../lib/services/tasks';
-import type { V2TaskItem, V2TasksFeed } from '../lib/v2/types';
+import { TaskPriority, TaskStatus } from '../lib/db/enums.js';
+import { db } from '../lib/db/client.js';
+import * as schema from '../lib/db/schema.js';
+import { listTasks } from '../lib/services/tasks.js';
+import type { V2TaskItem, V2TasksFeed } from '../lib/v2/types.js';
 
 function mapTaskStatus(status: TaskStatus): V2TaskItem['status'] {
   switch (status) {
