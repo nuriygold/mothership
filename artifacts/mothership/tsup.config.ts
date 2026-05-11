@@ -8,10 +8,19 @@ export default defineConfig({
   format: ['esm'],
   outDir: 'dist',
   sourcemap: false,
-  dts: true,
+  dts: false,
   splitting: false,
   bundle: true,
-  external: ['postgres', 'drizzle-orm'],
+  external: [
+    'postgres',
+    'drizzle-orm',
+    'googleapis',
+    'nodemailer',
+    'imapflow',
+    'plaid',
+    '@supabase/supabase-js',
+    'next',
+  ],
   esbuildOptions(options) {
     options.alias = { '@': './src' };
   },
