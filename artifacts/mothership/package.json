@@ -27,11 +27,11 @@
   },
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "build": "vite build --config vite.config.ts && tsc -p tsconfig.server.json",
+    "build": "vite build --config vite.config.ts && tsup",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:push": "drizzle-kit push --config ./drizzle.config.ts",
-    "build:server": "tsc -p tsconfig.server.json"
+    "build:server": "tsup"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
