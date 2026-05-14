@@ -37,6 +37,7 @@ const navItems = [
   // Personas
   { label: 'Marco', href: '/marco' },
   { label: 'Claude', href: '/claude' },
+  { label: 'Hermes', href: '/hermes' },
   { label: 'Ruby', href: '/ruby' },
   { label: 'Marvin', href: '/marvin' },
   { label: 'Iceman', href: '/iceman' },
