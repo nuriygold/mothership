@@ -45,8 +45,6 @@ export default defineConfig({
       { find: /^nodemailer$/, replacement: path.resolve(import.meta.dirname, "src/shims/noop-module.ts") },
       { find: /^imapflow$/, replacement: path.resolve(import.meta.dirname, "src/shims/noop-module.ts") },
       { find: /^googleapis$/, replacement: path.resolve(import.meta.dirname, "src/shims/noop-module.ts") },
-      { find: /^plaid$/, replacement: path.resolve(import.meta.dirname, "src/shims/noop-module.ts") },
-      { find: /^react-plaid-link$/, replacement: path.resolve(import.meta.dirname, "src/shims/noop-module.ts") },
       // node:crypto used by services for randomUUID — provide browser shim
       { find: /^node:crypto$/, replacement: path.resolve(import.meta.dirname, "src/shims/node-crypto.ts") },
       // Project paths (must come last so regex above match first)
