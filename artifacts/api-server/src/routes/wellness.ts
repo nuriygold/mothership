@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { desc, eq } from "drizzle-orm";
-import { db, wellnessLogs } from "@workspace/mothership/db";
+import { db, wellnessLogs } from "@/lib/db";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();

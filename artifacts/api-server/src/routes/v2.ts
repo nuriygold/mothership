@@ -1,5 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { createV2Task, getV2TasksFeed, patchV2Task, type PatchTaskInput } from "../../../mothership/src/server/v2.js";
+import {
+  createV2Task,
+  getV2TasksFeed,
+  patchV2Task,
+  type PatchTaskInput,
+} from "@/server/v2";
 import wellnessRouter from "./wellness";
 import { logger } from "../lib/logger";
 

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { bootstrap as bootstrapOpsEngine } from "@workspace/mothership/ops-engine";
+import { bootstrap as bootstrapOpsEngine } from "@/lib/ops/engine";
+import { processDispatchQueue } from "@workspace/mothership/services/dispatch";
 
 const rawPort = process.env["PORT"];
 
@@ -11,6 +12,7 @@ if (!rawPort) {
 }
 
 const port = Number(rawPort);
+const DISPATCH_INTERVAL_MS = 30_000;
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
@@ -25,10 +27,25 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
 
   bootstrapOpsEngine()
-    .then(({ resumed }) => {
+    .then(({ resumed }: { resumed: number }) => {
       logger.info({ resumed }, "ops engine bootstrapped");
     })
     .catch((bootErr: unknown) => {
       logger.error({ err: bootErr }, "ops engine bootstrap failed");
     });
+
+  const runDispatchWorker = () => {
+    processDispatchQueue()
+      .then(({ processed, skipped }) => {
+        if (processed > 0 || skipped > 0) {
+          logger.info({ processed, skipped }, "dispatch queue processed");
+        }
+      })
+      .catch((dispatchErr: unknown) => {
+        logger.error({ err: dispatchErr }, "dispatch queue processing failed");
+      });
+  };
+
+  runDispatchWorker();
+  setInterval(runDispatchWorker, DISPATCH_INTERVAL_MS);
 });

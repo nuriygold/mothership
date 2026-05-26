@@ -11,7 +11,7 @@ import {
   seedDemoCampaigns,
   clearDemoCampaigns,
   ensureDemoAgents,
-} from "@workspace/mothership/ops-engine";
+} from "@/lib/ops/engine";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -72,6 +72,20 @@ router.get(
       return;
     }
     res.json({ campaign: await projection.projectCampaign(row) });
+  }),
+);
+
+router.get(
+  "/ops/campaigns/:id/feed",
+  wrap(async (req, res) => {
+    const row = await campaignsSvc.getCampaign(String(req.params.id));
+    if (!row) {
+      res.status(404).json({ message: "Campaign not found" });
+      return;
+    }
+
+    const campaign = await projection.projectCampaign(row);
+    res.json({ events: campaign.feed });
   }),
 );
 

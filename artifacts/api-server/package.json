@@ -16,6 +16,8 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "googleapis": "^172.0.0",
+    "nodemailer": "^8.0.8",
     "pino": "^9",
     "pino-http": "^10",
     "postgres": "^3.4.9"
@@ -25,6 +27,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
+    "@types/nodemailer": "^8.0.0",
     "drizzle-kit": "^0.31.9",
     "esbuild": "^0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
