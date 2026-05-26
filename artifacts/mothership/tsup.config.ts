@@ -17,7 +17,6 @@ export default defineConfig({
     'googleapis',
     'nodemailer',
     'imapflow',
-    'plaid',
     '@supabase/supabase-js',
     'next',
   ],
