@@ -8,6 +8,7 @@ import {
   type McCampaignAgent,
   type McCampaignInsert,
 } from '../../../db/dispatch-schema';
+import type { JsonValue } from '../../../db/json';
 import { record } from './events';
 
 export type CreateCampaignArgs = Omit<McCampaignInsert, 'id' | 'createdAt' | 'updatedAt'> & {
@@ -89,6 +90,30 @@ export async function setProgressSummary(
     .update(mcCampaigns)
     .set({ progressSummary: progress, updatedAt: new Date() })
     .where(eq(mcCampaigns.id, id));
+}
+
+export async function mergeMetadata(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<McCampaign | undefined> {
+  const campaign = await getCampaign(id);
+  if (!campaign) return undefined;
+
+  const nextMetadata = {
+    ...((campaign.metadata as Record<string, unknown> | null) ?? {}),
+    ...patch,
+  } as JsonValue;
+
+  const [row] = await db
+    .update(mcCampaigns)
+    .set({
+      metadata: nextMetadata,
+      updatedAt: new Date(),
+    })
+    .where(eq(mcCampaigns.id, id))
+    .returning();
+
+  return row;
 }
 
 export async function assignAgent(

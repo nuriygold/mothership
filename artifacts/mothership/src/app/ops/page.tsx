@@ -14,6 +14,7 @@ import type {
   Campaign,
   OpsTickerSummary,
   SystemRules,
+  SystemRulesResponse,
   WatchdogState,
 } from '@/lib/ops/types';
 
@@ -29,7 +30,7 @@ export default function OpsPage() {
     refreshInterval: 30_000,
   });
 
-  const { data: rulesData, mutate: mutateRules } = useSWR<{ rules: SystemRules }>(
+  const { data: rulesData, mutate: mutateRules } = useSWR<SystemRulesResponse>(
     '/api/ops/system-rules',
     opsFetcher,
     { refreshInterval: 60_000 }
@@ -45,6 +46,7 @@ export default function OpsPage() {
   const ticker = campaignsData?.ticker ?? null;
   const agents = agentsData?.agents ?? [];
   const rules = rulesData?.rules ?? null;
+  const rulesMutable = rulesData?.mutable ?? false;
   const watchdog = watchdogData ?? null;
 
   return (
@@ -118,7 +120,8 @@ export default function OpsPage() {
         <WatchdogPanel state={watchdog} onAfterAction={() => { void mutateWatchdog(); void mutateCampaigns(); }} />
         <SystemRulesPanel
           rules={rules}
-          onUpdated={(next) => mutateRules({ rules: next }, false)}
+          mutable={rulesMutable}
+          onUpdated={(next) => mutateRules({ rules: next, mutable: rulesMutable }, false)}
         />
       </div>
 

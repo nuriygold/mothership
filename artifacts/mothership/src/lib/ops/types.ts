@@ -78,6 +78,11 @@ export interface SystemRules {
   blockerThreshold: number;
 }
 
+export interface SystemRulesResponse {
+  rules: SystemRules;
+  mutable: boolean;
+}
+
 export interface WatchdogState {
   inProgress: Array<{
     campaignId: string;

@@ -1,6 +1,7 @@
 export type ToolDef = {
   name: string;
   description: string;
+  runtimeStatus: 'active' | 'mock' | 'blocker' | 'disabled';
   parameters: Record<string, { type: string; description: string }>;
   execute(args: Record<string, unknown>): Promise<string>;
 };
@@ -10,6 +11,7 @@ export type ToolDef = {
 const webSearchTool: ToolDef = {
   name: 'web_search',
   description: 'Search the web for current information. Returns a text summary of the top results.',
+  runtimeStatus: 'active',
   parameters: {
     query: { type: 'string', description: 'The search query' },
   },
@@ -45,6 +47,7 @@ const webSearchTool: ToolDef = {
 const fetchUrlTool: ToolDef = {
   name: 'fetch_url',
   description: 'Fetch the text content of a URL. Useful for reading web pages, APIs, or documents.',
+  runtimeStatus: 'active',
   parameters: {
     url: { type: 'string', description: 'The URL to fetch' },
   },
@@ -75,6 +78,7 @@ const listEbaySoldTool: ToolDef = {
   name: 'list_ebay_sold',
   description:
     'Search eBay completed/sold listings to get recent sale prices for an item. Useful for pricing research.',
+  runtimeStatus: 'active',
   parameters: {
     keywords: { type: 'string', description: 'Item keywords to search for' },
     max_results: { type: 'number', description: 'Maximum number of results to return (default 10)' },
@@ -127,6 +131,7 @@ const searchFacebookMarketplaceTool: ToolDef = {
   name: 'search_facebook_marketplace',
   description:
     'Search Facebook Marketplace listings. (Stub — requires Facebook Graph API credentials not yet configured.)',
+  runtimeStatus: 'disabled',
   parameters: {
     query: { type: 'string', description: 'Search query' },
     location: { type: 'string', description: 'City or zip code for local listings' },
@@ -145,6 +150,7 @@ const postCraigslistTool: ToolDef = {
   name: 'post_craigslist',
   description:
     'Post a listing to Craigslist. (Stub — requires Craigslist posting API/credentials not yet configured.)',
+  runtimeStatus: 'disabled',
   parameters: {
     title: { type: 'string', description: 'Listing title' },
     body: { type: 'string', description: 'Full listing body text' },
@@ -169,10 +175,39 @@ export const TOOL_REGISTRY: ToolDef[] = [
 
 const TOOL_MAP: Map<string, ToolDef> = new Map(TOOL_REGISTRY.map((t) => [t.name, t]));
 
+function mockDispatchToolsEnabled() {
+  return process.env.ENABLE_MOCK_TOOL_ADAPTERS === 'true';
+}
+
+export function resolveToolsForRequirements(requirements: string[]) {
+  const tools: ToolDef[] = [];
+  const unavailable: string[] = [];
+
+  for (const name of requirements) {
+    const tool = TOOL_MAP.get(name);
+    if (!tool) {
+      unavailable.push(name);
+      continue;
+    }
+
+    if (tool.runtimeStatus === 'disabled') {
+      unavailable.push(name);
+      continue;
+    }
+
+    if (tool.runtimeStatus === 'mock' && !mockDispatchToolsEnabled()) {
+      unavailable.push(name);
+      continue;
+    }
+
+    tools.push(tool);
+  }
+
+  return { tools, unavailable };
+}
+
 export function getToolsForRequirements(requirements: string[]): ToolDef[] {
-  return requirements
-    .map((name) => TOOL_MAP.get(name))
-    .filter((t): t is ToolDef => t !== undefined);
+  return resolveToolsForRequirements(requirements).tools;
 }
 
 export function buildToolsBlock(tools: ToolDef[]): string {

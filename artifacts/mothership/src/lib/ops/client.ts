@@ -10,6 +10,7 @@ import type {
   FeedEvent,
   OpsTickerSummary,
   SystemRules,
+  SystemRulesResponse,
   WatchdogState,
 } from './types';
 
@@ -107,7 +108,7 @@ export async function controlCampaign(id: string, action: CampaignControlAction)
   return body.campaign as Campaign;
 }
 
-export async function patchSystemRules(patch: Partial<SystemRules>): Promise<SystemRules> {
+export async function patchSystemRules(patch: Partial<SystemRules>): Promise<SystemRulesResponse> {
   const res = await fetch('/api/ops/system-rules', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -115,7 +116,7 @@ export async function patchSystemRules(patch: Partial<SystemRules>): Promise<Sys
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body?.message ?? 'Failed to update rules');
-  return body.rules as SystemRules;
+  return body as SystemRulesResponse;
 }
 
 export async function loadDemoMissions(): Promise<{ created: string[] }> {
@@ -150,5 +151,6 @@ export type {
   FeedEvent,
   OpsTickerSummary,
   SystemRules,
+  SystemRulesResponse,
   WatchdogState,
 };

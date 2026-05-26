@@ -31,11 +31,19 @@ node_modules
 /.sass-cache
 /connect.lock
 /coverage
+/AGENTS.md
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log
 testem.log
 /typings
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.env.example
 
 # System Files
 .DS_Store
@@ -48,3 +56,7 @@ Thumbs.db
 .cache/
 .local/
 .vercel
+.junie/
+**/.junie/
+supabase/.branches/
+supabase/.temp/

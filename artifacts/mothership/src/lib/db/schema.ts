@@ -247,11 +247,19 @@ export const dispatchCampaigns = pgTable('DispatchCampaign', {
   assignedBotId: text('assignedBotId'),
   revenueStream: text('revenueStream'),
   linkedTaskRef: text('linkedTaskRef'),
+  executionOwner: text('executionOwner'),
+  executionLeaseUntil: timestamp('executionLeaseUntil', { withTimezone: true }),
+  heartbeatAt: timestamp('heartbeatAt', { withTimezone: true }),
+  attemptCount: integer('attemptCount').default(0).notNull(),
   queuedAt: timestamp('queuedAt', { withTimezone: true }),
   scheduledAt: timestamp('scheduledAt', { withTimezone: true }),
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
-});
+}, (table) => ({
+  statusQueueIdx: index('DispatchCampaign_status_queuedAt_idx').on(table.status, table.queuedAt),
+  statusScheduleIdx: index('DispatchCampaign_status_scheduledAt_idx').on(table.status, table.scheduledAt),
+  statusLeaseIdx: index('DispatchCampaign_status_executionLeaseUntil_idx').on(table.status, table.executionLeaseUntil),
+}));
 
 export const dispatchTasks = pgTable('DispatchTask', {
   id: text('id').primaryKey(),

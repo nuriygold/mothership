@@ -14,12 +14,22 @@ export * as projection from './services/projection';
 export { runCampaign, resumeCampaign, isInflight } from './runtime';
 export { bootstrap } from './bootstrap';
 export {
+  OPS_DISPATCH_LIFECYCLE_CONTRACT,
+  ensureDispatchBinding,
+  isDispatchBackedCampaign,
+  startDispatchBackedCampaign,
+  syncDispatchBackedCampaign,
+} from './dispatch-bridge';
+export {
   registerTool,
   listTools,
+  listToolDescriptors,
   invokeTool,
   type ToolAdapter,
   type ToolContext,
+  type ToolDescriptor,
   type ToolOutcome,
+  type ToolRuntimeStatus,
 } from './tools/registry';
 export { registerDefaultTools } from './tools/adapters';
 

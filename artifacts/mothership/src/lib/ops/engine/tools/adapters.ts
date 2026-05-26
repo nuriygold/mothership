@@ -6,6 +6,10 @@ function asObject(v: JsonValue): JsonObject {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as JsonObject) : {};
 }
 
+function mockToolAdaptersEnabled() {
+  return process.env.ENABLE_MOCK_TOOL_ADAPTERS === 'true';
+}
+
 const artifactWrite: ToolAdapter = async (input, ctx) => {
   const obj = asObject(input);
   const title = typeof obj.title === 'string' ? obj.title : 'untitled';
@@ -37,6 +41,20 @@ const artifactWrite: ToolAdapter = async (input, ctx) => {
 
 const dbReadStub: ToolAdapter = async (input, _ctx) => {
   const obj = asObject(input);
+  if (!mockToolAdaptersEnabled()) {
+    return {
+      ok: false,
+      blocker: {
+        summary: 'Tool "db.read" is running in mock mode only.',
+        details: 'Enable mock adapters explicitly for non-production testing, or wire a real read adapter.',
+        severity: 'medium',
+        attemptedMethod: 'db.read',
+        failureEvidence: { input: obj, runtimeStatus: 'mock' },
+        requiredResolution: 'Set ENABLE_MOCK_TOOL_ADAPTERS=true for intentional mock testing or implement a real db.read adapter.',
+        canContinueElsewhere: true,
+      },
+    };
+  }
   return {
     ok: true,
     output: {
@@ -49,6 +67,20 @@ const dbReadStub: ToolAdapter = async (input, _ctx) => {
 
 const dbWriteStub: ToolAdapter = async (input, _ctx) => {
   const obj = asObject(input);
+  if (!mockToolAdaptersEnabled()) {
+    return {
+      ok: false,
+      blocker: {
+        summary: 'Tool "db.write" is running in mock mode only.',
+        details: 'The current adapter never mutates state. Refusing to report success without explicit mock mode.',
+        severity: 'high',
+        attemptedMethod: 'db.write',
+        failureEvidence: { input: obj, runtimeStatus: 'mock' },
+        requiredResolution: 'Set ENABLE_MOCK_TOOL_ADAPTERS=true for intentional mock testing or implement a real db.write adapter.',
+        canContinueElsewhere: false,
+      },
+    };
+  }
   return {
     ok: true,
     output: {
@@ -75,15 +107,16 @@ function makeBlockerAdapter(name: string, requiredResolution: string): ToolAdapt
 }
 
 export function registerDefaultTools(): void {
-  registerTool('artifact.write', artifactWrite);
-  registerTool('db.read', dbReadStub);
-  registerTool('db.write', dbWriteStub);
+  registerTool('artifact.write', artifactWrite, { runtimeStatus: 'active' });
+  registerTool('db.read', dbReadStub, { runtimeStatus: 'mock' });
+  registerTool('db.write', dbWriteStub, { runtimeStatus: 'mock' });
   registerTool(
     'web.extract',
     makeBlockerAdapter(
       'web.extract',
       'Wire a real web extraction adapter (e.g. Firecrawl, Browserbase) before invoking this tool.',
     ),
+    { runtimeStatus: 'blocker' },
   );
   registerTool(
     'mcp.invoke',
@@ -91,6 +124,7 @@ export function registerDefaultTools(): void {
       'mcp.invoke',
       'Wire an MCP transport before invoking this tool.',
     ),
+    { runtimeStatus: 'blocker' },
   );
   registerTool(
     'file.write',
@@ -98,5 +132,6 @@ export function registerDefaultTools(): void {
       'file.write',
       'External filesystem writes require an operator-approved adapter.',
     ),
+    { runtimeStatus: 'blocker' },
   );
 }

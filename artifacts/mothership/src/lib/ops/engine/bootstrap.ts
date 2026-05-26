@@ -1,4 +1,5 @@
 import { listCampaignsByStatus } from './services/campaigns';
+import { isDispatchBackedCampaign, startDispatchBackedCampaign } from './dispatch-bridge';
 import { runCampaign } from './runtime';
 import { registerDefaultTools } from './tools/adapters';
 import { record } from './services/events';
@@ -17,8 +18,10 @@ export async function bootstrap(): Promise<{ resumed: number }> {
     await record(c.id, 'execution_resumed', 'Engine rehydrated campaign after restart', {
       previousStatus: c.status,
     });
-    // Fire-and-forget; the loop is idempotent and protected by inflight guard.
-    void runCampaign(c.id).catch((err) => {
+    const resume = isDispatchBackedCampaign(c)
+      ? startDispatchBackedCampaign(c.id)
+      : runCampaign(c.id);
+    void resume.catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       void record(c.id, 'execution_failed', `Rehydration failed: ${msg}`, {});
     });

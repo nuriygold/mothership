@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { validateRuntimeEnv } from "./lib/env";
 import { bootstrap as bootstrapOpsEngine } from "@/lib/ops/engine";
 import { processDispatchQueue } from "@workspace/mothership/services/dispatch";
 
@@ -17,6 +18,8 @@ const DISPATCH_INTERVAL_MS = 30_000;
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+validateRuntimeEnv();
 
 app.listen(port, (err) => {
   if (err) {

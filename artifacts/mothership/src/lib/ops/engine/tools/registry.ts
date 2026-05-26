@@ -7,6 +7,13 @@ export type ToolContext = {
   agentId?: string;
 };
 
+export type ToolRuntimeStatus = 'active' | 'mock' | 'blocker' | 'disabled';
+
+export type ToolDescriptor = {
+  name: string;
+  runtimeStatus: ToolRuntimeStatus;
+};
+
 export type ToolBlockerOutcome = {
   ok: false;
   blocker: {
@@ -57,9 +64,18 @@ export type ToolAdapter = (
 ) => Promise<ToolOutcome>;
 
 const adapters = new Map<string, ToolAdapter>();
+const descriptors = new Map<string, ToolDescriptor>();
 
-export function registerTool(name: string, adapter: ToolAdapter): void {
+export function registerTool(
+  name: string,
+  adapter: ToolAdapter,
+  descriptor?: Partial<Omit<ToolDescriptor, 'name'>>,
+): void {
   adapters.set(name, adapter);
+  descriptors.set(name, {
+    name,
+    runtimeStatus: descriptor?.runtimeStatus ?? 'active',
+  });
 }
 
 export function getTool(name: string): ToolAdapter | undefined {
@@ -68,6 +84,10 @@ export function getTool(name: string): ToolAdapter | undefined {
 
 export function listTools(): string[] {
   return Array.from(adapters.keys()).sort();
+}
+
+export function listToolDescriptors(): ToolDescriptor[] {
+  return Array.from(descriptors.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function invokeTool(

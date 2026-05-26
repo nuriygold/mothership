@@ -59,6 +59,19 @@ const wrap =
     });
   };
 
+function legacyDispatchIngressEnabled() {
+  return process.env.ENABLE_LEGACY_DISPATCH_INGRESS === "true";
+}
+
+function rejectLegacyDispatchIngress(res: Response) {
+  res.status(501).json({
+    ok: false,
+    error: "legacy_dispatch_ingress_disabled",
+    message:
+      "Legacy dispatch HTTP ingress is disabled. Create campaigns through /api/ops/campaigns instead.",
+  });
+}
+
 function optionalString(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
@@ -83,6 +96,10 @@ router.get(
 router.post(
   "/dispatch/campaigns",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const title = String(req.body?.title ?? "").trim();
     if (!title) {
       res.status(400).json({ ok: false, message: "Title is required" });
@@ -123,6 +140,10 @@ router.get(
 router.delete(
   "/dispatch/campaigns/:id",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const reason =
       typeof req.body?.reason === "string"
         ? req.body.reason.trim().slice(0, 500)
@@ -167,6 +188,10 @@ router.delete(
 router.post(
   "/dispatch/campaigns/:id/trophy",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const [campaign] = await db
       .select()
       .from(dispatchCampaigns)
@@ -225,6 +250,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/send-to-bot",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const botId = String(req.body?.botId ?? "").trim();
     const note = optionalString(req.body?.note) ?? "";
     if (!botId) {
@@ -307,6 +336,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const title = String(req.body?.title ?? "").trim();
     if (!title) {
       res.status(400).json({ ok: false, message: "Title is required" });
@@ -332,6 +365,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/plan",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const result = await generateDispatchPlans(String(req.params.id));
     res.json(result);
   }),
@@ -340,6 +377,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/plan/approve",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const campaign = await approveDispatchPlan(
       String(req.params.id),
       optionalString(req.body?.planName),
@@ -351,6 +392,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/plan/convert",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const rawJson = String(req.body?.rawJson ?? req.body?.text ?? "").trim();
     if (!rawJson) {
       res.status(400).json({ ok: false, message: "rawJson is required" });
@@ -378,6 +423,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/pause",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const campaign = await setDispatchCampaignStatus(
       String(req.params.id),
       DispatchCampaignStatus.PAUSED,
@@ -389,6 +438,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/resume",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const campaign = await setDispatchCampaignStatus(
       String(req.params.id),
       DispatchCampaignStatus.EXECUTING,
@@ -416,6 +469,10 @@ router.get(
 router.post(
   "/dispatch/campaigns/:id/run",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const mode = String(req.body?.mode ?? "now");
     if (mode === "queue") {
       const campaign = await enqueueDispatchCampaign(String(req.params.id));
@@ -456,6 +513,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks/:taskId/retry",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     const agentId = optionalString(req.body?.agentId);
     void retryDispatchTask(String(req.params.taskId), agentId).catch((err) =>
       logger.error({ err, taskId: req.params.taskId }, "dispatch retry failed"),
@@ -467,6 +528,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks/:taskId/review",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     void reviewDispatchTask(String(req.params.taskId)).catch((err) =>
       logger.error({ err, taskId: req.params.taskId }, "dispatch review failed"),
     );
@@ -481,6 +546,10 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks/:taskId/replan",
   wrap(async (req, res) => {
+    if (!legacyDispatchIngressEnabled()) {
+      rejectLegacyDispatchIngress(res);
+      return;
+    }
     void replanDispatchTask(String(req.params.id), String(req.params.taskId)).catch(
       (err) =>
         logger.error({ err, taskId: req.params.taskId }, "dispatch replan failed"),

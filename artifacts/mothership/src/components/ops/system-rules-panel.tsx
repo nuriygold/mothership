@@ -7,19 +7,25 @@ import { OpsCard, OpsHeading, OpsLabel } from './ops-shell';
 
 export function SystemRulesPanel({
   rules,
+  mutable,
   onUpdated,
 }: {
   rules: SystemRules | null;
+  mutable: boolean;
   onUpdated: (next: SystemRules) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function update(patch: Partial<SystemRules>) {
-    if (busy) return;
+    if (busy || !mutable) return;
     setBusy(true);
+    setError(null);
     try {
       const next = await patchSystemRules(patch);
-      onUpdated(next);
+      onUpdated(next.rules);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update rules');
     } finally {
       setBusy(false);
     }
@@ -46,26 +52,31 @@ export function SystemRulesPanel({
         <OpsHeading level={3}>System Rules</OpsHeading>
       </div>
       <OpsLabel style={{ marginTop: 4 }}>Live policy · backend-driven</OpsLabel>
+      {!mutable ? (
+        <div style={{ fontFamily: opsTheme.mono, fontSize: 11, color: opsTheme.amber, marginTop: 12 }}>
+          Volatile system rules are disabled until durable persistence is implemented.
+        </div>
+      ) : null}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 12 }}>
         <Toggle
           label="Execution Mode"
           value={rules.executionMode}
           onChange={(v) => update({ executionMode: v })}
-          disabled={busy}
+          disabled={busy || !mutable}
         />
         <Toggle
           label="Fallback Enforcement"
           value={rules.fallbackEnforcement}
           onChange={(v) => update({ fallbackEnforcement: v })}
-          disabled={busy}
+          disabled={busy || !mutable}
         />
         <NumberRow
           label="Batch Minimum"
           value={rules.batchMinimum}
           unit="rows"
           onChange={(v) => update({ batchMinimum: v })}
-          disabled={busy}
+          disabled={busy || !mutable}
           min={1}
         />
         <NumberRow
@@ -73,7 +84,7 @@ export function SystemRulesPanel({
           value={rules.watchdogIntervalMinutes}
           unit="min"
           onChange={(v) => update({ watchdogIntervalMinutes: v })}
-          disabled={busy}
+          disabled={busy || !mutable}
           min={1}
         />
         <NumberRow
@@ -81,10 +92,15 @@ export function SystemRulesPanel({
           value={rules.blockerThreshold}
           unit="attempts"
           onChange={(v) => update({ blockerThreshold: v })}
-          disabled={busy}
+          disabled={busy || !mutable}
           min={1}
         />
       </div>
+      {error ? (
+        <div style={{ fontFamily: opsTheme.mono, fontSize: 11, color: opsTheme.red, marginTop: 12 }}>
+          {error}
+        </div>
+      ) : null}
     </OpsCard>
   );
 }

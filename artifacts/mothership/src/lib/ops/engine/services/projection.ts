@@ -215,6 +215,7 @@ export function uiCreateInputToDb(input: UiCreateCampaignInput): CreateCampaignA
       requiredArtifacts: input.requiredArtifacts,
       minimumBatchSize: input.minimumBatchSize,
       executionMode: input.executionMode,
+      executionBackend: 'dispatch',
     },
   };
 }
