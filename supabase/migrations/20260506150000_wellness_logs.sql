@@ -1,3 +1,7 @@
+-- RECONCILED: This table is now managed by Drizzle ORM via
+-- artifacts/mothership/src/lib/db/schema.ts.
+-- This file is retained for migration history only. Do not re-run.
+
 create table if not exists public.wellness_logs (
   date text primary key,
   water integer not null default 0,
