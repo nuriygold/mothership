@@ -395,8 +395,8 @@ function DispatchPageInner() {
   const dispatchCampaignsQuery = useQuery({
     queryKey: ['dispatch-campaigns'],
     queryFn: fetchDispatchCampaigns,
-    refetchInterval: (data) => {
-      const hasPlanning = (data as DispatchCampaign[] | undefined)?.some((c) => c.status === 'PLANNING');
+    refetchInterval: (query) => {
+      const hasPlanning = query.state.data?.some((c) => c.status === 'PLANNING');
       return hasPlanning ? 3_000 : 15_000;
     },
   });
@@ -540,7 +540,7 @@ function DispatchPageInner() {
   }, [dispatchCampaignsQuery.data, selectedCampaignId]);
 
   const selectedCampaign = dispatchCampaignsQuery.data?.find((campaign) => campaign.id === selectedCampaignId);
-  const isWorkspaceLoading = dispatchCampaignsQuery.isLoading;
+  const isWorkspaceLoading = dispatchCampaignsQuery.isPending;
   const isWorkspaceRefreshing = dispatchCampaignsQuery.isFetching;
 
   const progressQuery = useQuery({
@@ -939,7 +939,7 @@ function DispatchPageInner() {
                         onChange={(e) => setCampaignProjectId(e.target.value)}
                       >
                         <option value="">None</option>
-                        {projectsQuery.isLoading && <option disabled>Loading projects…</option>}
+                        {projectsQuery.isPending && <option disabled>Loading projects…</option>}
                         {(projectsQuery.data ?? []).map((p) => (
                           <option key={p.id} value={p.id}>{p.title}</option>
                         ))}
@@ -999,9 +999,9 @@ function DispatchPageInner() {
                       linkedTaskRef: campaignLinkedTaskRef || undefined,
                     })
                   }
-                  disabled={!campaignTitle || (Boolean(campaignOutputFolder) && !campaignAssignedBotId) || createCampaignMutation.isLoading}
+                  disabled={!campaignTitle || (Boolean(campaignOutputFolder) && !campaignAssignedBotId) || createCampaignMutation.isPending}
                 >
-                  {createCampaignMutation.isLoading ? 'Creating...' : 'Create campaign'}
+                  {createCampaignMutation.isPending ? 'Creating...' : 'Create campaign'}
                 </Button>
                 <Button variant="outline" onClick={() => setShowNewCampaignForm(false)}>
                   Cancel
@@ -1039,14 +1039,14 @@ function DispatchPageInner() {
       )}
 
       {/* ── Phase 1 + 3: Campaign list ── */}
-      {dispatchCampaignsQuery.isLoading && (
+      {dispatchCampaignsQuery.isPending && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: 'var(--muted)' }} />
           ))}
         </div>
       )}
-      {!dispatchCampaignsQuery.isLoading && campaigns.length === 0 && (
+      {!dispatchCampaignsQuery.isPending && campaigns.length === 0 && (
         <div
           className="rounded-2xl flex flex-col items-center justify-center py-16 text-center"
           style={{ border: '2px dashed var(--card-border)' }}
@@ -1062,7 +1062,7 @@ function DispatchPageInner() {
           {campaigns.map((campaign) => {
             const isSelected = selectedCampaignId === campaign.id;
             const failedCount = campaign.tasks.filter((t) => t.status === 'FAILED').length;
-            const isDeleting = deleteCampaignMutation.isLoading && deleteCampaignMutation.variables?.campaignId === campaign.id;
+            const isDeleting = deleteCampaignMutation.isPending && deleteCampaignMutation.variables?.campaignId === campaign.id;
             return (
               <div
                 key={campaign.id}
@@ -1096,7 +1096,7 @@ function DispatchPageInner() {
                         e.stopPropagation();
                         trophyCampaignMutation.mutate({ campaignId: campaign.id });
                       }}
-                      disabled={trophyCampaignMutation.isLoading || campaign.status === 'COMPLETED'}
+                      disabled={trophyCampaignMutation.isPending || campaign.status === 'COMPLETED'}
                       title={campaign.status === 'COMPLETED' ? 'Already in the Trophy Case' : 'Move to Trophy Case'}
                       aria-label="Move campaign to Trophy Case"
                       className="rounded-md p-1 transition-opacity hover:opacity-70 disabled:opacity-40"
@@ -1221,9 +1221,9 @@ function DispatchPageInner() {
                 onClick={() =>
                   sendToBotMutation.mutate({ campaignId: sendToBotTarget, botId: sendToBotBotId, note: sendToBotNote || undefined })
                 }
-                disabled={sendToBotMutation.isLoading}
+                disabled={sendToBotMutation.isPending}
               >
-                {sendToBotMutation.isLoading ? 'Sending…' : 'Send to bot'}
+                {sendToBotMutation.isPending ? 'Sending…' : 'Send to bot'}
               </Button>
               <Button variant="outline" onClick={() => setSendToBotTarget(null)}>Cancel</Button>
             </div>
@@ -1260,8 +1260,8 @@ function DispatchPageInner() {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={() => planMutation.mutate(selectedCampaign.id)} disabled={planMutation.isLoading}>
-                  {planMutation.isLoading ? 'Planning...' : 'Generate plan'}
+                <Button onClick={() => planMutation.mutate(selectedCampaign.id)} disabled={planMutation.isPending}>
+                  {planMutation.isPending ? 'Planning...' : 'Generate plan'}
                 </Button>
                 <Button
                   variant="outline"
@@ -1271,7 +1271,7 @@ function DispatchPageInner() {
                       action: selectedCampaign.status === 'PAUSED' ? 'resume' : 'pause',
                     })
                   }
-                  disabled={statusMutation.isLoading}
+                  disabled={statusMutation.isPending}
                 >
                   {selectedCampaign.status === 'PAUSED' ? 'Resume' : 'Pause'}
                 </Button>
@@ -1349,7 +1349,7 @@ function DispatchPageInner() {
           {selectedCampaign.tasks.length > 0 && (
             <Card>
               <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Bot recommendation</p>
-              {recommendQuery.isLoading && (
+              {recommendQuery.isPending && (
                 <p className="mt-2 text-xs animate-pulse" style={{ color: 'var(--foreground)', opacity: 0.45 }}>Analyzing tasks…</p>
               )}
               {recommendQuery.isError && (
@@ -1386,12 +1386,12 @@ function DispatchPageInner() {
                   <span className="text-xs text-emerald-400">Active: {selectedCampaign.approvedPlanName}</span>
                 )}
             </div>
-            {planMutation.isLoading && (
+            {planMutation.isPending && (
               <p className="mt-2 text-xs animate-pulse" style={{ color: 'var(--foreground)', opacity: 0.45 }}>
                 Generating plan options via OpenClaw…
               </p>
             )}
-            {!availablePlans.length && !planMutation.isLoading && (
+            {!availablePlans.length && !planMutation.isPending && (
               <p className="mt-2 text-sm" style={{ color: 'var(--foreground)', opacity: 0.35 }}>
                 No generated plans yet. Click &quot;Generate plan&quot; above.
               </p>
@@ -1415,9 +1415,9 @@ function DispatchPageInner() {
                     <Button
                       size="sm"
                       onClick={() => approvePlanMutation.mutate({ campaignId: selectedCampaign.id, planName: plan.name })}
-                      disabled={approvePlanMutation.isLoading}
+                      disabled={approvePlanMutation.isPending}
                     >
-                      {approvePlanMutation.isLoading ? 'Approving…' : 'Approve'}
+                      {approvePlanMutation.isPending ? 'Approving…' : 'Approve'}
                     </Button>
                   </div>
                   <div className="mt-3 space-y-2">
@@ -1455,9 +1455,9 @@ function DispatchPageInner() {
                   <Button
                     size="sm"
                     onClick={() => convertPlanJsonMutation.mutate({ campaignId: selectedCampaign.id, rawJson: planJsonText })}
-                    disabled={convertPlanJsonMutation.isLoading || !planJsonText.trim()}
+                    disabled={convertPlanJsonMutation.isPending || !planJsonText.trim()}
                   >
-                    {convertPlanJsonMutation.isLoading ? 'Converting…' : 'Convert JSON'}
+                    {convertPlanJsonMutation.isPending ? 'Converting…' : 'Convert JSON'}
                   </Button>
                 </div>
               </div>
@@ -1499,17 +1499,17 @@ function DispatchPageInner() {
               <Button
                 size="sm"
                 onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'now' })}
-                disabled={runMutation.isLoading || !selectedCampaign.tasks.length}
+                disabled={runMutation.isPending || !selectedCampaign.tasks.length}
               >
-                {runMutation.isLoading && runMutation.variables?.mode === 'now' ? 'Starting…' : 'Run now'}
+                {runMutation.isPending && runMutation.variables?.mode === 'now' ? 'Starting…' : 'Run now'}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => runMutation.mutate({ campaignId: selectedCampaign.id, mode: 'queue' })}
-                disabled={runMutation.isLoading}
+                disabled={runMutation.isPending}
               >
-                {runMutation.isLoading && runMutation.variables?.mode === 'queue' ? 'Queuing…' : 'Add to queue'}
+                {runMutation.isPending && runMutation.variables?.mode === 'queue' ? 'Queuing…' : 'Add to queue'}
               </Button>
               <Button
                 size="sm"
@@ -1521,9 +1521,9 @@ function DispatchPageInner() {
                     scheduledAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
                   })
                 }
-                disabled={runMutation.isLoading || !scheduleAt}
+                disabled={runMutation.isPending || !scheduleAt}
               >
-                {runMutation.isLoading && runMutation.variables?.mode === 'schedule' ? 'Scheduling…' : 'Schedule'}
+                {runMutation.isPending && runMutation.variables?.mode === 'schedule' ? 'Scheduling…' : 'Schedule'}
               </Button>
             </div>
             {runMutation.isSuccess && (
@@ -1563,11 +1563,11 @@ function DispatchPageInner() {
                   const isFailed = task.status === 'FAILED';
                   const isDone = task.status === 'DONE' || task.status === 'COMPLETED';
                   const retryAgent = retryAgents[task.id] ?? 'main';
-                  const isRetrying = retryTaskMutation.isLoading &&
+                  const isRetrying = retryTaskMutation.isPending &&
                     (retryTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
-                  const isReplanning = replanTaskMutation.isLoading &&
+                  const isReplanning = replanTaskMutation.isPending &&
                     (replanTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
-                  const isReviewing = reviewTaskMutation.isLoading &&
+                  const isReviewing = reviewTaskMutation.isPending &&
                     (reviewTaskMutation.variables as { taskId: string } | undefined)?.taskId === task.id;
                   return (
                     <div
@@ -1772,9 +1772,9 @@ function DispatchPageInner() {
                       assignee: taskAssignee || undefined,
                     })
                   }
-                  disabled={!taskTitle || createTaskMutation.isLoading}
+                  disabled={!taskTitle || createTaskMutation.isPending}
                 >
-                  {createTaskMutation.isLoading ? 'Adding...' : 'Add task'}
+                  {createTaskMutation.isPending ? 'Adding...' : 'Add task'}
                 </Button>
                 {createTaskMutation.isError && (
                   <p className="text-xs text-rose-400">{(createTaskMutation.error as Error).message}</p>
@@ -1842,7 +1842,7 @@ function DispatchPageInner() {
               </select>
               <Button
                 onClick={() => mutation.mutate({ input, sourceChannel: source })}
-                disabled={!input || mutation.isLoading}
+                disabled={!input || mutation.isPending}
               >
                 Submit
               </Button>
@@ -1874,7 +1874,7 @@ function DispatchPageInner() {
                 </select>
                 <Button
                   onClick={() => telegramMutation.mutate({ text: telegramMessage, botKey: telegramBot })}
-                  disabled={!telegramMessage || telegramMutation.isLoading}
+                  disabled={!telegramMessage || telegramMutation.isPending}
                 >
                   Send
                 </Button>
@@ -1929,7 +1929,7 @@ function DispatchPageInner() {
                   onClick={() =>
                     openClawMutation.mutate({ text: ocText, agentId: ocAgent, sessionKey: ocSession || undefined })
                   }
-                  disabled={!ocText || openClawMutation.isLoading || gateway.isError}
+                  disabled={!ocText || openClawMutation.isPending || gateway.isError}
                 >
                   Dispatch
                 </Button>
@@ -1938,7 +1938,7 @@ function DispatchPageInner() {
                 )}
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-300">
-                <Button variant="outline" size="sm" onClick={() => gatewayMutation.mutate()} disabled={gatewayMutation.isLoading}>
+                <Button variant="outline" size="sm" onClick={() => gatewayMutation.mutate()} disabled={gatewayMutation.isPending}>
                   Check gateway
                 </Button>
                 {gatewayMutation.isSuccess && <span className="text-emerald-300">Gateway OK</span>}
@@ -1964,8 +1964,8 @@ function DispatchPageInner() {
                   {cmd.run && <p className="text-xs text-slate-500">Run: {cmd.run.type}</p>}
                 </div>
               ))}
-              {commandsQuery.isLoading && <p className="text-sm text-slate-500">Loading recent commands…</p>}
-              {!commandsQuery.isLoading && !commandsQuery.data?.length && <p className="text-sm text-slate-500">No recent commands.</p>}
+              {commandsQuery.isPending && <p className="text-sm text-slate-500">Loading recent commands…</p>}
+              {!commandsQuery.isPending && !commandsQuery.data?.length && <p className="text-sm text-slate-500">No recent commands.</p>}
             </div>
           </Card>
         </div>

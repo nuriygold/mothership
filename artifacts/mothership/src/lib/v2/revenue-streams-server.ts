@@ -3,7 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { REVENUE_STREAMS, type RevenueStreamDef } from './revenue-streams';
 
-export const OPENCLAW_STREAMS_PATH = '/Users/claw/.openclaw/workspace/revenue_streams';
+export const OPENCLAW_STREAMS_PATH = process.env.OPENCLAW_STREAMS_PATH || '/Users/claw/.openclaw/workspace/revenue_streams';
 
 // Known folder→key mappings to preserve existing DB records
 const FOLDER_KEY_MAP: Record<string, string> = {

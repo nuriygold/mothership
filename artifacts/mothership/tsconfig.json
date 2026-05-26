@@ -3,6 +3,7 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
+    "baseUrl": ".",
     "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
@@ -16,7 +17,15 @@
     "moduleResolution": "bundler",
     "types": ["node", "vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "next": ["./src/shims/next.ts"],
+      "next/link": ["./src/shims/next-link.tsx"],
+      "next/image": ["./src/shims/next-image.tsx"],
+      "next/navigation": ["./src/shims/next-navigation.ts"],
+      "next/headers": ["./src/shims/next-headers.ts"],
+      "next/server": ["./src/shims/next-server.ts"],
+      "next/dynamic": ["./src/shims/next-dynamic.tsx"],
+      "@supabase/supabase-js": ["./src/shims/supabase.ts"]
     }
   },
   "references": [

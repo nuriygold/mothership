@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-interface ImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'placeholder'> {
+interface ImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'placeholder'> {
   src: string | { src: string };
   alt: string;
   width?: number | string;

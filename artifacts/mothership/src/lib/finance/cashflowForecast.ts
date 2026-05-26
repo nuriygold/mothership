@@ -73,7 +73,7 @@ export type ForecastConfidence = {
 export type CashFlowForecast = {
   generatedAt: string;
   openingBalance: number;
-  liquidOnly: boolean;
+  liquidAccountsOnly: boolean;
   days: ForecastDay[];
   lowestPoint: { date: string; balance: number };
   paydaySchedules: PaydaySchedule[];
@@ -483,7 +483,7 @@ export async function buildCashFlowForecast(): Promise<CashFlowForecast> {
   return {
     generatedAt: now.toISOString(),
     openingBalance: Math.round(openingBalance * 100) / 100,
-    liquidOnly,
+    liquidAccountsOnly: liquidOnly,
     days,
     lowestPoint,
     paydaySchedules,
@@ -503,7 +503,7 @@ export async function runCashFlowForecast(): Promise<CashFlowForecast> {
         lowestBalance: forecast.lowestPoint.balance,
         lowestDate: forecast.lowestPoint.date,
         openingBalance: forecast.openingBalance,
-        liquidAccountsOnly: forecast.liquidOnly,
+        liquidAccountsOnly: forecast.liquidAccountsOnly,
         threshold: LOW_CASH_THRESHOLD,
         priority: 'high',
       });

@@ -15,9 +15,9 @@ function buildPrompt(title: string, description: string | null, customPrompt?: s
   return customPrompt ? `${base} Style/scene direction: ${customPrompt}.` : base;
 }
 
-async function ensureBucket(supabase: any) {
+async function ensureBucket(supabase: ReturnType<typeof createClient>) {
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (!buckets?.find((b: { name: string }) => b.name === BUCKET)) {
+  if (!buckets?.find((bucket) => bucket.name === BUCKET)) {
     await supabase.storage.createBucket(BUCKET, { public: true });
   }
 }
@@ -55,10 +55,7 @@ export async function generateVisionImage(
 
   // 2. Upload to Supabase Storage
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  const { data: buckets } = await supabase.storage.listBuckets();
-  if (!buckets?.find((bucket) => bucket.name === BUCKET)) {
-    await supabase.storage.createBucket(BUCKET, { public: true });
-  }
+  await ensureBucket(supabase);
 
   const buffer = Buffer.from(b64, 'base64');
   const fileName = `${itemId}-${Date.now()}.png`;
@@ -67,7 +64,7 @@ export async function generateVisionImage(
     .from(BUCKET)
     .upload(fileName, buffer, { contentType: 'image/png', upsert: true });
 
-  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+  if (uploadError) throw new Error('Storage upload failed');
 
   // 3. Return permanent public URL
   const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);

@@ -175,11 +175,9 @@ export function CommandPalette() {
 
   // Focus input when opened
   useEffect(() => {
-    if (open) {
-      // Tiny delay so the element is mounted and visible
-      const t = setTimeout(() => inputRef.current?.focus(), 10);
-      return () => clearTimeout(t);
-    }
+    if (!open) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 10);
+    return () => clearTimeout(t);
   }, [open]);
 
   // Reset selection when results change

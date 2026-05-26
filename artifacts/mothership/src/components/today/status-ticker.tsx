@@ -1,7 +1,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import type { MarketData } from '@/app/api/v2/finance/markets/route';
+type MarketSnapshot = { price: number; change: number };
+
+type MarketData = {
+  btc?: MarketSnapshot | null;
+  dow?: MarketSnapshot | null;
+  nyse?: MarketSnapshot | null;
+};
 
 interface ServiceStatus {
   name: string;

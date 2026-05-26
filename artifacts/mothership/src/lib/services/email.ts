@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { google } from 'googleapis';
+import { google, gmail_v1 } from 'googleapis';
 import { ImapFlow } from 'imapflow';
 
 type EmailProvider = 'gmail' | 'zoho' | 'both' | 'outlook' | 'none';
@@ -83,7 +83,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs = 6000): Promise<T>
   }
 }
 
-function getHeader(headers: Array<{ name?: string | null; value?: string | null }> | undefined, key: string) {
+function getHeader(headers: gmail_v1.Schema$MessagePartHeader[] | null | undefined, key: string) {
   if (!headers) return '';
   const match = headers.find((header) => header.name?.toLowerCase() === key.toLowerCase());
   return match?.value?.trim() ?? '';
@@ -106,6 +106,10 @@ function summarizeError(prefix: string, err: unknown) {
   return `${prefix} error: ${message.slice(0, 140)}`;
 }
 
+type GmailMessagesListResponse = gmail_v1.Schema$ListMessagesResponse;
+type GmailThreadsListResponse = gmail_v1.Schema$ListThreadsResponse;
+type GmailMessageResponse = gmail_v1.Schema$Message;
+
 async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
   const clientId = process.env.GOOGLE_CLIENT_ID || '';
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -127,47 +131,47 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
   const gmail = google.gmail({ version: 'v1', auth: oauth });
 
   try {
-    const profile = await withTimeout(gmail.users.getProfile({ userId: 'me' }));
-    const inferredInbox = profile.data.emailAddress ?? undefined;
+    const profile = await withTimeout<gmail_v1.Schema$Profile>(gmail.users.getProfile({ userId: 'me' }).then((res) => res.data));
+    const inferredInbox = profile.emailAddress ?? undefined;
 
     const windowQuery = `newer_than:${GMAIL_WINDOW_DAYS}d`;
     const [inboxRes, needsReplyRes, urgentRes] = await Promise.all([
-      withTimeout(
+      withTimeout<GmailMessagesListResponse>(
         gmail.users.messages.list({
           userId: 'me',
           q: `in:inbox ${windowQuery}`,
           maxResults: GMAIL_MAX_COUNT_RESULTS,
-        })
+        }).then((res) => res.data)
       ),
-      withTimeout(
+      withTimeout<GmailThreadsListResponse>(
         gmail.users.threads.list({
           userId: 'me',
           q: `in:inbox is:unread -from:me ${windowQuery}`,
           maxResults: GMAIL_MAX_COUNT_RESULTS,
-        })
+        }).then((res) => res.data)
       ),
-      withTimeout(
+      withTimeout<GmailMessagesListResponse>(
         gmail.users.messages.list({
           userId: 'me',
           q: `in:inbox ${windowQuery} {subject:urgent subject:asap subject:"action required"}`,
           maxResults: GMAIL_MAX_COUNT_RESULTS,
-        })
+        }).then((res) => res.data)
       ),
     ]);
 
-    const unreadMessages = inboxRes.data.messages ?? [];
-    const previewIds = unreadMessages.slice(0, GMAIL_MAX_PREVIEWS).map((message) => message.id).filter(Boolean) as string[];
+    const unreadMessages = inboxRes.messages ?? [];
+    const previewIds = unreadMessages.slice(0, GMAIL_MAX_PREVIEWS).map((message: gmail_v1.Schema$Message) => message.id).filter(Boolean) as string[];
 
     const previewResults = await Promise.all(
       previewIds.map(async (id) => {
         try {
-          return await withTimeout(
+          return await withTimeout<GmailMessageResponse>(
             gmail.users.messages.get({
               userId: 'me',
               id,
               format: 'metadata',
               metadataHeaders: ['From', 'Subject', 'Date', 'List-Unsubscribe'],
-            })
+            }).then((res) => res.data)
           );
         } catch (_err) {
           return null;
@@ -176,19 +180,19 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
     );
 
     const previews: EmailSummary['previews'] = previewResults
-      .filter((result): result is NonNullable<typeof result> => Boolean(result))
+      .filter((result): result is GmailMessageResponse => Boolean(result))
       .map((result, index) => {
-        const headers = result.data.payload?.headers;
+        const headers = result.payload?.headers;
         const from = getHeader(headers, 'From') || 'Unknown sender';
         const subject = getHeader(headers, 'Subject') || '(no subject)';
         const rawDate = getHeader(headers, 'Date');
-        const msgId = result.data.id || `gmail-${index}`;
+        const msgId = result.id || `gmail-${index}`;
         return {
           id: msgId,
           from,
           subject,
           date: rawDate ? toIsoDate(rawDate) : new Date().toISOString(),
-          snippet: result.data.snippet ?? undefined,
+          snippet: result.snippet ?? undefined,
           gmailLink: `https://mail.google.com/mail/u/0/#inbox/${msgId}`,
         };
       })
@@ -199,8 +203,8 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
 
     logEmailEvent('info', 'gmail_sync_success', {
       unread: unreadMessages.length,
-      needsReply: (needsReplyRes.data.threads ?? []).length,
-      urgent: (urgentRes.data.messages ?? []).length,
+      needsReply: (needsReplyRes.threads ?? []).length,
+      urgent: (urgentRes.messages ?? []).length,
       previewCount: previews.length,
       inferredInbox: inferredInbox ?? null,
       windowDays: GMAIL_WINDOW_DAYS,
@@ -209,8 +213,8 @@ async function fetchGmailCounts(inboxes: string[]): Promise<LiveEmailCounts> {
     return {
       connected: true,
       unread: unreadMessages.length,
-      needsReply: (needsReplyRes.data.threads ?? []).length,
-      urgent: (urgentRes.data.messages ?? []).length,
+      needsReply: (needsReplyRes.threads ?? []).length,
+      urgent: (urgentRes.messages ?? []).length,
       previews,
       note: `Live Gmail sync active. ${inboxNote}`,
       inferredInbox,
@@ -258,24 +262,23 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
 
   try {
     await client.connect();
-    await client.selectMailbox('INBOX');
+    await client.mailboxOpen('INBOX');
 
-    // Fetch all inbox messages within the date window (not just unread)
-    const allInWindow = await client.search({ since: windowCutoff }, { uid: true, signal: controller.signal });
-    const unreadInWindow = await client.search({ seen: false, since: windowCutoff }, { uid: true, signal: controller.signal });
+    const allInWindow = (await client.search({ since: windowCutoff }, { uid: true })) || [];
+    const unreadInWindow = (await client.search({ seen: false, since: windowCutoff }, { uid: true })) || [];
     const unread = unreadInWindow.length;
 
-    const urgentMatches = await client.search(
-      { seen: false, since: windowCutoff, header: ['Subject', 'urgent'] },
-      { uid: true, signal: controller.signal }
-    );
+    const urgentMatches = (await client.search(
+      { seen: false, since: windowCutoff, header: { Subject: 'urgent' } },
+      { uid: true }
+    )) || [];
     const urgent = urgentMatches.length;
 
     const previews: EmailSummary['previews'] = [];
     const fetchResults = client.fetch(
       allInWindow.slice(-ZOHO_MAX_PREVIEWS),
       { envelope: true, source: false, bodyStructure: false },
-      { signal: controller.signal }
+      { uid: true }
     );
 
     for await (const message of fetchResults) {
@@ -304,7 +307,7 @@ async function fetchZohoCounts(): Promise<LiveEmailCounts> {
       error: err instanceof Error ? err.message : String(err),
     });
     try {
-      if (client?.loggedIn) await client.logout();
+      if (client.usable) await client.logout();
     } catch (_e) {
       // ignore secondary logout errors
     }
@@ -527,10 +530,10 @@ export async function fetchZohoFullBody(uid: string): Promise<EmailFullBody> {
   const client = new ImapFlow({ host, port, secure: true, auth, logger: false });
   try {
     await client.connect();
-    await client.selectMailbox('INBOX');
+    await client.mailboxOpen('INBOX');
     const message = await client.fetchOne(uid, { bodyStructure: true, source: true }, { uid: true });
     await client.logout();
-    if (!message?.source) return { html: null, text: null, actionLinks: [] };
+    if (!message || !message.source) return { html: null, text: null, actionLinks: [] };
     const raw = message.source.toString('utf-8');
     // Extract HTML part from raw RFC822 source via boundary splitting
     const htmlMatch = raw.match(/Content-Type:\s*text\/html[^\r\n]*\r?\n(?:.*\r?\n)*?\r?\n([\s\S]*?)(?=--|\z)/i);
@@ -540,7 +543,7 @@ export async function fetchZohoFullBody(uid: string): Promise<EmailFullBody> {
     return { html, text, actionLinks: html ? extractActionLinks(html) : [] };
   } catch (err) {
     logEmailEvent('error', 'zoho_full_body_fetch_failed', { uid, error: err instanceof Error ? err.message : String(err) });
-    try { if (client?.loggedIn) await client.logout(); } catch (_e) { /* ignore */ }
+    try { if (client.usable) await client.logout(); } catch (_e) { /* ignore */ }
     return { html: null, text: null, actionLinks: [] };
   }
 }

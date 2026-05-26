@@ -150,7 +150,9 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       });
   }, []);
 
-  useEffect(() => () => clearTimeout(celebrateTimer.current), []);
+  useEffect(() => () => {
+    if (celebrateTimer.current) clearTimeout(celebrateTimer.current);
+  }, []);
 
   function update(patch: Partial<WellnessState>) {
     const tdate = todayDate();
@@ -162,7 +164,7 @@ export function WellnessAnchors({ onAllComplete }: { onAllComplete?: () => void 
       const allDone = next.water >= 8 && next.steps >= 10 && next.workout && next.prayer && next.journal && next.vitamins;
       if (allDone) {
         setCelebrate(true);
-        clearTimeout(celebrateTimer.current);
+        if (celebrateTimer.current) clearTimeout(celebrateTimer.current);
         celebrateTimer.current = setTimeout(() => setCelebrate(false), 1800);
         if (!wasAllDone) {
           onAllComplete?.();

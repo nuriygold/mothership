@@ -1,5 +1,5 @@
 import { TaskPriority, EmailTriageBucket, EmailTriageStatus } from '@/lib/db/enums';
-import { db } from '@/lib/db';
+import { db } from '@/lib/db/client';
 import * as schema from '@/lib/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import {
@@ -11,6 +11,7 @@ import {
 import { createCalendarEvent } from '@/lib/services/calendar';
 import { createTask } from '@/lib/services/tasks';
 import { getV2EmailFeed, markDraftSent } from '@/lib/v2/orchestrator';
+import type { InputJsonObject } from '@/lib/db/json';
 import type { EmailTriageConfidence } from '@/lib/v2/types';
 
 type TriageEmailMeta = {
@@ -256,7 +257,7 @@ export async function runEmailAgentTriage(): Promise<{ created: number; dismisse
     .set({ status: EmailTriageStatus.DENIED, deniedAt: new Date(), updatedAt: new Date() })
     .where(eq(schema.emailAgentTriages.status, EmailTriageStatus.PENDING));
   
-  const dismissed = result.rowCount ?? 0;
+  const dismissed = Array.isArray(result) ? result.length : 0;
 
   const feed = await getV2EmailFeed();
   const emails = feed.inbox;
@@ -295,7 +296,7 @@ export async function runEmailAgentTriage(): Promise<{ created: number; dismisse
     if (bucketEmails.length === 0) continue;
     const { agentName, recommendation, actionLabel } = buildGroupMeta(bucket, bucketEmails);
     const bucketConfidences = confidences.get(bucket) ?? [];
-    const payload = {
+    const payload: InputJsonObject = {
       emailIds: bucketEmails.map((e) => e.id),
       urgentCount: urgency.get(bucket) ?? 0,
       confidence: bucketConfidences.includes('LOCKED_IN')
@@ -303,8 +304,8 @@ export async function runEmailAgentTriage(): Promise<{ created: number; dismisse
         : bucketConfidences.includes('PRETTY_SURE')
           ? 'PRETTY_SURE'
           : 'NEEDS_YOUR_EYES',
-      subGroups: bucket === 'PERSONAL' ? personalSubGroups : undefined,
     };
+    if (bucket === 'PERSONAL') payload.subGroups = personalSubGroups;
 
     await db.insert(schema.emailAgentTriages).values({
       id: crypto.randomUUID(),

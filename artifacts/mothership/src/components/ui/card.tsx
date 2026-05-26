@@ -38,3 +38,13 @@ export function CardSubtitle({
     </p>
   );
 }
+
+export function CardContent({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return <div className={cn(className)}>{children}</div>;
+}

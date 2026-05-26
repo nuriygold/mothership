@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { calendar_v3, google } from 'googleapis';
 
 export interface CalendarEvent {
   id: string;
@@ -116,18 +116,18 @@ export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEven
       maxResults: 50,
     });
 
-    const items = res.data.items ?? [];
+    const items: calendar_v3.Schema$Event[] = res.data.items ?? [];
 
     const events = items
-      .filter((ev) => !!ev.summary) // skip untitled events
-      .map((ev) => {
+      .filter((ev: calendar_v3.Schema$Event) => !!ev.summary)
+      .map((ev: calendar_v3.Schema$Event) => {
         const isAllDay = !ev.start?.dateTime;
         const startIso = ev.start?.dateTime ?? ev.start?.date ?? now.toISOString();
         const endIso = ev.end?.dateTime ?? ev.end?.date ?? null;
 
         const meetingUrl =
           ev.hangoutLink ??
-          ev.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri ??
+          ev.conferenceData?.entryPoints?.find((e: calendar_v3.Schema$EntryPoint) => e.entryPointType === 'video')?.uri ??
           null;
 
         return {

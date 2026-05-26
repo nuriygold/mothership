@@ -93,7 +93,7 @@ export async function getDashboard() {
 
   const activeWorkflowsBase = await db.select().from(workflows).orderBy(desc(workflows.createdAt)).limit(5);
   const activeWorkflowIds = activeWorkflowsBase.map((w) => w.id);
-  const [activeSubmissions, activeRuns] = await Promise.all([
+  const [activeSubmissions, activeRuns]: [typeof submissions.$inferSelect[], typeof runs.$inferSelect[]] = await Promise.all([
     activeWorkflowIds.length
       ? db.select().from(submissions).where(inArray(submissions.workflowId, activeWorkflowIds))
       : Promise.resolve([]),
@@ -104,8 +104,8 @@ export async function getDashboard() {
 
   const activeWorkflows = activeWorkflowsBase.map((workflow) => ({
     ...workflow,
-    submissions: activeSubmissions.filter((s) => s.workflowId === workflow.id),
-    runs: activeRuns.filter((r) => r.workflowId === workflow.id),
+    submissions: activeSubmissions.filter((submission) => submission.workflowId === workflow.id),
+    runs: activeRuns.filter((run) => run.workflowId === workflow.id),
   }));
 
   const pendingApprovalsRows = await db
