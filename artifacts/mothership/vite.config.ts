@@ -36,9 +36,6 @@ export default defineConfig({
       { find: /^next\/headers$/, replacement: path.resolve(import.meta.dirname, "src/shims/next-headers.ts") },
       { find: /^next\/server$/, replacement: path.resolve(import.meta.dirname, "src/shims/next-server.ts") },
       { find: /^next\/dynamic$/, replacement: path.resolve(import.meta.dirname, "src/shims/next-dynamic.tsx") },
-      // Vercel Workflow SDK shims (server-only)
-      { find: /^workflow$/, replacement: path.resolve(import.meta.dirname, "src/shims/workflow.ts") },
-      { find: /^@workflow\/ai\/agent$/, replacement: path.resolve(import.meta.dirname, "src/shims/workflow-ai-agent.ts") },
       // Supabase shim — original used it server-side
       { find: /^@supabase\/supabase-js$/, replacement: path.resolve(import.meta.dirname, "src/shims/supabase.ts") },
       // Server-only DB libs replaced with no-op proxies (regex catches all subpaths)

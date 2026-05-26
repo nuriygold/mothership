@@ -111,9 +111,9 @@ export function ActiveCampaignsPanel({
           >
             No missions in flight
           </div>
-          Dispatch a mission to start a durable workflow run.
+          Dispatch a mission to start a durable campaign run.
           <br />
-          Each mission spins up a WDK workflow that produces required artifacts via Vercel AI Gateway.
+          Each mission coordinates agents, artifacts, and progress through the active dispatch system.
           <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -136,7 +136,7 @@ export function ActiveCampaignsPanel({
               {seeding ? 'Loading…' : 'Load demo missions'}
             </button>
             <span style={{ fontSize: 10, color: opsTheme.textDim, alignSelf: 'center' }}>
-              or use the Dispatch button to start a real workflow
+              or use the Dispatch button to start a real mission
             </span>
           </div>
         </div>

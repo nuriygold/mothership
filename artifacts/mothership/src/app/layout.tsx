@@ -7,7 +7,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 export const metadata: Metadata = {
   title: 'Mothership',
-  description: 'Operator command center for workflows, runs, and approvals.',
+  description: 'Operator command center for campaigns, runs, and approvals.',
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Mothership' },
   other: { 'mobile-web-app-capable': 'yes' },
@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AppShell items={navItems}>
             {children}
           </AppShell>
-          <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
+          <ReactQueryDevtools initialIsOpen={false} />
         </Providers>
       </body>
     </html>
