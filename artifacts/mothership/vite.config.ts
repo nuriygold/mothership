@@ -10,7 +10,8 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT: "${rawPort}"`);
 
 const basePath = process.env.BASE_PATH ?? "/";
-const apiTarget = process.env.API_BASE_URL ?? "http://127.0.0.1:4000";
+// Keep the frontend API proxy separate from the local LiteLLM port.
+const apiTarget = process.env.API_BASE_URL ?? "http://127.0.0.1:4100";
 
 export default defineConfig({
   base: basePath,

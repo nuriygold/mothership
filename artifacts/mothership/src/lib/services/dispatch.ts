@@ -1,12 +1,12 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import { asc, and, desc, eq, inArray, lte } from 'drizzle-orm';
+import { asc, and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { auditEvents, dispatchCampaigns, dispatchTasks, projects } from '@/lib/db/schema';
 import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/enums';
 import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
-import { buildToolsBlock, getToolsForRequirements } from '@/lib/tools/registry';
+import { buildToolsBlock, resolveToolsForRequirements } from '@/lib/tools/registry';
 import { writeCampaignOutput, pingTelegramCampaignComplete } from '@/lib/services/campaign-output';
 
 type RawPlanTask = {
@@ -25,9 +25,126 @@ type RawPlan = {
   estimated_duration_seconds?: number;
 };
 
+export type DispatchSyncReason =
+  | 'queued'
+  | 'claimed'
+  | 'heartbeat'
+  | 'task_started'
+  | 'task_completed'
+  | 'task_failed'
+  | 'completed'
+  | 'failed';
+
+export type DispatchSyncHook = (input: {
+  campaignId: string;
+  taskId?: string;
+  reason: DispatchSyncReason;
+}) => Promise<void>;
+
 export type RawPlanEnvelope = {
   plans: RawPlan[];
 };
+
+const DISPATCH_LEASE_MS = 10 * 60 * 1000;
+const DISPATCH_HEARTBEAT_MS = 30 * 1000;
+
+function dispatchWorkerId() {
+  return process.env.MOTHERSHIP_DISPATCH_WORKER_ID?.trim() || `api-server:${process.pid}`;
+}
+
+function nextLeaseDeadline() {
+  return new Date(Date.now() + DISPATCH_LEASE_MS);
+}
+
+async function claimDispatchCampaign(campaignId: string, workerId: string) {
+  const now = new Date();
+  const [claimed] = await db
+    .update(dispatchCampaigns)
+    .set({
+      status: DispatchCampaignStatus.EXECUTING,
+      executionOwner: workerId,
+      executionLeaseUntil: nextLeaseDeadline(),
+      heartbeatAt: now,
+      attemptCount: sql`${dispatchCampaigns.attemptCount} + 1`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(dispatchCampaigns.id, campaignId),
+        inArray(dispatchCampaigns.status, [
+          DispatchCampaignStatus.QUEUED,
+          DispatchCampaignStatus.SCHEDULED,
+          DispatchCampaignStatus.READY,
+        ]),
+      ),
+    )
+    .returning();
+
+  return claimed;
+}
+
+async function heartbeatDispatchCampaign(campaignId: string, workerId: string) {
+  await db
+    .update(dispatchCampaigns)
+    .set({
+      heartbeatAt: new Date(),
+      executionLeaseUntil: nextLeaseDeadline(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(dispatchCampaigns.id, campaignId),
+        eq(dispatchCampaigns.status, DispatchCampaignStatus.EXECUTING),
+        eq(dispatchCampaigns.executionOwner, workerId),
+      ),
+    );
+}
+
+async function releaseDispatchCampaign(campaignId: string, status: DispatchCampaignStatus) {
+  await db
+    .update(dispatchCampaigns)
+    .set({
+      status,
+      executionOwner: null,
+      executionLeaseUntil: null,
+      heartbeatAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(dispatchCampaigns.id, campaignId));
+}
+
+export async function recoverStaleExecutingCampaigns() {
+  const now = new Date();
+  const recovered = await db
+    .update(dispatchCampaigns)
+    .set({
+      status: DispatchCampaignStatus.QUEUED,
+      executionOwner: null,
+      executionLeaseUntil: null,
+      heartbeatAt: null,
+      queuedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(dispatchCampaigns.status, DispatchCampaignStatus.EXECUTING),
+        lte(dispatchCampaigns.executionLeaseUntil, now),
+      ),
+    )
+    .returning({ id: dispatchCampaigns.id });
+
+  for (const campaign of recovered) {
+    await db.insert(auditEvents).values({
+      id: randomUUID(),
+      entityType: 'dispatch_campaign',
+      entityId: campaign.id,
+      eventType: 'campaign.recovered',
+      metadata: { reason: 'stale_execution_lease' },
+    });
+  }
+
+  return recovered.length;
+}
 
 function extractJson(text: string) {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -456,7 +573,7 @@ export async function approveDispatchPlan(campaignId: string, planName?: string)
     await tx
       .update(dispatchCampaigns)
       .set({
-        status: DispatchCampaignStatus.EXECUTING,
+        status: DispatchCampaignStatus.READY,
         approvedPlanName: selectedPlanName,
         approvedPlanAt: new Date(),
         updatedAt: new Date(),
@@ -527,7 +644,13 @@ export async function setDispatchCampaignStatus(campaignId: string, status: Disp
   await repairStaleCampaignProjectLink(campaignId);
   const [campaign] = await db
     .update(dispatchCampaigns)
-    .set({ status, updatedAt: new Date() })
+    .set({
+      status,
+      executionOwner: status === DispatchCampaignStatus.EXECUTING ? dispatchWorkerId() : null,
+      executionLeaseUntil: status === DispatchCampaignStatus.EXECUTING ? nextLeaseDeadline() : null,
+      heartbeatAt: status === DispatchCampaignStatus.EXECUTING ? new Date() : null,
+      updatedAt: new Date(),
+    })
     .where(eq(dispatchCampaigns.id, campaignId))
     .returning();
 
@@ -585,8 +708,11 @@ function buildTaskPrompt(
   const requirements = Array.isArray(task.toolRequirements)
     ? (task.toolRequirements as string[]).filter((r): r is string => typeof r === 'string')
     : [];
-  const tools = getToolsForRequirements(requirements);
+  const { tools, unavailable } = resolveToolsForRequirements(requirements);
   const toolsBlock = buildToolsBlock(tools);
+  const unavailableBlock = unavailable.length
+    ? `Unavailable tools: ${unavailable.join(', ')}. Do not assume these tools are callable in this environment.`
+    : null;
 
   return [
     `Campaign goal: ${campaign.title}`,
@@ -595,6 +721,7 @@ function buildTaskPrompt(
     `Task: ${task.title}`,
     task.description ?? null,
     '',
+    unavailableBlock,
     toolsBlock || null,
     'Complete this task. Return your output directly — no meta-commentary.',
   ]
@@ -801,7 +928,11 @@ export async function reviewDispatchTask(taskId: string): Promise<string | null>
   return review.output;
 }
 
-export async function executeDispatchTask(taskId: string, agentIdOverride?: string) {
+export async function executeDispatchTask(
+  taskId: string,
+  agentIdOverride?: string,
+  onSync?: DispatchSyncHook,
+) {
   const [row] = await db
     .select({ task: dispatchTasks, campaign: dispatchCampaigns })
     .from(dispatchTasks)
@@ -814,18 +945,49 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
   if (!task || !campaign) throw new Error('Task not found');
 
   const agentId = agentIdOverride ?? routeTaskToBot(task);
+  const executionStartedAt = new Date();
+  const sessionKey = `dispatch-task:${taskId}:${executionStartedAt.getTime()}`;
 
   await db
     .update(dispatchTasks)
-    .set({ status: DispatchTaskStatus.RUNNING, agentId, startedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: DispatchTaskStatus.RUNNING,
+      agentId,
+      errorMessage: null,
+      startedAt: executionStartedAt,
+      updatedAt: new Date(),
+    })
     .where(eq(dispatchTasks.id, taskId));
+
+  await onSync?.({ campaignId: task.campaignId, taskId, reason: 'task_started' });
 
   const prompt = buildTaskPrompt(task, campaign);
 
   const taskToolRequirements = Array.isArray(task.toolRequirements)
     ? (task.toolRequirements as string[]).filter((r): r is string => typeof r === 'string')
     : [];
-  const resolvedTools = getToolsForRequirements(taskToolRequirements);
+  const { tools: resolvedTools, unavailable } = resolveToolsForRequirements(taskToolRequirements);
+
+  if (unavailable.length > 0) {
+    const errorMessage = `Task requires unavailable tools: ${unavailable.join(', ')}`;
+
+    await db
+      .update(dispatchTasks)
+      .set({ status: DispatchTaskStatus.FAILED, completedAt: new Date(), errorMessage, updatedAt: new Date() })
+      .where(eq(dispatchTasks.id, taskId));
+
+    await db.insert(auditEvents).values({
+      id: randomUUID(),
+      entityType: 'dispatch_task',
+      entityId: taskId,
+      eventType: 'task.failed',
+      metadata: { error: errorMessage, unavailableTools: unavailable },
+    });
+
+    await onSync?.({ campaignId: task.campaignId, taskId, reason: 'task_failed' });
+
+    throw new Error(errorMessage);
+  }
 
   try {
     const result =
@@ -833,18 +995,19 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
         ? await dispatchWithTools({
             text: prompt,
             agentId,
-            sessionKey: `dispatch-task:${taskId}`,
+            sessionKey,
             tools: resolvedTools,
             maxTurns: 6,
             timeoutMs: 180_000,
           })
-        : { ...(await dispatchToOpenClaw({ text: prompt, agentId, sessionKey: `dispatch-task:${taskId}`, timeoutMs: 120_000 })), turns: 1 };
+        : { ...(await dispatchToOpenClaw({ text: prompt, agentId, sessionKey, timeoutMs: 120_000 })), turns: 1 };
 
     await db
       .update(dispatchTasks)
       .set({
         status: DispatchTaskStatus.DONE,
         output: result.output,
+        errorMessage: null,
         completedAt: new Date(),
         toolTurns: result.turns > 1 ? result.turns : null,
         updatedAt: new Date(),
@@ -858,6 +1021,8 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
       eventType: 'task.done',
       metadata: { agentId: result.agentId, outputLength: result.output?.length ?? 0, toolTurns: result.turns },
     });
+
+    await onSync?.({ campaignId: task.campaignId, taskId, reason: 'task_completed' });
 
     // Peer-review pass — Emerald checks the primary bot's work
     if (agentId !== 'emerald') {
@@ -895,6 +1060,8 @@ export async function executeDispatchTask(taskId: string, agentIdOverride?: stri
       metadata: { error: errorMessage },
     });
 
+    await onSync?.({ campaignId: task.campaignId, taskId, reason: 'task_failed' });
+
     throw error;
   }
 }
@@ -925,11 +1092,15 @@ export async function retryDispatchTask(taskId: string, agentIdOverride?: string
   return executeDispatchTask(taskId, agentIdOverride);
 }
 
-export async function runDispatchCampaign(campaignId: string) {
+export async function runDispatchCampaign(
+  campaignId: string,
+  onSync?: DispatchSyncHook,
+) {
   const [campaign] = await db.select().from(dispatchCampaigns).where(eq(dispatchCampaigns.id, campaignId)).limit(1);
   if (!campaign) throw new Error('Campaign not found');
 
   await repairStaleCampaignProjectLink(campaignId);
+  const workerId = dispatchWorkerId();
 
   const campaignTasks = await db
     .select()
@@ -944,15 +1115,19 @@ export async function runDispatchCampaign(campaignId: string) {
   );
   if (!pending.length) throw new Error('No executable tasks on this campaign');
 
-  await db
-    .update(dispatchCampaigns)
-    .set({ status: DispatchCampaignStatus.EXECUTING, updatedAt: new Date() })
-    .where(eq(dispatchCampaigns.id, campaignId));
+  const claimed = await claimDispatchCampaign(campaignId, workerId);
+  if (!claimed) {
+    throw new Error('Campaign is already claimed by another execution or is not in a runnable state');
+  }
+
+  await onSync?.({ campaignId, reason: 'claimed' });
 
   await db
     .update(dispatchTasks)
     .set({ status: DispatchTaskStatus.QUEUED, updatedAt: new Date() })
     .where(and(eq(dispatchTasks.campaignId, campaignId), eq(dispatchTasks.status, DispatchTaskStatus.PLANNED)));
+
+  await onSync?.({ campaignId, reason: 'queued' });
 
   await db.insert(auditEvents).values({
     id: randomUUID(),
@@ -963,33 +1138,43 @@ export async function runDispatchCampaign(campaignId: string) {
   });
 
   const results: Array<{ taskId: string; status: string; error?: string }> = [];
+  const heartbeatTimer = setInterval(() => {
+    void heartbeatDispatchCampaign(campaignId, workerId)
+      .then(() => onSync?.({ campaignId, reason: 'heartbeat' }))
+      .catch(() => undefined);
+  }, DISPATCH_HEARTBEAT_MS);
 
-  // Build a key → task map so dependency strings can be resolved
-  const keyToTask = new Map(pending.filter((t) => t.key).map((t) => [t.key!, t]));
-  // Track which keys finished successfully
-  const doneKeys = new Set<string>();
+  try {
+    // Build a key -> task map so dependency strings can be resolved
+    const keyToTask = new Map(pending.filter((t) => t.key).map((t) => [t.key!, t]));
+    // Track which keys finished successfully
+    const doneKeys = new Set<string>();
 
-  for (const task of pending) {
-    const deps = Array.isArray(task.dependencies) ? (task.dependencies as string[]) : [];
-    // A task is blocked if any of its dependency keys exist in the map but haven't completed
-    const blockedByFailure = deps.some((dep) => keyToTask.has(dep) && !doneKeys.has(dep));
+    for (const task of pending) {
+      await heartbeatDispatchCampaign(campaignId, workerId);
+      await onSync?.({ campaignId, taskId: task.id, reason: 'heartbeat' });
+      const deps = Array.isArray(task.dependencies) ? (task.dependencies as string[]) : [];
+      const blockedByFailure = deps.some((dep) => keyToTask.has(dep) && !doneKeys.has(dep));
 
-    if (blockedByFailure) {
-      await db
-        .update(dispatchTasks)
-        .set({ status: DispatchTaskStatus.CANCELED, updatedAt: new Date() })
-        .where(eq(dispatchTasks.id, task.id));
-      results.push({ taskId: task.id, status: 'CANCELED' });
-      continue;
+      if (blockedByFailure) {
+        await db
+          .update(dispatchTasks)
+          .set({ status: DispatchTaskStatus.CANCELED, updatedAt: new Date() })
+          .where(eq(dispatchTasks.id, task.id));
+        results.push({ taskId: task.id, status: 'CANCELED' });
+        continue;
+      }
+
+      try {
+        await executeDispatchTask(task.id, undefined, onSync);
+        if (task.key) doneKeys.add(task.key);
+        results.push({ taskId: task.id, status: 'DONE' });
+      } catch (error) {
+        results.push({ taskId: task.id, status: 'FAILED', error: String(error) });
+      }
     }
-
-    try {
-      await executeDispatchTask(task.id);
-      if (task.key) doneKeys.add(task.key);
-      results.push({ taskId: task.id, status: 'DONE' });
-    } catch (error) {
-      results.push({ taskId: task.id, status: 'FAILED', error: String(error) });
-    }
+  } finally {
+    clearInterval(heartbeatTimer);
   }
 
   const allDone = results.every((r) => r.status === 'DONE' || r.status === 'CANCELED');
@@ -1000,10 +1185,8 @@ export async function runDispatchCampaign(campaignId: string) {
     ? DispatchCampaignStatus.PAUSED
     : DispatchCampaignStatus.EXECUTING;
 
-  await db
-    .update(dispatchCampaigns)
-    .set({ status: finalStatus, updatedAt: new Date() })
-    .where(eq(dispatchCampaigns.id, campaignId));
+  await releaseDispatchCampaign(campaignId, finalStatus);
+  await onSync?.({ campaignId, reason: finalStatus === DispatchCampaignStatus.COMPLETED ? 'completed' : 'failed' });
 
   const doneCnt = results.filter((r) => r.status === 'DONE').length;
   const failedCnt = results.filter((r) => r.status === 'FAILED').length;
@@ -1057,7 +1240,14 @@ export async function enqueueDispatchCampaign(campaignId: string) {
   await repairStaleCampaignProjectLink(campaignId);
   const [campaign] = await db
     .update(dispatchCampaigns)
-    .set({ status: DispatchCampaignStatus.QUEUED, queuedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: DispatchCampaignStatus.QUEUED,
+      executionOwner: null,
+      executionLeaseUntil: null,
+      heartbeatAt: null,
+      queuedAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(eq(dispatchCampaigns.id, campaignId))
     .returning();
 
@@ -1075,7 +1265,14 @@ export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: 
   await repairStaleCampaignProjectLink(campaignId);
   const [campaign] = await db
     .update(dispatchCampaigns)
-    .set({ status: DispatchCampaignStatus.SCHEDULED, scheduledAt, updatedAt: new Date() })
+    .set({
+      status: DispatchCampaignStatus.SCHEDULED,
+      executionOwner: null,
+      executionLeaseUntil: null,
+      heartbeatAt: null,
+      scheduledAt,
+      updatedAt: new Date(),
+    })
     .where(eq(dispatchCampaigns.id, campaignId))
     .returning();
 
@@ -1094,6 +1291,7 @@ export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: 
 
 export async function processDispatchQueue(): Promise<{ processed: number; skipped: number }> {
   const now = new Date();
+  await recoverStaleExecutingCampaigns();
 
   const [queued, scheduled] = await Promise.all([
     db
