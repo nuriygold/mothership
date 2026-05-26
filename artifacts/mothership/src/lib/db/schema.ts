@@ -27,6 +27,8 @@ export const notifications = pgTable('Notification', {
   readCreatedAtIdx: index('Notification_read_createdAt_idx').on(table.read, table.createdAt),
 }));
 
+// Source of truth for wellness_logs. Original DDL in:
+// supabase/migrations/20260506150000_wellness_logs.sql (reconciled, do not re-run)
 export const wellnessLogs = pgTable('wellness_logs', {
   date: text('date').primaryKey(),
   water: integer('water').default(0).notNull(),
@@ -503,7 +505,7 @@ export const agentInboxItems = pgTable('AgentInboxItem', {
   agentStatusCreatedAtIdx: index('AgentInboxItem_agentKey_status_createdAt_idx').on(table.agentKey, table.status, table.createdAt),
 }));
 
-export const plaidItems = pgTable('PlaidItem', {
+export const tellerItems = pgTable('TellerItem', {
   id: text('id').primaryKey(),
   itemId: text('itemId').notNull().unique(),
   accessToken: text('accessToken').notNull(),

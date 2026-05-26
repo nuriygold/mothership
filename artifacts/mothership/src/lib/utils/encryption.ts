@@ -7,10 +7,10 @@ function toU8(buf: Buffer): Uint8Array {
 }
 
 function getKey() {
-  const raw = process.env.PLAID_ENCRYPTION_KEY;
-  if (!raw) throw new Error('PLAID_ENCRYPTION_KEY is not set');
+  const raw = process.env.TELLER_ENCRYPTION_KEY;
+  if (!raw) throw new Error('TELLER_ENCRYPTION_KEY is not set');
   const buf = Buffer.from(raw, 'hex');
-  if (buf.length !== 32) throw new Error('PLAID_ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
+  if (buf.length !== 32) throw new Error('TELLER_ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
   return createSecretKey(toU8(buf));
 }
 

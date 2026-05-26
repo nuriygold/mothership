@@ -13,7 +13,25 @@ const fetcher = async (url: string): Promise<V2FinanceOverviewFeed> => {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isPlaidAccount(id: string) { return !UUID_RE.test(id); }
+function isTellerAccount(id: string) { return !UUID_RE.test(id); }
+
+type TellerConnectEnrollment = {
+  accessToken: string;
+  user?: { id?: string };
+  enrollment?: { id?: string; institution?: { name?: string } };
+};
+
+type TellerConnectApi = {
+  open: () => void;
+};
+
+declare global {
+  interface Window {
+    TellerConnect?: {
+      setup: (config: Record<string, unknown>) => TellerConnectApi;
+    };
+  }
+}
 
 function fmtUSD(n: number, opts: Intl.NumberFormatOptions = {}) {
   return new Intl.NumberFormat('en-US', {
@@ -154,7 +172,7 @@ export default function FinancePage() {
         <span className="sse-indicator"><span className="sse-pulse" /> live</span>
       </div>
 
-      <PlaidBar onSyncDone={() => globalMutate('/api/v2/finance/overview')} />
+      <TellerBar onSyncDone={() => globalMutate('/api/v2/finance/overview')} />
 
       {/* Hero: net worth */}
       <div className="card" style={{ padding: 20 }}>
@@ -224,9 +242,9 @@ export default function FinancePage() {
                   <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {a.type}
                   </div>
-                  {isPlaidAccount(a.id) && (
+                  {isTellerAccount(a.id) && (
                     <span
-                      title="Synced via Plaid"
+                      title="Synced via Teller"
                       style={{
                         fontSize: 9,
                         fontWeight: 700,
@@ -239,7 +257,7 @@ export default function FinancePage() {
                         lineHeight: '14px',
                       }}
                     >
-                      P
+                      T
                     </span>
                   )}
                 </div>
@@ -554,44 +572,83 @@ function PlanRow({ plan }: { plan: V2FinancePlan }) {
   );
 }
 
-function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
+function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
   const { data, mutate: mutateItems } = useSWR<{ items: Array<{ id: string; institutionName: string; updatedAt: string | null }> }>(
-    '/api/plaid/items',
+    '/api/teller/items',
     (url: string) => fetch(url).then((r) => r.json()).catch(() => ({ items: [] })),
     { refreshInterval: 60_000 }
   );
   const [syncing, setSyncing] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [seedError, setSeedError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   const items = data?.items ?? [];
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
     try {
-      await fetch('/api/plaid/sync-transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      await fetch('/api/teller/sync-transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       onSyncDone();
     } finally {
       setSyncing(false);
     }
   }, [onSyncDone]);
 
-  const handleSeed = useCallback(async () => {
-    setSeeding(true);
-    setSeedError(null);
+  const handleConnect = useCallback(async () => {
+    if (!window.TellerConnect) {
+      setConnectError('Teller Connect is not available.');
+      return;
+    }
+
+    const applicationId = import.meta.env.VITE_TELLER_APPLICATION_ID;
+    if (!applicationId) {
+      setConnectError('VITE_TELLER_APPLICATION_ID is not set.');
+      return;
+    }
+
+    setConnecting(true);
+    setConnectError(null);
+
     try {
-      const res = await fetch('/api/plaid/sandbox-seed', { method: 'POST' });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setSeedError(body?.error ?? 'Seed failed');
-        return;
-      }
-      await mutateItems();
-      onSyncDone();
+      const teller = window.TellerConnect.setup({
+        applicationId,
+        environment: import.meta.env.VITE_TELLER_ENV ?? 'sandbox',
+        products: ['balance', 'transactions'],
+        selectAccount: 'multiple',
+        onSuccess: async (enrollment: TellerConnectEnrollment) => {
+          try {
+            const res = await fetch('/api/teller/connect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                accessToken: enrollment.accessToken,
+                institutionName: enrollment.enrollment?.institution?.name,
+                userId: enrollment.user?.id,
+                enrollmentId: enrollment.enrollment?.id,
+              }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              setConnectError(body?.error ?? 'Connect failed');
+              return;
+            }
+            await mutateItems();
+            onSyncDone();
+          } catch (err) {
+            setConnectError(err instanceof Error ? err.message : 'Connect failed');
+          } finally {
+            setConnecting(false);
+          }
+        },
+        onExit: () => {
+          setConnecting(false);
+        },
+      });
+
+      teller.open();
     } catch (err) {
-      setSeedError(err instanceof Error ? err.message : 'Seed failed');
-    } finally {
-      setSeeding(false);
+      setConnectError(err instanceof Error ? err.message : 'Connect failed');
+      setConnecting(false);
     }
   }, [mutateItems, onSyncDone]);
 
@@ -609,18 +666,18 @@ function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
 
   return (
     <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <div className="card-title" style={{ margin: 0 }}>Plaid</div>
+      <div className="card-title" style={{ margin: 0 }}>Teller</div>
       <div style={{ fontSize: 12, color: 'var(--text2)', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <strong style={{ fontWeight: 600 }}>{institutionLabel}</strong>
         {items.length > 0 && (
           <span style={{ color: 'var(--text3)' }}>
-            · syncing balances &amp; transactions from {items.length === 1 ? 'this institution' : 'these institutions'}
+            · syncing balances &amp; transactions from {items.length === 1 ? 'this institution' : 'these institutions'} via Teller
             {lastUpdated ? ` · updated ${lastUpdated}` : ''}
           </span>
         )}
       </div>
-      {seedError && (
-        <div style={{ fontSize: 11, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{seedError}</div>
+      {connectError && (
+        <div style={{ fontSize: 11, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{connectError}</div>
       )}
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
         {items.length > 0 && (
@@ -629,8 +686,8 @@ function PlaidBar({ onSyncDone }: { onSyncDone: () => void }) {
           </button>
         )}
         {items.length === 0 && (
-          <button className="btn-sm primary" onClick={handleSeed} disabled={seeding}>
-            {seeding ? 'Connecting…' : 'Connect sandbox'}
+          <button className="btn-sm primary" onClick={handleConnect} disabled={connecting}>
+            {connecting ? 'Connecting…' : 'Connect Teller'}
           </button>
         )}
       </div>

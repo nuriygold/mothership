@@ -90,8 +90,8 @@ export async function seedDemoCampaigns(): Promise<{ created: string[] }> {
   // ── Mission 2: BLOCKED — Marvin finance recon ─────────────────────────────
   const m2 = await createCampaign({
     name: 'Demo: Finance Recon (Apr 2026)',
-    description: 'Reconcile April expense ledger against Plaid feed.',
-    objective: 'Reconcile April expense ledger against Plaid feed.',
+    description: 'Reconcile April expense ledger against Teller feed.',
+    objective: 'Reconcile April expense ledger against Teller feed.',
     campaignType: 'finance_audit',
     status: 'queued',
     priority: 'high',
