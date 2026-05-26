@@ -5,10 +5,12 @@ import {
   blockers as blockersSvc,
   campaigns as campaignsSvc,
   events as eventsSvc,
+  isDispatchBackedCampaign,
   projection,
   runCampaign,
   resumeCampaign,
   seedDemoCampaigns,
+  startDispatchBackedCampaign,
   clearDemoCampaigns,
   ensureDemoAgents,
 } from "@/lib/ops/engine";
@@ -16,13 +18,30 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    };
+  }
+
+  return {
+    name: "UnknownError",
+    message: String(error),
+  };
+}
+
 const wrap = (
   fn: (req: Request, res: Response) => Promise<unknown>,
 ) => (req: Request, res: Response) => {
   fn(req, res).catch((err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
     logger.error({ err, path: req.path }, "ops route failed");
-    res.status(500).json({ message });
+    res.status(500).json({
+      error: "ops_route_failed",
+      details: serializeError(err),
+    });
   });
 };
 
@@ -34,6 +53,10 @@ const systemRules = {
   watchdogIntervalMinutes: 5,
   blockerThreshold: 3,
 };
+
+function volatileSystemRulesEnabled() {
+  return process.env.ENABLE_VOLATILE_SYSTEM_RULES === "true";
+}
 
 // ─── Ticker ───────────────────────────────────────────────────────────────
 router.get(
@@ -99,9 +122,11 @@ router.post(
     }
     const dbInput = projection.uiCreateInputToDb(input);
     const created = await campaignsSvc.createCampaign(dbInput);
-    // Kick the engine; resolve immediately and let it run.
-    void runCampaign(created.id).catch((err) => {
-      logger.error({ err, campaignId: created.id }, "runCampaign failed");
+    const kickoff = isDispatchBackedCampaign(created)
+      ? startDispatchBackedCampaign(created.id)
+      : runCampaign(created.id);
+    void kickoff.catch((err) => {
+      logger.error({ err, campaignId: created.id }, "campaign kickoff failed");
     });
     res.status(201).json({ campaign: await projection.projectCampaign(created) });
   }),
@@ -125,16 +150,18 @@ router.post(
         for (const b of open) {
           await blockersSvc.resolveBlocker(b.id, "Resolved by operator (resume)");
         }
-        void resumeCampaign(id).catch((err) =>
-          logger.error({ err, id }, "resume failed"),
-        );
+        const resume = isDispatchBackedCampaign(row)
+          ? startDispatchBackedCampaign(id)
+          : resumeCampaign(id);
+        void resume.catch((err) => logger.error({ err, id }, "resume failed"));
         break;
       }
       case "force_retry": {
         await campaignsSvc.setStatus(id, "queued", "Operator: force retry");
-        void runCampaign(id).catch((err) =>
-          logger.error({ err, id }, "force_retry failed"),
-        );
+        const retry = isDispatchBackedCampaign(row)
+          ? startDispatchBackedCampaign(id)
+          : runCampaign(id);
+        void retry.catch((err) => logger.error({ err, id }, "force_retry failed"));
         break;
       }
       case "approve_action": {
@@ -142,7 +169,10 @@ router.post(
         for (const b of open) {
           await blockersSvc.resolveBlocker(b.id, "Approved by operator");
         }
-        void resumeCampaign(id).catch((err) =>
+        const approve = isDispatchBackedCampaign(row)
+          ? startDispatchBackedCampaign(id)
+          : resumeCampaign(id);
+        void approve.catch((err) =>
           logger.error({ err, id }, "approve_action failed"),
         );
         break;
@@ -169,16 +199,24 @@ router.post(
 router.get(
   "/ops/system-rules",
   wrap(async (_req, res) => {
-    res.json({ rules: systemRules });
+    res.json({ rules: systemRules, mutable: volatileSystemRulesEnabled() });
   }),
 );
 
 router.patch(
   "/ops/system-rules",
   wrap(async (req, res) => {
+    if (!volatileSystemRulesEnabled()) {
+      res.status(501).json({
+        error: "system_rules_not_durable",
+        message:
+          "System rules are disabled until durable persistence is implemented.",
+      });
+      return;
+    }
     const patch = (req.body ?? {}) as Partial<typeof systemRules>;
     Object.assign(systemRules, patch);
-    res.json({ rules: systemRules });
+    res.json({ rules: systemRules, mutable: true });
   }),
 );
 
