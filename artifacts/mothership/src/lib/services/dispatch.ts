@@ -945,10 +945,18 @@ export async function executeDispatchTask(
   if (!task || !campaign) throw new Error('Task not found');
 
   const agentId = agentIdOverride ?? routeTaskToBot(task);
+  const executionStartedAt = new Date();
+  const sessionKey = `dispatch-task:${taskId}:${executionStartedAt.getTime()}`;
 
   await db
     .update(dispatchTasks)
-    .set({ status: DispatchTaskStatus.RUNNING, agentId, startedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: DispatchTaskStatus.RUNNING,
+      agentId,
+      errorMessage: null,
+      startedAt: executionStartedAt,
+      updatedAt: new Date(),
+    })
     .where(eq(dispatchTasks.id, taskId));
 
   await onSync?.({ campaignId: task.campaignId, taskId, reason: 'task_started' });
@@ -987,18 +995,19 @@ export async function executeDispatchTask(
         ? await dispatchWithTools({
             text: prompt,
             agentId,
-            sessionKey: `dispatch-task:${taskId}`,
+            sessionKey,
             tools: resolvedTools,
             maxTurns: 6,
             timeoutMs: 180_000,
           })
-        : { ...(await dispatchToOpenClaw({ text: prompt, agentId, sessionKey: `dispatch-task:${taskId}`, timeoutMs: 120_000 })), turns: 1 };
+        : { ...(await dispatchToOpenClaw({ text: prompt, agentId, sessionKey, timeoutMs: 120_000 })), turns: 1 };
 
     await db
       .update(dispatchTasks)
       .set({
         status: DispatchTaskStatus.DONE,
         output: result.output,
+        errorMessage: null,
         completedAt: new Date(),
         toolTurns: result.turns > 1 ? result.turns : null,
         updatedAt: new Date(),
