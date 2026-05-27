@@ -4,6 +4,7 @@ import { db } from '@/lib/db/client';
 import { auditEvents, dispatchCampaigns, dispatchTasks, projects, systemLeases } from '@/lib/db/schema';
 import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/enums';
 import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
+import { syncCampaignQueueIntoDispatch } from '@/lib/services/campaign-queue';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
 import { closeTaskPoolIssueWithOutput, createTaskPoolIssue } from '@/lib/integrations/task-pool';
 import { buildToolsBlock, resolveToolsForRequirements } from '@/lib/tools/registry';
@@ -410,6 +411,22 @@ export async function saveDispatchPlanEnvelope(campaignId: string, envelope: Raw
 }
 
 export async function listDispatchCampaigns() {
+  const queueSync = await syncCampaignQueueIntoDispatch();
+  if (queueSync.imported > 0 || queueSync.updated > 0 || queueSync.errors.length > 0) {
+    console.info(
+      JSON.stringify({
+        service: 'dispatch',
+        event: 'dispatch_campaign_queue_sync',
+        root: queueSync.root,
+        scanned: queueSync.scanned,
+        imported: queueSync.imported,
+        updated: queueSync.updated,
+        skipped: queueSync.skipped,
+        errors: queueSync.errors.length,
+        timestamp: new Date().toISOString(),
+      }),
+    );
+  }
   const campaigns = await db.select().from(dispatchCampaigns).orderBy(desc(dispatchCampaigns.createdAt));
   const campaignIds = campaigns.map((c) => c.id);
   const taskRows = campaignIds.length
@@ -427,6 +444,7 @@ export async function listDispatchCampaigns() {
 }
 
 export async function getDispatchCampaign(id: string) {
+  await syncCampaignQueueIntoDispatch();
   const [campaign] = await db.select().from(dispatchCampaigns).where(eq(dispatchCampaigns.id, id)).limit(1);
   if (!campaign) return null;
   const taskRows = await db

@@ -63,6 +63,11 @@ function legacyDispatchIngressEnabled() {
   return process.env.ENABLE_LEGACY_DISPATCH_INGRESS === "true";
 }
 
+function canUseDispatchMutation(req: Request) {
+  if (legacyDispatchIngressEnabled()) return true;
+  return String(req.headers["x-mothership-ui"] ?? "").toLowerCase() === "dispatch";
+}
+
 function rejectLegacyDispatchIngress(res: Response) {
   res.status(501).json({
     ok: false,
@@ -96,7 +101,7 @@ router.get(
 router.post(
   "/dispatch/campaigns",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -140,7 +145,7 @@ router.get(
 router.delete(
   "/dispatch/campaigns/:id",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -188,7 +193,7 @@ router.delete(
 router.post(
   "/dispatch/campaigns/:id/trophy",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -261,7 +266,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/send-to-bot",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -347,7 +352,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -376,7 +381,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/plan",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -388,7 +393,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/plan/approve",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -403,7 +408,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/plan/convert",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -434,7 +439,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/pause",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -449,7 +454,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/resume",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -477,7 +482,7 @@ router.get(
 router.post(
   "/dispatch/campaigns/:id/run",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -521,7 +526,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks/:taskId/retry",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -536,7 +541,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks/:taskId/review",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
@@ -554,7 +559,7 @@ router.post(
 router.post(
   "/dispatch/campaigns/:id/tasks/:taskId/replan",
   wrap(async (req, res) => {
-    if (!legacyDispatchIngressEnabled()) {
+    if (!canUseDispatchMutation(req)) {
       rejectLegacyDispatchIngress(res);
       return;
     }
