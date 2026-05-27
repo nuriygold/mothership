@@ -203,3 +203,27 @@ Verification commands:
 # Audit Status
 
 This document is an initial structural audit scaffold. Full compliance with the provided checklist requires deep source tracing of the execution engine and dispatch system.
+
+---
+
+## Post-audit inventory update
+
+The current source now includes a formal workflow registry at
+`artifacts/mothership/src/lib/ops/engine/workflow-registry.ts` and a read-only
+ops surface at `GET /api/ops/workflows`.
+
+Current registered workflows:
+
+- `ops.campaign.dispatch_backed.create`
+- `ops.campaign.control`
+- `ops.campaign.bootstrap.rehydrate`
+- `dispatch.campaign.create` as a legacy-disabled path
+- `dispatch.queue.worker`
+- `agent.chat.turn`
+- `agent.chat.v2.dispatch`
+
+Execution boundary note:
+
+- Durable Ops owns campaign control and durable state.
+- Dispatch owns execution, callbacks, and artifact mirroring.
+- The legacy durable loop is now documented as a compatibility fallback only.

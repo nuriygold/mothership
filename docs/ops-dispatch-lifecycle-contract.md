@@ -23,6 +23,18 @@ containing the dispatch lease fields.
 - `/api/ops/campaigns` is the intended user-facing campaign ingress.
 - Dispatch execution truth is translated back into Durable Ops status, events,
   and artifacts.
+- Supported workflow inventory lives in source at
+  `artifacts/mothership/src/lib/ops/engine/workflow-registry.ts` and is exposed
+  read-only through `GET /api/ops/workflows`.
+- New campaign ingress should not bypass this control plane without explicit
+  approval.
+
+## Execution boundary
+
+- Durable Ops owns campaign creation, control actions, and durable state.
+- Dispatch owns task execution, retries, callbacks, and artifact mirroring.
+- The legacy non-dispatch Durable Ops loop is a compatibility fallback only.
+- UI paths should use dispatch-backed campaigns, not the fallback runtime.
 
 ## State mapping
 
