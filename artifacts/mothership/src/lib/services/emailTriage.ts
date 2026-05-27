@@ -236,15 +236,20 @@ function buildGroupMeta(bucket: EmailTriageBucket, emails: TriageEmailMeta[]) {
 }
 
 async function classifyWriteBack(emailId: string, snippet: string): Promise<WriteBackBucket> {
-  const draft = await db.query.emailDraftSuggestions.findFirst({
-    where: and(
-      eq(schema.emailDraftSuggestions.emailExternalId, emailId),
-      eq(schema.emailDraftSuggestions.source, 'ruby_custom')
-    ),
-    orderBy: desc(schema.emailDraftSuggestions.createdAt),
-  });
+  const [draft, lifecycle] = await Promise.all([
+    db.query.emailDraftSuggestions.findFirst({
+      where: and(
+        eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+        eq(schema.emailDraftSuggestions.source, 'ruby_custom')
+      ),
+      orderBy: desc(schema.emailDraftSuggestions.createdAt),
+    }),
+    db.query.rubyDraftLifecycle.findFirst({
+      where: eq(schema.rubyDraftLifecycle.emailExternalId, emailId),
+    }),
+  ]);
 
-  if (!draft || draft.approvedAt) return 'SKIP';
+  if (!draft || draft.approvedAt || lifecycle?.status === 'finalized') return 'SKIP';
 
   const hay = `${draft.body} ${snippet}`.toLowerCase();
   if (/\b(ready to send|sounds great|let's do it|confirm|yes)\b/.test(hay)) return 'SEND';
@@ -393,15 +398,20 @@ export async function approveEmailTriage(id: string): Promise<{ ok: boolean; mes
 
         for (const emailId of sendIds) {
           try {
-            const draft = await db.query.emailDraftSuggestions.findFirst({
-              where: and(
-                eq(schema.emailDraftSuggestions.emailExternalId, emailId),
-                eq(schema.emailDraftSuggestions.source, 'ruby_custom')
-              ),
-              orderBy: desc(schema.emailDraftSuggestions.createdAt),
-            });
+            const [draft, lifecycle] = await Promise.all([
+              db.query.emailDraftSuggestions.findFirst({
+                where: and(
+                  eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+                  eq(schema.emailDraftSuggestions.source, 'ruby_custom')
+                ),
+                orderBy: desc(schema.emailDraftSuggestions.createdAt),
+              }),
+              db.query.rubyDraftLifecycle.findFirst({
+                where: eq(schema.rubyDraftLifecycle.emailExternalId, emailId),
+              }),
+            ]);
             const email = byId.get(emailId);
-            if (!draft || draft.approvedAt || !email) {
+            if (!draft || draft.approvedAt || lifecycle?.status === 'finalized' || !email) {
               results.push({ emailId, action: 'skipped_no_draft_or_email' });
               continue;
             }
