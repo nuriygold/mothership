@@ -64,6 +64,11 @@ function safeEqualString(left: string, right: string) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+function shouldUseSecureCookies(req: Request) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "").toLowerCase();
+  return req.secure || forwardedProto.includes("https");
+}
+
 router.use("/v2/wellness", wellnessRouter);
 
 router.post("/v2/auth/login", wrap(async (req, res) => {
@@ -105,7 +110,7 @@ router.post("/v2/auth/login", wrap(async (req, res) => {
   res.cookie(OWNER_COOKIE, createOwnerCookieValue(), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookies(req),
     maxAge: getOwnerCookieMaxAgeSeconds() * 1000,
     path: "/",
   });
@@ -116,11 +121,11 @@ router.post("/v2/auth/login", wrap(async (req, res) => {
   });
 }));
 
-router.post("/v2/auth/logout", wrap(async (_req, res) => {
+router.post("/v2/auth/logout", wrap(async (req, res) => {
   res.clearCookie(OWNER_COOKIE, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookies(req),
     path: "/",
   });
   res.json({ ok: true });
