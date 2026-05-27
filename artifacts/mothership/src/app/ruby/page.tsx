@@ -4,6 +4,10 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { LiveRuby } from '@/components/today/live-ruby';
 import { ChatTabs } from '@/components/ui/chat-tabs';
 
+// Persistence authority: localStorage here is only a UI convenience cache for
+// fast session hydration. The server-backed Ruby session APIs remain the source
+// of truth for session existence, history, and cross-device persistence.
+
 const RUBY_ACTIVE_SESSION_KEY = 'ruby-active-session';
 const RUBY_SESSIONS_KEY = 'ruby-sessions-v2';
 

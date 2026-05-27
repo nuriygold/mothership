@@ -1,10 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 
-const FLUX_ENDPOINT = process.env.FLUX_ENDPOINT!;
-const FLUX_KEY = process.env.FLUX_KEY!;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const BUCKET = 'vision-images';
+// Persistence authority: Supabase Storage is the durable asset store for
+// generated vision images. Database rows remain the source of truth for image
+// metadata and any higher-level workflow state that references these assets.
+
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable ${name} for vision image generation.`);
+  }
+  return value;
+}
+
+function getVisionBucket(): string {
+  return process.env.SUPABASE_VISION_BUCKET?.trim() || 'vision-images';
+}
+
+function storageErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error ?? 'unknown storage error');
+}
 
 function buildPrompt(title: string, description: string | null, customPrompt?: string | null): string {
   const detail = description ? ` ${description}.` : '';
@@ -15,10 +32,18 @@ function buildPrompt(title: string, description: string | null, customPrompt?: s
   return customPrompt ? `${base} Style/scene direction: ${customPrompt}.` : base;
 }
 
-async function ensureBucket(supabase: ReturnType<typeof createClient>) {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  if (!buckets?.find((bucket) => bucket.name === BUCKET)) {
-    await supabase.storage.createBucket(BUCKET, { public: true });
+async function ensureBucket(supabase: ReturnType<typeof createClient>, bucketName: string) {
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) {
+    throw new Error(`Supabase listBuckets failed for bucket ${bucketName}: ${storageErrorMessage(listError)}`);
+  }
+
+  if (!buckets?.find((bucket) => bucket.name === bucketName)) {
+    // The app returns public asset URLs, so the backing bucket must stay public.
+    const { error: createError } = await supabase.storage.createBucket(bucketName, { public: true });
+    if (createError) {
+      throw new Error(`Supabase createBucket failed for bucket ${bucketName}: ${storageErrorMessage(createError)}`);
+    }
   }
 }
 
@@ -28,12 +53,17 @@ export async function generateVisionImage(
   description: string | null,
   customPrompt?: string | null
 ): Promise<string> {
-  // 1. Call Flux 2 Pro
-  const fluxRes = await fetch(FLUX_ENDPOINT, {
+  const fluxEndpoint = requireEnv('FLUX_ENDPOINT');
+  const fluxKey = requireEnv('FLUX_KEY');
+  const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const supabaseServiceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+  const bucketName = getVisionBucket();
+
+  const fluxRes = await fetch(fluxEndpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${FLUX_KEY}`,
+      Authorization: `Bearer ${fluxKey}`,
     },
     body: JSON.stringify({
       prompt: buildPrompt(title, description, customPrompt),
@@ -53,20 +83,20 @@ export async function generateVisionImage(
   const b64 = fluxJson?.data?.[0]?.b64_json as string | undefined;
   if (!b64) throw new Error('No image data in Flux response');
 
-  // 2. Upload to Supabase Storage
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  await ensureBucket(supabase);
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  await ensureBucket(supabase, bucketName);
 
   const buffer = Buffer.from(b64, 'base64');
   const fileName = `${itemId}-${Date.now()}.png`;
 
   const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
+    .from(bucketName)
     .upload(fileName, buffer, { contentType: 'image/png', upsert: true });
 
-  if (uploadError) throw new Error('Storage upload failed');
+  if (uploadError) {
+    throw new Error(`Storage upload failed for ${bucketName}/${fileName}: ${storageErrorMessage(uploadError)}`);
+  }
 
-  // 3. Return permanent public URL
-  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+  const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
   return urlData.publicUrl;
 }
