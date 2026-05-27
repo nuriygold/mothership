@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { timingSafeEqual } from "node:crypto";
 import {
   createV2Task,
   getV2TasksFeed,
@@ -19,6 +20,14 @@ import {
   writeSseJson,
 } from "../lib/agent-chat";
 import { logger } from "../lib/logger";
+import {
+  createOwnerCookieValue,
+  getOwnerCookieMaxAgeSeconds,
+  getOwnerPassphrase,
+  OWNER_COOKIE,
+  OWNER_COOKIE_SUBJECT,
+  verifyOwnerCookieValue,
+} from "@/lib/auth/owner-cookie";
 
 const router: IRouter = Router();
 const TASK_ACTIONS = new Set<NonNullable<PatchTaskInput["action"]>>([
@@ -45,7 +54,97 @@ const wrap = (
   });
 };
 
+function apiPath(req: Request) {
+  return req.originalUrl.split("?")[0];
+}
+
+function safeEqualString(left: string, right: string) {
+  const leftBuffer = Buffer.from(left, "utf8");
+  const rightBuffer = Buffer.from(right, "utf8");
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 router.use("/v2/wellness", wellnessRouter);
+
+router.post("/v2/auth/login", wrap(async (req, res) => {
+  const configuredPassphrase = getOwnerPassphrase();
+  if (!configuredPassphrase) {
+    res.status(501).json({
+      error: {
+        code: "OWNER_LOGIN_NOT_CONFIGURED",
+        message: "Owner passphrase authentication is not configured.",
+        path: apiPath(req),
+      },
+    });
+    return;
+  }
+
+  const passphrase = typeof req.body?.passphrase === "string" ? req.body.passphrase : "";
+  if (!passphrase) {
+    res.status(400).json({
+      error: {
+        code: "INVALID_INPUT",
+        message: "passphrase is required",
+        path: apiPath(req),
+      },
+    });
+    return;
+  }
+
+  if (!safeEqualString(configuredPassphrase, passphrase)) {
+    res.status(401).json({
+      error: {
+        code: "INVALID_PASSPHRASE",
+        message: "Incorrect passphrase",
+        path: apiPath(req),
+      },
+    });
+    return;
+  }
+
+  res.cookie(OWNER_COOKIE, createOwnerCookieValue(), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: getOwnerCookieMaxAgeSeconds() * 1000,
+    path: "/",
+  });
+
+  res.json({
+    ok: true,
+    owner: OWNER_COOKIE_SUBJECT,
+  });
+}));
+
+router.post("/v2/auth/logout", wrap(async (_req, res) => {
+  res.clearCookie(OWNER_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  res.json({ ok: true });
+}));
+
+router.get("/v2/auth/me", wrap(async (req, res) => {
+  const verification = verifyOwnerCookieValue(req.cookies?.[OWNER_COOKIE]);
+  if (!verification.ok) {
+    res.status(401).json({
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Owner authentication required.",
+        path: apiPath(req),
+      },
+    });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    owner: OWNER_COOKIE_SUBJECT,
+    expiresAt: new Date(verification.payload.exp * 1000).toISOString(),
+  });
+}));
 
 router.get("/v2/tasks", wrap(async (_req, res) => {
   res.json(await getV2TasksFeed());

@@ -32,7 +32,11 @@ function LoginForm() {
         router.refresh();
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? 'Incorrect passphrase');
+        setError(
+          typeof data?.error === 'string' ? data.error
+          : typeof data?.error?.message === 'string' ? data.error.message
+          : 'Incorrect passphrase'
+        );
       }
     } catch {
       setError('Could not reach server — try again');

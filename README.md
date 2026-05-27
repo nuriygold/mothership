@@ -153,6 +153,7 @@ Use the same database for every configured connection string. Mixing different h
 
 ```text
 OWNER_PASSPHRASE
+OWNER_AUTH_SECRET
 OWNER_EMAIL
 ```
 
