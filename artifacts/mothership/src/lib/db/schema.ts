@@ -398,6 +398,18 @@ export const transactions = pgTable('Transaction', {
   occurredAtIdx: index('Transaction_occurredAt_idx').on(table.occurredAt),
 }));
 
+export const tellerWebhookReceipts = pgTable('TellerWebhookReceipt', {
+  id: text('id').primaryKey(),
+  eventId: text('eventId'),
+  signatureHash: text('signatureHash').notNull(),
+  receivedAt: timestamp('receivedAt', { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp('expiresAt', { withTimezone: true }).notNull(),
+}, (table) => ({
+  eventIdIdx: index('TellerWebhookReceipt_eventId_idx').on(table.eventId),
+  expiresAtIdx: index('TellerWebhookReceipt_expiresAt_idx').on(table.expiresAt),
+  signatureHashIdx: uniqueIndex('TellerWebhookReceipt_signatureHash_key').on(table.signatureHash),
+}));
+
 import { FinancePlanStatus, FinancePlanType } from './enums';
 
 export const financePlans = pgTable('FinancePlan', {

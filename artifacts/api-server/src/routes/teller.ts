@@ -1,9 +1,9 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { desc } from "drizzle-orm";
+import { desc, eq, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { tellerItems } from "@/lib/db/schema";
+import { tellerItems, tellerWebhookReceipts } from "@/lib/db/schema";
 import {
   exchangePublicToken,
   markItemError,
@@ -17,6 +17,7 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 const WEBHOOK_TOLERANCE_MS = 5 * 60 * 1000;
+const WEBHOOK_REPLAY_WINDOW_MS = WEBHOOK_TOLERANCE_MS;
 
 type TellerWebhookEvent = {
   id?: string;
@@ -91,6 +92,45 @@ async function forwardWebhook(rawBody: Buffer, signature: string | undefined): P
   }
 }
 
+function hashWebhookReceipt(signature: string | undefined, rawBody: Buffer) {
+  const hash = createHash('sha256');
+  if (signature) {
+    hash.update(signature);
+    hash.update(':');
+  }
+  hash.update(rawBody);
+  return hash.digest('hex');
+}
+
+async function rejectReplay(eventId: string | undefined, signatureHash: string) {
+  const now = new Date();
+  await db.delete(tellerWebhookReceipts).where(lte(tellerWebhookReceipts.expiresAt, now));
+
+  const [existing] = await db
+    .select({ id: tellerWebhookReceipts.id })
+    .from(tellerWebhookReceipts)
+    .where(
+      or(
+        eq(tellerWebhookReceipts.signatureHash, signatureHash),
+        eventId ? eq(tellerWebhookReceipts.eventId, eventId) : undefined,
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    const error = new Error('Duplicate Teller webhook rejected');
+    error.name = 'DuplicateWebhookError';
+    throw error;
+  }
+
+  await db.insert(tellerWebhookReceipts).values({
+    id: randomUUID(),
+    eventId: eventId ?? null,
+    signatureHash,
+    expiresAt: new Date(now.getTime() + WEBHOOK_REPLAY_WINDOW_MS),
+  });
+}
+
 async function handleWebhookEvent(event: TellerWebhookEvent): Promise<void> {
   const itemId = event.payload?.item_id ?? event.payload?.enrollment_id;
 
@@ -128,9 +168,21 @@ router.post(
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
     const signature = typeof req.header('Teller-Signature') === 'string' ? req.header('Teller-Signature') ?? undefined : undefined;
     verifyWebhookSignature(signature, rawBody);
+    const event = JSON.parse(rawBody.toString('utf8')) as TellerWebhookEvent;
+    const signatureHash = hashWebhookReceipt(signature, rawBody);
+
+    try {
+      await rejectReplay(event.id, signatureHash);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'DuplicateWebhookError') {
+        res.status(409).json({ ok: false, error: 'duplicate_webhook', eventId: event.id ?? null });
+        return;
+      }
+      throw err;
+    }
+
     await appendWebhookLog(rawBody);
     await forwardWebhook(rawBody, signature);
-    const event = JSON.parse(rawBody.toString('utf8')) as TellerWebhookEvent;
     await handleWebhookEvent(event);
     res.status(202).json({ ok: true, type: event.type ?? 'unknown' });
   }),
