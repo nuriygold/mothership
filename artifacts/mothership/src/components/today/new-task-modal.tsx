@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
 type NewTaskModalProps = {
@@ -12,6 +12,24 @@ export function NewTaskModal({ onClose, onSuccess }: NewTaskModalProps) {
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement;
+    closeBtnRef.current?.focus();
+    return () => {
+      (previousFocusRef.current as HTMLElement | null)?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isSubmitting, onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,9 +68,14 @@ export function NewTaskModal({ onClose, onSuccess }: NewTaskModalProps) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-task-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.6)' }}
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) onClose();
+      }}
     >
       <div
         className="rounded-3xl p-6 max-w-md w-full"
@@ -60,10 +83,11 @@ export function NewTaskModal({ onClose, onSuccess }: NewTaskModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+          <h2 id="new-task-modal-title" className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
             New Task
           </h2>
           <button
+            ref={closeBtnRef}
             onClick={onClose}
             className="rounded-full p-1 hover:opacity-60 transition-opacity"
             aria-label="Close"

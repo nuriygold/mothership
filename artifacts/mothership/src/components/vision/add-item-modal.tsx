@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Plus, ChevronDown } from 'lucide-react';
 import type { VisionItemStatus, V2TaskItem, V2TasksFeed } from '@/lib/v2/types';
 
@@ -22,6 +22,8 @@ const COMMON_EMOJIS = ['🎯', '🚀', '💡', '🌟', '🏆', '💪', '🌈', '
 
 export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddItemModalProps) {
   const [title, setTitle] = useState('');
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<VisionItemStatus>('DREAMING');
   const [imageEmoji, setImageEmoji] = useState('');
@@ -33,6 +35,22 @@ export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddI
   const [poolTasksLoading, setPoolTasksLoading] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement;
+    closeBtnRef.current?.focus();
+    return () => {
+      (previousFocusRef.current as HTMLElement | null)?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose, saving]);
 
   useEffect(() => {
     if (!showTaskPicker || poolTasks.length > 0) return;
@@ -86,19 +104,23 @@ export function AddItemModal({ pillarId, pillarLabel, onClose, onCreated }: AddI
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-vision-item-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.45)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && !saving && onClose()}
     >
       <div
         className="w-full max-w-md rounded-3xl p-6 shadow-2xl"
         style={{ background: 'var(--card)', border: '1px solid var(--card-border)' }}
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold text-base" style={{ color: 'var(--foreground)' }}>
+          <h2 id="add-vision-item-modal-title" className="font-semibold text-base" style={{ color: 'var(--foreground)' }}>
             Add goal to {pillarLabel}
           </h2>
           <button
+            ref={closeBtnRef}
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity hover:opacity-70"
             style={{ background: 'var(--muted)' }}

@@ -190,8 +190,8 @@ export function TakeActionModal({ item, onClose, onDone, onComplete, onGateway, 
           {
             key: 'route',
             icon: Send,
-            label: `Approve Route to ${normalizedBot}`,
-            desc: `Approve this routing action in queue (does not change task status)`,
+            label: `Update Task Status for ${normalizedBot}`,
+            desc: `Uses the task action endpoint configured on this item. This updates task state, not a no-op approval.`,
             color: botC.bg,
             textColor: botC.text,
             fn: async () => {

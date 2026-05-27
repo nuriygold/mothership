@@ -79,6 +79,9 @@ function AssignModal({ stream, onClose, onDone }: { stream: StreamStatus; onClos
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="assign-stream-task-modal-title"
       style={{
         position: 'fixed', inset: 0, zIndex: 300,
         background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)',
@@ -90,7 +93,7 @@ function AssignModal({ stream, onClose, onDone }: { stream: StreamStatus; onClos
         background: '#fff', borderRadius: 12, border: '1px solid #b8e0f5',
         boxShadow: '0 8px 32px rgba(64,168,200,0.18)', width: 360, padding: '20px 20px 16px',
       }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>
+        <div id="assign-stream-task-modal-title" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>
           Assign task — {stream.displayName}
         </div>
         <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>

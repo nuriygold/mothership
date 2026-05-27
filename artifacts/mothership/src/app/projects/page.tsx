@@ -114,7 +114,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const Icon = ICON_MAP[icon];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="new-project-modal-title" className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
       <div className="w-full max-w-md rounded-3xl p-6 shadow-2xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 mb-5">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
@@ -122,7 +122,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <Icon className="w-6 h-6" style={{ color: scheme.text }} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>{title || 'New Project'}</p>
+            <p id="new-project-modal-title" className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>{title || 'New Project'}</p>
             <p className="text-xs truncate" style={{ color: 'var(--muted-foreground)' }}>{description || 'No description'}</p>
           </div>
           <button type="button" onClick={onClose} className="p-1 rounded-full hover:opacity-70">
@@ -223,10 +223,10 @@ function AssignCampaignModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="assign-campaign-modal-title" className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
       <div className="w-full max-w-md rounded-3xl p-5 shadow-2xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between mb-4">
-          <p className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>Add campaign → {project.title}</p>
+          <p id="assign-campaign-modal-title" className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>Add campaign → {project.title}</p>
           <button type="button" onClick={onClose}><X className="w-4 h-4 opacity-50" /></button>
         </div>
         <input autoFocus

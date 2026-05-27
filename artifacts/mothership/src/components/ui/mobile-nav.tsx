@@ -19,6 +19,7 @@ import {
   Brain,
   Zap,
   TrendingUp,
+  Dog,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -45,6 +46,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/marco':    Globe,
   '/claude':          Brain,
   '/revenue-streams': TrendingUp,
+  '/watchdog':        Dog,
 };
 
 export function MobileNav({ items }: { items: SidebarItem[] }) {
