@@ -1,5 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import dispatchRouter from "./dispatch";
+import agentRouter from "./agent";
+import chatRouter from "./chat";
 import healthRouter from "./health";
 import opsRouter from "./ops";
 import tellerRouter from "./teller";
@@ -41,6 +43,8 @@ router.use(healthRouter);
 router.use(dispatchRouter);
 router.use(opsRouter);
 router.use(tellerRouter);
+router.use(chatRouter);
+router.use(agentRouter);
 router.use(v2Router);
 
 router.get("/openclaw/health", async (req: Request, res: Response) => {
@@ -57,24 +61,6 @@ router.get("/openclaw/health", async (req: Request, res: Response) => {
       path: apiPath(req),
     },
   });
-});
-
-router.all("/agent", (req: Request, res: Response) => {
-  sendApiRouteNotImplemented(
-    res,
-    apiPath(req),
-    "AGENT_ROUTE_NOT_IMPLEMENTED",
-    "No generic agent dispatch route is mounted. Use a supported dispatch endpoint instead.",
-  );
-});
-
-router.all("/v2/:agent/dispatch", (req: Request, res: Response) => {
-  sendApiRouteNotImplemented(
-    res,
-    apiPath(req),
-    "AGENT_DISPATCH_ROUTE_NOT_IMPLEMENTED",
-    `No /api/v2/${String(req.params.agent)}/dispatch route is mounted for this agent.`,
-  );
 });
 
 router.use((req: Request, res: Response) => {
