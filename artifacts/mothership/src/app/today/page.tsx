@@ -293,8 +293,10 @@ export default function TodayPage() {
   }, [nowIndex]);
 
   const greeting = useMemo(() => {
-    if (!feed) return 'Loading...';
-    return `${feed.userContext.greeting}, ${feed.userContext.userName}`;
+    if (!feed?.userContext) return 'Loading...';
+    const greeting = feed.userContext.greeting || 'Good day';
+    const userName = feed.userContext.userName || 'Rudolph';
+    return `${greeting}, ${userName}`;
   }, [feed]);
 
   const randomAffirmation = useMemo(() => pickRandomAffirmationBar(), []);

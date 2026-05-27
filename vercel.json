@@ -8,6 +8,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://express.nuriy.com/api/:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
     }
   ]
 }
