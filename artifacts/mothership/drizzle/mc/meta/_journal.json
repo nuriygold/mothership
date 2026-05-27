@@ -22,6 +22,13 @@
       "when": 1748273400000,
       "tag": "20260526153000_teller_webhook_replay_protection",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1748286000000,
+      "tag": "20260526200000_part6_persistence_hardening",
+      "breakpoints": true
     }
   ]
 }

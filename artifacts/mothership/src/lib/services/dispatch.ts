@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { asc, and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { auditEvents, dispatchCampaigns, dispatchTasks, projects } from '@/lib/db/schema';
+import { auditEvents, dispatchCampaigns, dispatchTasks, projects, systemLeases } from '@/lib/db/schema';
 import { DispatchCampaignStatus, DispatchTaskStatus, TaskPriority } from '@/lib/db/enums';
 import type { JsonArray, JsonObject, JsonValue } from '@/lib/db/json';
 import { dispatchToOpenClaw, dispatchWithTools } from '@/lib/services/openclaw';
@@ -48,6 +48,7 @@ export type RawPlanEnvelope = {
 const DISPATCH_LEASE_MS = 10 * 60 * 1000;
 const DISPATCH_HEARTBEAT_MS = 30 * 1000;
 const DISPATCH_WORKER_RUN_LEASE_MS = 25 * 1000;
+const DISPATCH_WORKER_LEASE_KEY = 'dispatch_worker';
 
 function dispatchWorkerId() {
   return process.env.MOTHERSHIP_DISPATCH_WORKER_ID?.trim() || `api-server:${process.pid}`;
@@ -61,22 +62,75 @@ function nextWorkerRunLeaseDeadline() {
   return new Date(Date.now() + DISPATCH_WORKER_RUN_LEASE_MS);
 }
 
-let activeWorkerRunLeaseUntil = 0;
+async function claimDispatchWorkerRun(workerId: string) {
+  const leaseUntil = nextWorkerRunLeaseDeadline();
+  const now = new Date();
+  const ownerToken = `${workerId}:${now.toISOString()}:${randomUUID()}`;
 
-function claimDispatchWorkerRun(workerId: string) {
-  const now = Date.now();
-  if (activeWorkerRunLeaseUntil > now) {
-    return null;
+  const claimed = await db.execute(sql`
+    insert into "SystemLease" ("key", "owner", "leaseUntil", "createdAt", "updatedAt")
+    values (${DISPATCH_WORKER_LEASE_KEY}, ${ownerToken}, ${leaseUntil}, ${now}, ${now})
+    on conflict ("key") do update
+      set "owner" = excluded."owner",
+          "leaseUntil" = excluded."leaseUntil",
+          "updatedAt" = excluded."updatedAt"
+      where "SystemLease"."leaseUntil" <= ${now}
+    returning "owner", "leaseUntil"
+  `);
+
+  const row = claimed[0] as { owner?: string; leaseUntil?: Date | string } | undefined;
+  if (row?.owner === ownerToken) {
+    console.info(
+      JSON.stringify({
+        service: 'dispatch',
+        event: 'dispatch_worker_lease_claimed',
+        workerId,
+        leaseKey: DISPATCH_WORKER_LEASE_KEY,
+        leaseUntil: row.leaseUntil instanceof Date ? row.leaseUntil.toISOString() : row.leaseUntil,
+        timestamp: now.toISOString(),
+      })
+    );
+    return ownerToken;
   }
 
-  activeWorkerRunLeaseUntil = now + DISPATCH_WORKER_RUN_LEASE_MS;
-  return `${workerId}:${now}`;
+  const [existing] = await db
+    .select({
+      owner: systemLeases.owner,
+      leaseUntil: systemLeases.leaseUntil,
+    })
+    .from(systemLeases)
+    .where(eq(systemLeases.key, DISPATCH_WORKER_LEASE_KEY))
+    .limit(1);
+
+  console.info(
+    JSON.stringify({
+      service: 'dispatch',
+      event: 'dispatch_worker_lease_skipped',
+      workerId,
+      leaseKey: DISPATCH_WORKER_LEASE_KEY,
+      currentOwner: existing?.owner ?? null,
+      leaseUntil: existing?.leaseUntil?.toISOString() ?? null,
+      timestamp: now.toISOString(),
+    })
+  );
+  return null;
 }
 
-function releaseDispatchWorkerRun(lockId: string) {
-  if (lockId) {
-    activeWorkerRunLeaseUntil = 0;
-  }
+async function releaseDispatchWorkerRun(lockId: string, workerId: string) {
+  const released = await db
+    .delete(systemLeases)
+    .where(and(eq(systemLeases.key, DISPATCH_WORKER_LEASE_KEY), eq(systemLeases.owner, lockId)))
+    .returning({ key: systemLeases.key });
+
+  console.info(
+    JSON.stringify({
+      service: 'dispatch',
+      event: released.length ? 'dispatch_worker_lease_released' : 'dispatch_worker_lease_release_skipped',
+      workerId,
+      leaseKey: DISPATCH_WORKER_LEASE_KEY,
+      timestamp: new Date().toISOString(),
+    })
+  );
 }
 
 async function markCampaignArtifactsWritten(campaignId: string) {
@@ -1248,12 +1302,31 @@ export async function runDispatchCampaign(
   if (finalStatus === DispatchCampaignStatus.COMPLETED) {
     if (!campaignWithTasks.artifactsWrittenAt) {
       try {
-        const outputDir = await writeCampaignOutput(campaignId);
-        if (outputDir) {
+        const outputResult = await writeCampaignOutput(campaignId);
+        if (outputResult.ok) {
           await markCampaignArtifactsWritten(campaignId);
+        } else {
+          console.error(
+            JSON.stringify({
+              service: 'dispatch',
+              event: 'campaign_output_write_failed',
+              campaignId,
+              code: outputResult.code,
+              message: outputResult.message,
+              timestamp: new Date().toISOString(),
+            })
+          );
         }
-      } catch {
-        // Non-fatal
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            service: 'dispatch',
+            event: 'campaign_output_write_crashed',
+            campaignId,
+            message: error instanceof Error ? error.message : String(error),
+            timestamp: new Date().toISOString(),
+          })
+        );
       }
     }
 
@@ -1354,7 +1427,7 @@ export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: 
 export async function processDispatchQueue(): Promise<{ processed: number; skipped: number }> {
   const now = new Date();
   const workerId = dispatchWorkerId();
-  const workerRunLockId = claimDispatchWorkerRun(workerId);
+  const workerRunLockId = await claimDispatchWorkerRun(workerId);
   if (!workerRunLockId) {
     return { processed: 0, skipped: 0 };
   }
@@ -1391,7 +1464,7 @@ export async function processDispatchQueue(): Promise<{ processed: number; skipp
 
     return { processed, skipped };
   } finally {
-    releaseDispatchWorkerRun(workerRunLockId);
+    await releaseDispatchWorkerRun(workerRunLockId, workerId);
   }
 }
 

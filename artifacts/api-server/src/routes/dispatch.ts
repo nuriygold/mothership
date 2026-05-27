@@ -220,7 +220,18 @@ router.post(
         .where(eq(dispatchCampaigns.id, campaign.id));
     }
 
-    void writeCampaignOutput(campaign.id).catch(() => undefined);
+    void writeCampaignOutput(campaign.id)
+      .then((result) => {
+        if (!result.ok) {
+          logger.error(
+            { campaignId: campaign.id, code: result.code, message: result.message },
+            "dispatch trophy output write failed",
+          );
+        }
+      })
+      .catch((err) =>
+        logger.error({ err, campaignId: campaign.id }, "dispatch trophy output write crashed"),
+      );
     if (!alreadyCompleted) {
       void pingTelegramCampaignComplete({
         id: campaign.id,
@@ -578,7 +589,16 @@ router.get(
 
     let outputDir = await getCampaignOutputDir(campaign.id);
     if (!outputDir) {
-      outputDir = await writeCampaignOutput(campaign.id);
+      const writeResult = await writeCampaignOutput(campaign.id);
+      if (!writeResult.ok) {
+        res.status(500).json({
+          ok: false,
+          code: writeResult.code,
+          message: writeResult.message,
+        });
+        return;
+      }
+      outputDir = writeResult.outputDir;
     }
     if (!outputDir) {
       res
@@ -616,11 +636,11 @@ router.get(
       return;
     }
 
-    const zipBuffer = zipCampaignOutputDir(outputDir);
-    if (!zipBuffer) {
+    const zipResult = zipCampaignOutputDir(outputDir);
+    if (!zipResult.ok) {
       res
         .status(500)
-        .json({ ok: false, message: "Failed to create zip archive" });
+        .json({ ok: false, code: zipResult.code, message: zipResult.message });
       return;
     }
 
@@ -633,7 +653,7 @@ router.get(
       "Content-Disposition",
       `attachment; filename="${zipName}"`,
     );
-    res.send(zipBuffer);
+    res.send(zipResult.buffer);
   }),
 );
 

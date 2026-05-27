@@ -106,6 +106,16 @@ export const auditEvents = pgTable('AuditEvent', {
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const systemLeases = pgTable('SystemLease', {
+  key: text('key').primaryKey(),
+  owner: text('owner').notNull(),
+  leaseUntil: timestamp('leaseUntil', { withTimezone: true }).notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  leaseUntilIdx: index('SystemLease_leaseUntil_idx').on(table.leaseUntil),
+}));
+
 export const runs = pgTable('Run', {
   id: text('id').primaryKey(),
   workflowId: text('workflowId'),
