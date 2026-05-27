@@ -164,7 +164,12 @@ export async function projectAllAgents(): Promise<UiAgent[]> {
   const [agents, campaigns] = await Promise.all([listAgents(), listCampaigns()]);
   const dedupedAgents = new Map<string, McAgent>();
   for (const agent of agents) {
-    const key = agent.codename?.trim() || agent.id;
+    const normalizedName = agent.name.trim().toLowerCase();
+    const normalizedRole = (agent.role ?? '').trim().toLowerCase();
+    const capabilitiesSignature = JSON.stringify(
+      Array.isArray(agent.capabilities) ? [...agent.capabilities].sort() : [],
+    );
+    const key = `${normalizedName}|${normalizedRole}|${capabilitiesSignature}`;
     const existing = dedupedAgents.get(key);
     if (!existing) {
       dedupedAgents.set(key, agent);
