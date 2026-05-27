@@ -44,6 +44,7 @@ function isProtectedAgentRoute(path: string) {
   return (
     path === "/agent" ||
     path.startsWith("/chat") ||
+    path.startsWith("/ops") ||
     /^\/v2\/(ruby|adrian|emerald|adobe|anchor)(?:\/|$)/.test(path)
   );
 }
