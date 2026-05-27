@@ -60,6 +60,7 @@ export async function seedDemoCampaigns(): Promise<{ created: string[] }> {
     leadAgentId: adrianAgent?.id,
     metadata: {
       demo: true,
+      demoNonRunnable: true,
       requiredArtifacts: ['products.md', 'action-log.md'],
       minimumBatchSize: 5,
       executionMode: 'STANDARD',
@@ -99,6 +100,7 @@ export async function seedDemoCampaigns(): Promise<{ created: string[] }> {
     leadAgentId: marvinAgent?.id,
     metadata: {
       demo: true,
+      demoNonRunnable: true,
       requiredArtifacts: ['ledger-diff.md'],
       minimumBatchSize: 5,
       executionMode: 'STANDARD',
@@ -139,6 +141,7 @@ export async function seedDemoCampaigns(): Promise<{ created: string[] }> {
     leadAgentId: icemanAgent?.id,
     metadata: {
       demo: true,
+      demoNonRunnable: true,
       requiredArtifacts: ['release-notes.md'],
       minimumBatchSize: 1,
       executionMode: 'STANDARD',

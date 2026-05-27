@@ -6,7 +6,11 @@ import {
   campaigns as campaignsSvc,
   events as eventsSvc,
   isDispatchBackedCampaign,
+  isNonRunnableDemoCampaign,
+  legacyDurableOpsDisabledError,
+  legacyDurableOpsEnabled,
   projection,
+  listWorkflowRegistry,
   runCampaign,
   resumeCampaign,
   seedDemoCampaigns,
@@ -58,12 +62,54 @@ function volatileSystemRulesEnabled() {
   return process.env.ENABLE_VOLATILE_SYSTEM_RULES === "true";
 }
 
+async function startCampaignExecution(
+  row: NonNullable<Awaited<ReturnType<typeof campaignsSvc.getCampaign>>>,
+  mode: "run" | "resume",
+) {
+  if (isDispatchBackedCampaign(row)) {
+    return {
+      ok: true as const,
+      kind: "dispatch",
+      promise: startDispatchBackedCampaign(row.id),
+    };
+  }
+
+  if (isNonRunnableDemoCampaign(row)) {
+    return {
+      ok: false as const,
+      kind: "demo_non_runnable",
+      error: legacyDurableOpsDisabledError(),
+    };
+  }
+
+  if (!legacyDurableOpsEnabled()) {
+    return {
+      ok: false as const,
+      kind: "legacy_disabled",
+      error: legacyDurableOpsDisabledError(),
+    };
+  }
+
+  return {
+    ok: true as const,
+    kind: "legacy",
+    promise: mode === "resume" ? resumeCampaign(row.id) : runCampaign(row.id),
+  };
+}
+
 // ─── Ticker ───────────────────────────────────────────────────────────────
 router.get(
   "/ops/ticker",
   wrap(async (_req, res) => {
     const campaigns = await projection.projectAllCampaigns();
     res.json(projection.tickerFromCampaigns(campaigns));
+  }),
+);
+
+router.get(
+  "/ops/workflows",
+  wrap(async (_req, res) => {
+    res.json({ workflows: listWorkflowRegistry() });
   }),
 );
 
@@ -145,33 +191,39 @@ router.post(
 
     switch (action) {
       case "resume": {
+        const execution = await startCampaignExecution(row, "resume");
+        if (!execution.ok) {
+          res.status(501).json(execution.error);
+          return;
+        }
         const open = await blockersSvc.listOpenBlockers(id);
         for (const b of open) {
           await blockersSvc.resolveBlocker(b.id, "Resolved by operator (resume)");
         }
-        const resume = isDispatchBackedCampaign(row)
-          ? startDispatchBackedCampaign(id)
-          : resumeCampaign(id);
-        void resume.catch((err) => logger.error({ err, id }, "resume failed"));
+        void execution.promise.catch((err) => logger.error({ err, id }, "resume failed"));
         break;
       }
       case "force_retry": {
+        const execution = await startCampaignExecution(row, "run");
+        if (!execution.ok) {
+          res.status(501).json(execution.error);
+          return;
+        }
         await campaignsSvc.setStatus(id, "queued", "Operator: force retry");
-        const retry = isDispatchBackedCampaign(row)
-          ? startDispatchBackedCampaign(id)
-          : runCampaign(id);
-        void retry.catch((err) => logger.error({ err, id }, "force_retry failed"));
+        void execution.promise.catch((err) => logger.error({ err, id }, "force_retry failed"));
         break;
       }
       case "approve_action": {
+        const execution = await startCampaignExecution(row, "resume");
+        if (!execution.ok) {
+          res.status(501).json(execution.error);
+          return;
+        }
         const open = await blockersSvc.listOpenBlockers(id);
         for (const b of open) {
           await blockersSvc.resolveBlocker(b.id, "Approved by operator");
         }
-        const approve = isDispatchBackedCampaign(row)
-          ? startDispatchBackedCampaign(id)
-          : resumeCampaign(id);
-        void approve.catch((err) =>
+        void execution.promise.catch((err) =>
           logger.error({ err, id }, "approve_action failed"),
         );
         break;
@@ -264,16 +316,40 @@ router.post(
     const targets = await campaignsSvc.listCampaignsByStatus(["blocked", "running"]);
     let count = 0;
     if (action === "force_resume_all") {
+      const resumed: string[] = [];
+      const skipped: Array<{ campaignId: string; reason: string; code: string; message: string }> = [];
       for (const c of targets) {
+        const execution = await startCampaignExecution(c, "resume");
+        if (!execution.ok) {
+          await eventsSvc.record(
+            c.id,
+            "campaign_updated",
+            execution.kind === "demo_non_runnable"
+              ? "Watchdog skipped non-runnable demo campaign"
+              : execution.error.error.message,
+          );
+          skipped.push({
+            campaignId: c.id,
+            reason: execution.kind,
+            code: execution.error.error.code,
+            message: execution.error.error.message,
+          });
+          count += 1;
+          continue;
+        }
+
         const open = await blockersSvc.listOpenBlockers(c.id);
         for (const b of open) {
           await blockersSvc.resolveBlocker(b.id, "Watchdog: force resume");
         }
-        void resumeCampaign(c.id).catch((err) =>
+        void execution.promise.catch((err) =>
           logger.error({ err, id: c.id }, "watchdog resume failed"),
         );
+        resumed.push(c.id);
         count += 1;
       }
+      res.json({ count, resumed, skipped });
+      return;
     } else if (action === "escalate_all") {
       for (const c of targets) {
         await eventsSvc.record(c.id, "approval_requested", "Watchdog: escalate");

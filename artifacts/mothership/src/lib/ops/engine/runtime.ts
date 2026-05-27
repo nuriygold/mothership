@@ -62,6 +62,9 @@ function planForCampaign(name: string, objective: string | null): StepPlan[] {
   ];
 }
 
+// Legacy durable fallback.
+// This guard is process-local only, so dispatch-backed campaigns remain the
+// supported UI path for durable execution.
 const inflight = new Set<string>();
 
 export async function runCampaign(campaignId: string): Promise<void> {

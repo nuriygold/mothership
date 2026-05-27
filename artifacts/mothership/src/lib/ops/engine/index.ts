@@ -14,12 +14,20 @@ export * as projection from './services/projection';
 export { runCampaign, resumeCampaign, isInflight } from './runtime';
 export { bootstrap } from './bootstrap';
 export {
+  legacyDurableOpsDisabledError,
+  legacyDurableOpsEnabled,
+  LEGACY_DURABLE_OPS_DISABLED_CODE,
+  LEGACY_DURABLE_OPS_DISABLED_MESSAGE,
+  isNonRunnableDemoCampaign,
+} from './legacy-durable-ops';
+export {
   OPS_DISPATCH_LIFECYCLE_CONTRACT,
   ensureDispatchBinding,
   isDispatchBackedCampaign,
   startDispatchBackedCampaign,
   syncDispatchBackedCampaign,
 } from './dispatch-bridge';
+export { listWorkflowRegistry, workflowRegistry } from './workflow-registry';
 export {
   registerTool,
   listTools,
