@@ -464,6 +464,21 @@ export const emailDraftSuggestions = pgTable('EmailDraftSuggestion', {
   createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const rubyDraftLifecycle = pgTable('RubyDraftLifecycle', {
+  id: text('id').primaryKey(),
+  emailExternalId: text('emailExternalId').notNull().unique(),
+  status: text('status').default('idle').notNull(),
+  generationOwner: text('generationOwner'),
+  generationLeaseUntil: timestamp('generationLeaseUntil', { withTimezone: true }),
+  lastGeneratedDraftId: text('lastGeneratedDraftId'),
+  finalizedAt: timestamp('finalizedAt', { withTimezone: true }),
+  failureReason: text('failureReason'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
+}, (table) => ({
+  statusUpdatedAtIdx: index('RubyDraftLifecycle_status_updatedAt_idx').on(table.status, table.updatedAt),
+}));
+
 export const emailAgentTriages = pgTable('EmailAgentTriage', {
   id: text('id').primaryKey(),
   bucket: text('bucket').notNull(),

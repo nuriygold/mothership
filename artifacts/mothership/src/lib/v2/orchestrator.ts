@@ -40,9 +40,111 @@ import type {
   V2VisionPillar,
 } from '@/lib/v2/types';
 
-const pendingRubyDrafts = new Set<string>();
 const rubyDraftStore = new Map<string, V2EmailDraft>();
-const sentDrafts = new Set<string>();
+
+const RUBY_DRAFT_LEASE_MS = 5 * 60 * 1000;
+
+type RubyDraftLifecycleRecord = typeof schema.rubyDraftLifecycle.$inferSelect;
+
+function buildRubyDraft(emailId: string, body: string): V2EmailDraft {
+  return {
+    id: `${emailId}-ruby-custom`,
+    tone: 'Ruby Custom',
+    body,
+    approveWebhook: `/api/v2/email/send/${emailId}/ruby-custom`,
+    source: 'ruby_custom',
+  };
+}
+
+async function getRubyDraftLifecycle(emailId: string): Promise<RubyDraftLifecycleRecord | undefined> {
+  return db.query.rubyDraftLifecycle.findFirst({
+    where: eq(schema.rubyDraftLifecycle.emailExternalId, emailId),
+  });
+}
+
+async function claimRubyDraftGeneration(emailId: string): Promise<boolean> {
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + RUBY_DRAFT_LEASE_MS);
+  const owner = crypto.randomUUID();
+
+  return db.transaction(async (tx) => {
+    const existing = await tx.query.rubyDraftLifecycle.findFirst({
+      where: eq(schema.rubyDraftLifecycle.emailExternalId, emailId),
+    });
+
+    if (!existing) {
+      await tx.insert(schema.rubyDraftLifecycle).values({
+        id: crypto.randomUUID(),
+        emailExternalId: emailId,
+        status: 'generating',
+        generationOwner: owner,
+        generationLeaseUntil: leaseUntil,
+        updatedAt: now,
+      });
+      return true;
+    }
+
+    if (existing.status === 'finalized') return false;
+    if (
+      existing.status === 'generating' &&
+      existing.generationLeaseUntil &&
+      existing.generationLeaseUntil.getTime() > now.getTime()
+    ) {
+      return false;
+    }
+
+    await tx.update(schema.rubyDraftLifecycle)
+      .set({
+        status: 'generating',
+        generationOwner: owner,
+        generationLeaseUntil: leaseUntil,
+        failureReason: null,
+        updatedAt: now,
+      })
+      .where(eq(schema.rubyDraftLifecycle.emailExternalId, emailId));
+
+    return true;
+  });
+}
+
+async function completeRubyDraftGeneration(emailId: string, draftId: string): Promise<void> {
+  await db.update(schema.rubyDraftLifecycle)
+    .set({
+      status: 'generated',
+      generationOwner: null,
+      generationLeaseUntil: null,
+      lastGeneratedDraftId: draftId,
+      failureReason: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.rubyDraftLifecycle.emailExternalId, emailId));
+}
+
+async function failRubyDraftGeneration(emailId: string, reason: string): Promise<void> {
+  await db.update(schema.rubyDraftLifecycle)
+    .set({
+      status: 'failed',
+      generationOwner: null,
+      generationLeaseUntil: null,
+      failureReason: reason,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.rubyDraftLifecycle.emailExternalId, emailId));
+}
+
+async function finalizeRubyDraftEmail(emailId: string, draftId?: string): Promise<void> {
+  await db.update(schema.rubyDraftLifecycle)
+    .set({
+      status: 'finalized',
+      generationOwner: null,
+      generationLeaseUntil: null,
+      lastGeneratedDraftId: draftId ?? null,
+      finalizedAt: new Date(),
+      failureReason: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.rubyDraftLifecycle.emailExternalId, emailId));
+}
 
 const BOT_PROFILES: Array<{
   key: BotRouteKey;
@@ -243,52 +345,52 @@ export function deterministicTemplateDrafts(
 }
 
 async function generateRubyDraft(emailId: string, subject: string, preview: string, senderName: string = '') {
-  if (pendingRubyDrafts.has(emailId)) return;
-  if (sentDrafts.has(emailId)) return;
-  pendingRubyDrafts.add(emailId);
+  const lifecycle = await getRubyDraftLifecycle(emailId);
+  if (lifecycle?.status === 'finalized') return;
+
+  const claimed = await claimRubyDraftGeneration(emailId);
+  if (!claimed) return;
 
   const firstName = senderName.split(/\s+/)[0] || '';
   const greeting = firstName ? `Hi ${firstName},\n\n` : 'Hi,\n\n';
   const subjectRef = subject ? `"${subject}"` : 'your message';
+  const fallbackBody = `${greeting}Thank you for your message about ${subjectRef}. I've reviewed the details and will follow up with a more complete response shortly.\n\nBest,`;
 
-  let body: string;
   try {
-    const result = await dispatchToOpenClaw({
-      agentId: 'ruby',
-      text: `Write a professional email reply to the following message. Be genuinely helpful and contextually appropriate — choose the response style that best fits the content (engaging, informational, action-oriented, declining, etc.). Include a greeting, a 2–3 sentence response, and a sign-off. Write only the reply body; do not include a subject line.\n\nSubject: ${subject}\nMessage preview: ${preview}`,
-      sessionKey: `email-${emailId}`,
-    });
-    body = result.output?.trim() || `${greeting}Thank you for your message about ${subjectRef}. I've reviewed the details and will follow up with a more complete response shortly.\n\nBest,`;
-  } catch {
-    // Fall back to a context-aware draft so the option doesn't hang indefinitely
-    body = `${greeting}Thank you for your message about ${subjectRef}. I've reviewed the details and will follow up with a more complete response shortly.\n\nBest,`;
-  }
+    let body = fallbackBody;
+    try {
+      const result = await dispatchToOpenClaw({
+        agentId: 'ruby',
+        text: `Write a professional email reply to the following message. Be genuinely helpful and contextually appropriate — choose the response style that best fits the content (engaging, informational, action-oriented, declining, etc.). Include a greeting, a 2–3 sentence response, and a sign-off. Write only the reply body; do not include a subject line.\n\nSubject: ${subject}\nMessage preview: ${preview}`,
+        sessionKey: `email-${emailId}`,
+      });
+      body = result.output?.trim() || fallbackBody;
+    } catch {
+      body = fallbackBody;
+    }
 
-  const rubyDraft: V2EmailDraft = {
-    id: `${emailId}-ruby-custom`,
-    tone: 'Ruby Custom',
-    body,
-    approveWebhook: `/api/v2/email/send/${emailId}/ruby-custom`,
-    source: 'ruby_custom',
-  };
-  rubyDraftStore.set(emailId, rubyDraft);
-  // Persist to DB so draft survives serverless cold starts
-  try {
+    const suggestionId = crypto.randomUUID();
+    const rubyDraft = buildRubyDraft(emailId, body);
+    rubyDraftStore.set(emailId, rubyDraft);
+
     await db.insert(schema.emailDraftSuggestions).values({
-      id: crypto.randomUUID(),
+      id: suggestionId,
       emailExternalId: emailId,
       tone: 'Ruby Custom',
       body,
       source: 'ruby_custom',
     });
+
+    await completeRubyDraftGeneration(emailId, suggestionId);
+
+    publishV2Event(`email-drafts:${emailId}`, 'draft.generated', {
+      emailId,
+      draft: rubyDraft,
+    });
   } catch (err) {
+    await failRubyDraftGeneration(emailId, err instanceof Error ? err.message : String(err));
     console.warn('[generateRubyDraft] failed to persist draft:', err instanceof Error ? err.message : String(err));
   }
-  publishV2Event(`email-drafts:${emailId}`, 'draft.generated', {
-    emailId,
-    draft: rubyDraft,
-  });
-  pendingRubyDrafts.delete(emailId);
 }
 
 export async function getV2TasksFeed(): Promise<V2TasksFeed> {
@@ -427,13 +529,12 @@ export async function getV2EmailDrafts(emailId: string): Promise<V2EmailDraftFee
   const senderName = senderMatch ? senderMatch[1].trim().replace(/^"(.*)"$/, '$1') : '';
 
   const drafts = deterministicTemplateDrafts(emailId, fallbackSubject, senderName, fallbackPreview);
+  const lifecycle = await getRubyDraftLifecycle(emailId);
 
-  // Check memory + DB so a previously generated draft is included in the initial response
-  // (avoids the SSE race condition where the event fires before the client subscribes)
   const rubyDraft = await getRubyDraftWithFallback(emailId);
   if (rubyDraft) {
     drafts.push(rubyDraft);
-  } else {
+  } else if (lifecycle?.status !== 'finalized' && lifecycle?.status !== 'generating') {
     void generateRubyDraft(emailId, fallbackSubject, fallbackPreview, senderName);
   }
 
@@ -1005,6 +1106,9 @@ export function getRubyDraft(emailId: string): V2EmailDraft | undefined {
  * serverless cold starts where the in-memory Map is empty.
  */
 export async function getRubyDraftWithFallback(emailId: string): Promise<V2EmailDraft | undefined> {
+  const lifecycle = await getRubyDraftLifecycle(emailId);
+  if (lifecycle?.status === 'finalized') return undefined;
+
   const mem = rubyDraftStore.get(emailId);
   if (mem) return mem;
 
@@ -1020,14 +1124,8 @@ export async function getRubyDraftWithFallback(emailId: string): Promise<V2Email
       .limit(1);
 
     if (!record) return undefined;
-    const draft: V2EmailDraft = {
-      id: `${emailId}-ruby-custom`,
-      tone: 'Ruby Custom',
-      body: record.body,
-      approveWebhook: `/api/v2/email/send/${emailId}/ruby-custom`,
-      source: 'ruby_custom',
-    };
-    rubyDraftStore.set(emailId, draft); // restore for fast subsequent access
+    const draft = buildRubyDraft(emailId, record.body);
+    rubyDraftStore.set(emailId, draft);
     return draft;
   } catch {
     return undefined;
@@ -1035,22 +1133,44 @@ export async function getRubyDraftWithFallback(emailId: string): Promise<V2Email
 }
 
 export async function markDraftSent(emailId: string, draftId?: string): Promise<void> {
-  // Track sent draft with optional draftId for granular tracking
-  // Composite key format: "emailId" or "emailId:draftId"
-  const sentKey = draftId ? `${emailId}:${draftId}` : emailId;
-  sentDrafts.add(sentKey);
-
-  // Always clear Ruby draft store for this email (backward compatible behavior)
   rubyDraftStore.delete(emailId);
-  pendingRubyDrafts.delete(emailId);
 
   try {
-    await db.update(schema.emailDraftSuggestions)
-      .set({ approvedAt: new Date() })
-      .where(and(
-        eq(schema.emailDraftSuggestions.emailExternalId, emailId),
-        drizzleSql`${schema.emailDraftSuggestions.approvedAt} IS NULL`
-      ));
+    await db.transaction(async (tx) => {
+      await tx.update(schema.emailDraftSuggestions)
+        .set({ approvedAt: new Date() })
+        .where(and(
+          eq(schema.emailDraftSuggestions.emailExternalId, emailId),
+          drizzleSql`${schema.emailDraftSuggestions.approvedAt} IS NULL`
+        ));
+
+      const existing = await tx.query.rubyDraftLifecycle.findFirst({
+        where: eq(schema.rubyDraftLifecycle.emailExternalId, emailId),
+      });
+
+      if (existing) {
+        await tx.update(schema.rubyDraftLifecycle)
+          .set({
+            status: 'finalized',
+            generationOwner: null,
+            generationLeaseUntil: null,
+            lastGeneratedDraftId: draftId ?? existing.lastGeneratedDraftId,
+            finalizedAt: new Date(),
+            failureReason: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.rubyDraftLifecycle.emailExternalId, emailId));
+      } else {
+        await tx.insert(schema.rubyDraftLifecycle).values({
+          id: crypto.randomUUID(),
+          emailExternalId: emailId,
+          status: 'finalized',
+          lastGeneratedDraftId: draftId ?? null,
+          finalizedAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+    });
   } catch { /* best-effort */ }
 }
 
