@@ -15,6 +15,14 @@ function channel(name: string) {
   return listeners.get(name)!;
 }
 
+export function subscribeV2Event(stream: string, listener: Listener) {
+  const set = channel(stream);
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+  };
+}
+
 export function publishV2Event(stream: string, type: string, payload: unknown) {
   const evt: BusEvent = {
     type,
@@ -48,7 +56,7 @@ export function createSseStream(stream: string) {
       };
 
       const set = channel(stream);
-      set.add(write);
+      const unsubscribe = subscribeV2Event(stream, write);
 
       keepAlive = setInterval(() => {
         controller.enqueue(encoder.encode(`event: heartbeat\ndata: {}\n\n`));
@@ -58,7 +66,7 @@ export function createSseStream(stream: string) {
 
       return () => {
         if (keepAlive) clearInterval(keepAlive);
-        set.delete(write);
+        unsubscribe();
       };
     },
     cancel() {

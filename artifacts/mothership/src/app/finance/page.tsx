@@ -222,9 +222,13 @@ export default function FinancePage() {
       </div>
 
       {/* Accounts row */}
-      {data.accounts.length > 0 && (
-        <div className="card">
-          <div className="card-title">Accounts &mdash; /api/v2/finance/overview</div>
+      <div className="card">
+        <div className="card-title">Accounts &mdash; /api/v2/finance/overview</div>
+        {data.accounts.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
+            No accounts synced yet.
+          </div>
+        ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             {data.accounts.map((a) => {
               const t = a.type.toLowerCase();
@@ -297,8 +301,8 @@ export default function FinancePage() {
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Two-column: Transactions | Payables */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>

@@ -49,6 +49,15 @@ All bots maintain persistent conversation history via DB-backed `ChatSession` re
 - campaign feed events, artifacts, blockers, execution attempts, and resume directives persist across reloads
 - demo missions are marked in metadata so they can be seeded and removed without relying on name prefixes
 
+## Watchdog
+
+- `/watchdog` is the dedicated Mothership UI route watchdog dashboard
+- `artifacts/mothership/src/components/watchdog/watchdog-dashboard.tsx` reads `/api/watchdog/latest` for the full latest UI watchdog report and `/api/ops/watchdog` for the mirrored ops summary
+- monitored routes are defined in `artifacts/mothership/src/lib/watchdog/routes.ts`
+- watchdog runs persist to `artifacts/mothership/runtime/ui-watchdog/latest.json` plus per-run `summary.json` files
+- `/ops` also surfaces the latest UI watchdog status through the watchdog panel
+- run `npm run ui-watchdog` in the Mothership app to generate a fresh report
+
 ---
 
 ## Tech Stack

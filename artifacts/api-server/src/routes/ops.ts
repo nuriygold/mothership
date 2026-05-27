@@ -307,7 +307,7 @@ router.get(
       });
 
     const uiRun = await readLatestUiWatchdogRun();
-    const uiWatchdog = uiRun
+    const mothershipUiWatchdog = uiRun
       ? {
           latestRunId: uiRun.runId,
           latestRunAt: uiRun.startedAt,
@@ -315,19 +315,32 @@ router.get(
           routeCount: uiRun.routeCount,
           failureCount: uiRun.failureCount,
           failingRoutes: uiRun.results
-            .filter((result) => result.status === "fail")
+            .filter((result) => result.severity !== "pass")
             .slice(0, 10)
             .map((result) => ({
               name: result.name,
               path: result.path,
               reason:
-                result.fatal ??
-                (result.missingExpected[0]
-                  ? `missing expected text: ${result.missingExpected[0]}`
-                  : result.requestFailures[0]?.failure ??
-                    result.consoleErrors[0] ??
+                result.classification === "auth_fail"
+                  ? `auth ${result.authObservedPath ?? "unknown"}`
+                  : result.fatal ??
                     result.pageErrors[0] ??
-                    "unknown failure"),
+                    (result.missingExpected[0]
+                      ? `missing expected text: ${result.missingExpected[0]}`
+                      : result.missingExpectedSelectors[0]
+                        ? `missing selector: ${result.missingExpectedSelectors[0]}`
+                        : result.missingExpectedTitle[0]
+                          ? `missing title text: ${result.missingExpectedTitle[0]}`
+                          : !result.redirectAllowed && result.redirectPath
+                            ? `unexpected redirect: ${result.redirectPath}`
+                            : !result.statusAllowed
+                              ? `unexpected status: ${result.httpStatus}`
+                              : result.httpFailures[0]
+                                ? `${result.httpFailures[0].status} ${result.httpFailures[0].method} ${result.httpFailures[0].url}`
+                                : result.requestFailures[0]?.failure ??
+                                  result.matchingConsoleFailures[0] ??
+                                  result.consoleErrors[0] ??
+                                  `${result.classification}`),
             })),
         }
       : {
@@ -339,7 +352,7 @@ router.get(
           failingRoutes: [],
         };
 
-    res.json({ inProgress, staleThresholdMinutes, uiWatchdog });
+    res.json({ inProgress, staleThresholdMinutes, uiWatchdog: mothershipUiWatchdog });
   }),
 );
 
