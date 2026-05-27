@@ -68,6 +68,19 @@ const STREAM_STATUS_COLORS: Record<string, string> = {
 };
 
 export default function FinancePage() {
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (document.querySelector('script[data-teller-connect="true"]')) return;
+    const script = document.createElement('script');
+    script.src = 'https://cdn.teller.io/connect/connect.js';
+    script.async = true;
+    script.dataset.tellerConnect = 'true';
+    document.body.appendChild(script);
+    return () => {
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+  }, []);
+
   const { data, error, isLoading } = useSWR<V2FinanceOverviewFeed>(
     '/api/v2/finance/overview',
     fetcher,
@@ -163,16 +176,17 @@ export default function FinancePage() {
   const campaigns = activePlans.filter((p) => p.targetValue === null);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="section-head">
-        <span>
-          Finance &mdash; managed by <strong style={{ color: 'var(--green)' }}>Drake</strong> &middot; watched by{' '}
-          <strong style={{ color: 'var(--purple)' }}>Champagne Papi</strong>
-        </span>
-        <span className="sse-indicator"><span className="sse-pulse" /> live</span>
-      </div>
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="section-head">
+          <span>
+            Finance &mdash; managed by <strong style={{ color: 'var(--green)' }}>Drake</strong> &middot; watched by{' '}
+            <strong style={{ color: 'var(--purple)' }}>Champagne Papi</strong>
+          </span>
+          <span className="sse-indicator"><span className="sse-pulse" /> live</span>
+        </div>
 
-      <TellerBar onSyncDone={() => globalMutate('/api/v2/finance/overview')} />
+        <TellerBar onSyncDone={() => globalMutate('/api/v2/finance/overview')} />
 
       {/* Hero: net worth */}
       <div className="card" style={{ padding: 20 }}>
@@ -216,70 +230,70 @@ export default function FinancePage() {
               const t = a.type.toLowerCase();
               const isDebt = t.includes('credit') || t.includes('loan') || t.includes('mortgage');
               const isInvestment = t.includes('investment');
-              // Debit (liquid): muted lime. Credit/loan/mortgage: warm amber. Investment: champagne papi emerald. Other: neutral.
               const cardBg =
-                isDebt        ? 'rgba(245, 158, 11, 0.08)'
+                isDebt ? 'rgba(245, 158, 11, 0.08)'
                 : isInvestment ? 'rgba(16, 185, 129, 0.08)'
-                : a.liquid    ? 'rgba(132, 204, 22, 0.07)'
-                :               'var(--bg2)';
+                : a.liquid ? 'rgba(132, 204, 22, 0.07)'
+                : 'var(--bg2)';
               const cardBorder =
-                isDebt        ? '1px solid rgba(245, 158, 11, 0.40)'
+                isDebt ? '1px solid rgba(245, 158, 11, 0.40)'
                 : isInvestment ? '1px solid rgba(16, 185, 129, 0.40)'
-                : a.liquid    ? '1px solid rgba(132, 204, 22, 0.35)'
-                :               '1px solid var(--border-c)';
+                : a.liquid ? '1px solid rgba(132, 204, 22, 0.35)'
+                : '1px solid var(--border-c)';
+
               return (
-              <div
-                key={a.id}
-                style={{
-                  padding: 12,
-                  background: cardBg,
-                  border: cardBorder,
-                  borderRadius: 'var(--radius)',
-                  position: 'relative',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    {a.type}
-                  </div>
-                  {isTellerAccount(a.id) && (
-                    <span
-                      title="Synced via Teller"
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        fontFamily: 'var(--font-mono)',
-                        letterSpacing: 0.5,
-                        color: '#000',
-                        background: '#00C2A8',
-                        borderRadius: 3,
-                        padding: '1px 5px',
-                        lineHeight: '14px',
-                      }}
-                    >
-                      T
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 4, fontWeight: 500 }}>{a.name}</div>
                 <div
+                  key={a.id}
                   style={{
-                    fontSize: 18,
-                    color: 'var(--text)',
-                    marginTop: 6,
-                    fontFamily: 'var(--font-rajdhani)',
-                    fontWeight: 600,
-                    letterSpacing: 0.5,
+                    padding: 12,
+                    background: cardBg,
+                    border: cardBorder,
+                    borderRadius: 'var(--radius)',
+                    position: 'relative',
                   }}
                 >
-                  {fmtUSD(a.balance)}
-                </div>
-                {a.updatedAt && (
-                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
-                    as of {new Date(a.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {a.type}
+                    </div>
+                    {isTellerAccount(a.id) && (
+                      <span
+                        title="Synced via Teller"
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-mono)',
+                          letterSpacing: 0.5,
+                          color: '#000',
+                          background: '#00C2A8',
+                          borderRadius: 3,
+                          padding: '1px 5px',
+                          lineHeight: '14px',
+                        }}
+                      >
+                        T
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
+                  <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 4, fontWeight: 500 }}>{a.name}</div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      color: 'var(--text)',
+                      marginTop: 6,
+                      fontFamily: 'var(--font-rajdhani)',
+                      fontWeight: 600,
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    {fmtUSD(a.balance)}
+                  </div>
+                  {a.updatedAt && (
+                    <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
+                      as of {new Date(a.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -436,41 +450,48 @@ export default function FinancePage() {
           revenue stream rails so each stream is visible and mapped to its lead. */}
       {(() => {
         const PLACEHOLDER_STREAMS = [
-          { id: 'placeholder-shopify',       source: 'Shopify',        lead: 'Adrian',                    amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
-          { id: 'placeholder-tiktok',        source: 'TikTok',         lead: 'Ruby',                      amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
-          { id: 'placeholder-nuriy-product', source: 'Nuriy Product',  lead: 'Iceman (Dev) · Emerald (Ops/QA)', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
-          { id: 'placeholder-truckstop',     source: 'Truckstop.com',  lead: 'Adrian',                    amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
-          { id: 'placeholder-notary',        source: 'Notary Services',lead: 'Ruby',                      amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-shopify', source: 'Shopify', lead: 'Adrian', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-tiktok', source: 'TikTok', lead: 'Ruby', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-nuriy-product', source: 'Nuriy Product', lead: 'Iceman (Dev) · Emerald (Ops/QA)', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-truckstop', source: 'Truckstop.com', lead: 'Adrian', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
+          { id: 'placeholder-notary', source: 'Notary Services', lead: 'Ruby', amount: 0, interval: 'variable', nextPayday: null, confirmed: false },
         ] as const;
         const liveSourceNames = new Set(data.incomeSources.map((s) => s.source.toLowerCase()));
         const unseen = PLACEHOLDER_STREAMS.filter((p) => !liveSourceNames.has(p.source.toLowerCase()));
-        type StreamRow = { id: string; source: string; amount: number; interval: string; nextPayday: string | null; confirmed: boolean; lead?: string };
-        const allStreams: StreamRow[] = [
-          ...data.incomeSources,
-          ...unseen,
-        ];
+        type StreamRow = {
+          id: string;
+          source: string;
+          amount: number;
+          interval: string;
+          nextPayday: string | null;
+          confirmed: boolean;
+          lead?: string;
+        };
+        const allStreams: StreamRow[] = [...data.incomeSources, ...unseen];
         if (allStreams.length === 0) return null;
+
         return (
           <div className="card">
             <div className="card-title">Income Streams</div>
             {allStreams.map((src) => {
               const isPlaceholder = src.id.startsWith('placeholder-');
               const streamStatus = streamStatusMap.get(src.source.toLowerCase());
-              const statusLabel  = streamStatus?.status ?? (isPlaceholder ? 'idle' : 'active');
-              const badgeColor   = STREAM_STATUS_COLORS[statusLabel] ?? 'blue';
-              const isPinging    = pinging === src.source;
-              const wasPinged    = !!streamStatus?.requestedAt;
+              const statusLabel = streamStatus?.status ?? (isPlaceholder ? 'idle' : 'active');
+              const badgeColor = STREAM_STATUS_COLORS[statusLabel] ?? 'blue';
+              const isPinging = pinging === src.source;
+              const wasPinged = !!streamStatus?.requestedAt;
+
               return (
                 <div key={src.id} className="finance-row" style={isPlaceholder ? { opacity: 0.75 } : undefined}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                       <span className="finance-name">{src.source}</span>
                       <span className={`badge ${badgeColor}`}>{statusLabel}</span>
-                      {streamStatus?.note && (
+                      {streamStatus?.note ? (
                         <span style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
                           {streamStatus.note}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     <div className="finance-meta">
                       {src.interval}
@@ -508,6 +529,7 @@ export default function FinancePage() {
         generated {new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
       </div>
     </div>
+    </>
   );
 }
 
@@ -581,8 +603,15 @@ function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [connectScriptReady, setConnectScriptReady] = useState(false);
 
   const items = data?.items ?? [];
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.TellerConnect) {
+      setConnectScriptReady(true);
+    }
+  }, []);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -595,14 +624,14 @@ function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
   }, [onSyncDone]);
 
   const handleConnect = useCallback(async () => {
-    if (!window.TellerConnect) {
-      setConnectError('Teller Connect is not available.');
+    if (!window.TellerConnect || !connectScriptReady) {
+      setConnectError('Mothership Teller Connect is still loading. If this persists, confirm the Teller Connect script is allowed in production.');
       return;
     }
 
-    const applicationId = import.meta.env.VITE_TELLER_APPLICATION_ID;
+    const applicationId = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID;
     if (!applicationId) {
-      setConnectError('VITE_TELLER_APPLICATION_ID is not set.');
+      setConnectError('NEXT_PUBLIC_TELLER_APPLICATION_ID is not set for the Mothership finance page.');
       return;
     }
 
@@ -612,7 +641,7 @@ function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
     try {
       const teller = window.TellerConnect.setup({
         applicationId,
-        environment: import.meta.env.VITE_TELLER_ENV ?? 'sandbox',
+        environment: process.env.NEXT_PUBLIC_TELLER_ENV ?? 'sandbox',
         products: ['balance', 'transactions'],
         selectAccount: 'multiple',
         onSuccess: async (enrollment: TellerConnectEnrollment) => {
@@ -666,7 +695,7 @@ function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
 
   return (
     <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <div className="card-title" style={{ margin: 0 }}>Teller</div>
+      <div className="card-title" style={{ margin: 0 }}>Teller Bridge</div>
       <div style={{ fontSize: 12, color: 'var(--text2)', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <strong style={{ fontWeight: 600 }}>{institutionLabel}</strong>
         {items.length > 0 && (
@@ -686,8 +715,8 @@ function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
           </button>
         )}
         {items.length === 0 && (
-          <button className="btn-sm primary" onClick={handleConnect} disabled={connecting}>
-            {connecting ? 'Connecting…' : 'Connect Teller'}
+          <button className="btn-sm primary" onClick={handleConnect} disabled={connecting || !connectScriptReady}>
+            {connecting ? 'Connecting…' : !connectScriptReady ? 'Loading Teller…' : 'Connect Teller'}
           </button>
         )}
       </div>
