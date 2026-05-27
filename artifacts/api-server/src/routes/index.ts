@@ -1,16 +1,80 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import dispatchRouter from "./dispatch";
 import healthRouter from "./health";
 import opsRouter from "./ops";
 import tellerRouter from "./teller";
 import v2Router from "./v2";
+import { checkGateway } from "@/lib/services/openclaw";
 
 const router: IRouter = Router();
+
+function sendApiRouteNotFound(res: Response, path: string) {
+  res.status(404).json({
+    error: {
+      code: "API_ROUTE_NOT_FOUND",
+      message: "No API route is mounted for this path.",
+      path,
+    },
+  });
+}
+
+function sendApiRouteNotImplemented(
+  res: Response,
+  path: string,
+  code: string,
+  message: string,
+) {
+  res.status(501).json({
+    error: {
+      code,
+      message,
+      path,
+    },
+  });
+}
 
 router.use(healthRouter);
 router.use(dispatchRouter);
 router.use(opsRouter);
 router.use(tellerRouter);
 router.use(v2Router);
+
+router.get("/openclaw/health", async (req: Request, res: Response) => {
+  const gateway = await checkGateway();
+  if (gateway.ok) {
+    res.json({ ok: true, status: "ok", path: req.path, reason: gateway.reason });
+    return;
+  }
+
+  res.status(501).json({
+    error: {
+      code: "OPENCLAW_HEALTH_NOT_CONFIGURED",
+      message: gateway.reason,
+      path: req.path,
+    },
+  });
+});
+
+router.all("/agent", (req: Request, res: Response) => {
+  sendApiRouteNotImplemented(
+    res,
+    req.path,
+    "AGENT_ROUTE_NOT_IMPLEMENTED",
+    "No generic agent dispatch route is mounted. Use a supported dispatch endpoint instead.",
+  );
+});
+
+router.all("/v2/:agent/dispatch", (req: Request, res: Response) => {
+  sendApiRouteNotImplemented(
+    res,
+    req.path,
+    "AGENT_DISPATCH_ROUTE_NOT_IMPLEMENTED",
+    `No /api/v2/${String(req.params.agent)}/dispatch route is mounted for this agent.`,
+  );
+});
+
+router.use((req: Request, res: Response) => {
+  sendApiRouteNotFound(res, req.path);
+});
 
 export default router;
