@@ -1148,29 +1148,18 @@ export async function markDraftSent(emailId: string, draftId?: string): Promise<
         where: eq(schema.rubyDraftLifecycle.emailExternalId, emailId),
       });
 
-      if (existing) {
-        await tx.update(schema.rubyDraftLifecycle)
-          .set({
-            status: 'finalized',
-            generationOwner: null,
-            generationLeaseUntil: null,
-            lastGeneratedDraftId: draftId ?? existing.lastGeneratedDraftId,
-            finalizedAt: new Date(),
-            failureReason: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.rubyDraftLifecycle.emailExternalId, emailId));
-      } else {
+      if (!existing) {
         await tx.insert(schema.rubyDraftLifecycle).values({
           id: crypto.randomUUID(),
           emailExternalId: emailId,
-          status: 'finalized',
+          status: 'generated',
           lastGeneratedDraftId: draftId ?? null,
-          finalizedAt: new Date(),
           updatedAt: new Date(),
         });
       }
     });
+
+    await finalizeRubyDraftEmail(emailId, draftId);
   } catch { /* best-effort */ }
 }
 
