@@ -5,6 +5,7 @@ import { isTaskPoolRepositorySource, addVisionBoardLabelToIssue } from '@/lib/in
 import { listFinancePlans } from '@/lib/services/finance';
 import { getEmailSummary } from '@/lib/services/email';
 import { fetchTodayCalendarEvents } from '@/lib/services/calendar';
+import { getAppTimezone } from '@/lib/config/runtime';
 import { listAuditEvents } from '@/lib/services/audit';
 import { dispatchToOpenClaw } from '@/lib/services/openclaw';
 import { publishV2Event } from '@/lib/v2/event-bus';
@@ -412,7 +413,7 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
       typeof task.sourceChannel === 'string' && task.sourceChannel.includes('task_pool')
         ? 'GitHub'
         : 'Internal';
-    const tz = process.env.APP_TIMEZONE || 'America/New_York';
+    const tz = getAppTimezone();
     const dueAtISO = task.dueAt ? new Date(task.dueAt).toISOString() : null;
     const timeframe = dueAtISO
       ? new Date(dueAtISO).toLocaleDateString('en-US', { timeZone: tz, month: 'numeric', day: 'numeric', year: 'numeric' })
@@ -923,7 +924,7 @@ export async function getV2TodayFeed(): Promise<V2TodayFeed> {
 }
 
 function getTimeAwareGreeting(): string {
-  const tz = process.env.APP_TIMEZONE || 'America/New_York';
+  const tz = getAppTimezone();
   const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz }), 10);
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
@@ -1018,7 +1019,7 @@ async function buildTimeline(tasks: V2TasksFeed): Promise<V2TodayFeed['timeline'
     // (when calendar is connected, tasks stay in Top Priorities for drag-drop)
     if (calEvents.length === 0) {
       const syntheticHour = 9 + items.length;
-      const tzLabel = process.env.APP_TIMEZONE || 'America/New_York';
+      const tzLabel = getAppTimezone();
       const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tzLabel });
       const syntheticLocal = new Date(`${localDateStr}T${String(syntheticHour).padStart(2, '0')}:00:00`);
       when.setTime(syntheticLocal.getTime());

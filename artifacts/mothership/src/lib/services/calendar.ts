@@ -1,4 +1,5 @@
 import { calendar_v3, google } from 'googleapis';
+import { getAppTimezone } from '@/lib/config/runtime';
 
 export interface CalendarEvent {
   id: string;
@@ -36,8 +37,11 @@ function computeStatus(startIso: string, endIso: string | null, now: Date): Cale
 }
 
 function fmtTime(iso: string): string {
-  const tz = process.env.APP_TIMEZONE || 'America/New_York';
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: getAppTimezone(),
+  });
 }
 
 export async function createCalendarEvent(input: {
@@ -99,7 +103,7 @@ export async function fetchTodayCalendarEvents(): Promise<{ events: CalendarEven
     const cal = google.calendar({ version: 'v3', auth: oauth });
     const calendarId = getCalendarId();
     const now = new Date();
-    const tz = process.env.APP_TIMEZONE || 'America/New_York';
+    const tz = getAppTimezone();
 
     // Fetch events from yesterday through 2 days from now (3-day window centered on today)
     const localDateStr = now.toLocaleDateString('en-CA', { timeZone: tz });

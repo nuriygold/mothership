@@ -65,16 +65,18 @@ function nextWorkerRunLeaseDeadline() {
 async function claimDispatchWorkerRun(workerId: string) {
   const leaseUntil = nextWorkerRunLeaseDeadline();
   const now = new Date();
+  const leaseUntilIso = leaseUntil.toISOString();
+  const nowIso = now.toISOString();
   const ownerToken = `${workerId}:${now.toISOString()}:${randomUUID()}`;
 
   const claimed = await db.execute(sql`
     insert into "SystemLease" ("key", "owner", "leaseUntil", "createdAt", "updatedAt")
-    values (${DISPATCH_WORKER_LEASE_KEY}, ${ownerToken}, ${leaseUntil}, ${now}, ${now})
+    values (${DISPATCH_WORKER_LEASE_KEY}, ${ownerToken}, ${leaseUntilIso}, ${nowIso}, ${nowIso})
     on conflict ("key") do update
       set "owner" = excluded."owner",
           "leaseUntil" = excluded."leaseUntil",
           "updatedAt" = excluded."updatedAt"
-      where "SystemLease"."leaseUntil" <= ${now}
+      where "SystemLease"."leaseUntil" <= ${nowIso}
     returning "owner", "leaseUntil"
   `);
 

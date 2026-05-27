@@ -1,6 +1,7 @@
 import { TaskPriority, TaskStatus } from '../lib/db/enums.js';
 import { db } from '../lib/db/client.js';
 import * as schema from '../lib/db/schema.js';
+import { getAppTimezone } from '@/lib/config/runtime';
 import { listTasks } from '../lib/services/tasks.js';
 import type { V2TaskItem, V2TasksFeed } from '../lib/v2/types.js';
 
@@ -77,7 +78,7 @@ export async function getV2TasksFeed(): Promise<V2TasksFeed> {
   const mapped: V2TaskItem[] = tasks.map((task) => {
     const route = routeForTask(task);
     const source = typeof task.sourceChannel === 'string' && task.sourceChannel.includes('task_pool') ? 'GitHub' : 'Internal';
-    const tz = process.env.APP_TIMEZONE || 'America/New_York';
+    const tz = getAppTimezone();
     const dueAtISO = task.dueAt ? new Date(task.dueAt).toISOString() : null;
     const timeframe = dueAtISO
       ? new Date(dueAtISO).toLocaleDateString('en-US', { timeZone: tz, month: 'numeric', day: 'numeric', year: 'numeric' })
