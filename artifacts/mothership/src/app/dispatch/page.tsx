@@ -480,6 +480,8 @@ function DispatchPageInner() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [campaignTitle, setCampaignTitle] = useState('');
   const [campaignDescription, setCampaignDescription] = useState('');
+  const [campaignDescriptionTouched, setCampaignDescriptionTouched] = useState(false);
+  const [campaignTitleError, setCampaignTitleError] = useState<string | null>(null);
   const [campaignProjectId, setCampaignProjectId] = useState('');
   const [campaignVisionItemId, setCampaignVisionItemId] = useState('');
   const [campaignOutputFolder, setCampaignOutputFolder] = useState('');
@@ -612,6 +614,8 @@ function DispatchPageInner() {
       await qc.invalidateQueries({ queryKey: ['dispatch-campaigns'] });
       setCampaignTitle('');
       setCampaignDescription('');
+      setCampaignDescriptionTouched(false);
+      setCampaignTitleError(null);
       setCampaignProjectId('');
       setCampaignVisionItemId('');
       setCampaignOutputFolder('');
@@ -619,6 +623,7 @@ function DispatchPageInner() {
       setCampaignRevenueStream('');
       setCampaignLinkedTaskRef('');
       setShowCampaignExtras(false);
+      setShowNewCampaignForm(false);
       if (payload?.campaign?.id) {
         setSelectedCampaignId(payload.campaign.id);
       }
@@ -866,22 +871,41 @@ function DispatchPageInner() {
             <div className="mt-3 space-y-3">
               <input
                 autoFocus
+                aria-invalid={Boolean(campaignTitleError)}
                 className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
                 placeholder="Campaign title *"
                 value={campaignTitle}
-                onChange={(e) => setCampaignTitle(e.target.value)}
+                onChange={(e) => {
+                  const nextTitle = e.target.value;
+                  setCampaignTitle(nextTitle);
+                  if (!campaignDescriptionTouched) {
+                    setCampaignDescription(nextTitle);
+                  }
+                  if (nextTitle.trim()) {
+                    setCampaignTitleError(null);
+                  }
+                }}
+                onBlur={() => {
+                  if (!campaignTitle.trim()) {
+                    setCampaignTitleError('Campaign title is required.');
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && campaignTitle && !campaignOutputFolder) {
                     createCampaignMutation.mutate({ title: campaignTitle, description: campaignDescription || undefined, projectId: campaignProjectId || undefined, visionItemId: campaignVisionItemId || undefined, outputFolder: campaignOutputFolder || undefined, assignedBotId: campaignAssignedBotId || undefined, revenueStream: campaignRevenueStream || undefined, linkedTaskRef: campaignLinkedTaskRef || undefined });
                   }
                 }}
               />
+              {campaignTitleError && <p className="text-xs text-rose-400">{campaignTitleError}</p>}
               <textarea
                 className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
                 rows={3}
                 placeholder="Objective + resources: Figma links, repo URLs, docs, or any context the agent needs"
                 value={campaignDescription}
-                onChange={(e) => setCampaignDescription(e.target.value)}
+                onChange={(e) => {
+                  setCampaignDescriptionTouched(true);
+                  setCampaignDescription(e.target.value);
+                }}
               />
 
               {/* Optional settings toggle */}
@@ -1014,7 +1038,11 @@ function DispatchPageInner() {
 
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={() =>
+                  onClick={() => {
+                    if (!campaignTitle.trim()) {
+                      setCampaignTitleError('Campaign title is required.');
+                      return;
+                    }
                     createCampaignMutation.mutate({
                       title: campaignTitle,
                       description: campaignDescription || undefined,
@@ -1024,9 +1052,9 @@ function DispatchPageInner() {
                       assignedBotId: campaignAssignedBotId || undefined,
                       revenueStream: campaignRevenueStream || undefined,
                       linkedTaskRef: campaignLinkedTaskRef || undefined,
-                    })
-                  }
-                  disabled={!campaignTitle || (Boolean(campaignOutputFolder) && !campaignAssignedBotId) || createCampaignMutation.isPending}
+                    });
+                  }}
+                  disabled={(Boolean(campaignOutputFolder) && !campaignAssignedBotId) || createCampaignMutation.isPending}
                 >
                   {createCampaignMutation.isPending ? 'Creating...' : 'Create campaign'}
                 </Button>
