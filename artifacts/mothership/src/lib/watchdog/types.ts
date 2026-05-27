@@ -1,4 +1,5 @@
-export type UiWatchdogRouteResult = {
+export type UiWatchdogRoutePassResult = {
+  mode: 'anonymous' | 'authenticated';
   name: string;
   path: string;
   url: string;
@@ -19,7 +20,7 @@ export type UiWatchdogRouteResult = {
   missingExpectedSelectors: string[];
   missingExpectedTitle: string[];
   navSatisfied: boolean;
-  watchdogMode: string;
+  watchdogMode: 'anonymous' | 'authenticated';
   authSatisfied: boolean;
   authObservedPath: string | null;
   consoleErrorCount: number;
@@ -36,6 +37,11 @@ export type UiWatchdogRouteResult = {
   screenshotPath?: string;
 };
 
+export type UiWatchdogRouteResult = UiWatchdogRoutePassResult & {
+  watchdogMode: string;
+  passResults?: UiWatchdogRoutePassResult[];
+};
+
 export type UiWatchdogRun = {
   runId: string;
   startedAt: string;
@@ -47,5 +53,14 @@ export type UiWatchdogRun = {
   routeCount: number;
   failureCount: number;
   warningCount: number;
+  rootCauseRollup: Array<{ key: string; label: string; count: number; severity: 'warn' | 'fail' }>;
+  normalizedDiagnostics: {
+    hardFailReasons: string[];
+    warningReasons: string[];
+    httpFailures: Array<{ route: string; status: number; method: string; url: string }>;
+    redirects: Array<{ route: string; from: string; to: string; allowed: boolean }>;
+    sharedDependencyFailures: Array<{ route: string; url: string; status?: number | null; failure?: string | null }>;
+    authFailures: Array<{ route: string; observedPath: string | null }>;
+  };
   results: UiWatchdogRouteResult[];
 };
