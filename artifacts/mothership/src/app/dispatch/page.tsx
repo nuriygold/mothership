@@ -15,6 +15,15 @@ const DISPATCH_COMMANDS = [
   { cmd: '/polo',     args: '<cmd>',   desc: 'Run a terminal command (restricted)' },
 ];
 
+async function dispatchActionFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const headers = new Headers(init.headers ?? {});
+  headers.set('x-mothership-ui', 'dispatch');
+  return fetch(input, {
+    ...init,
+    headers,
+  });
+}
+
 type CommandItem = {
   id: string;
   input: string;
@@ -125,7 +134,7 @@ async function fetchDispatchCampaigns(): Promise<DispatchCampaign[]> {
 }
 
 async function deleteDispatchCampaign(payload: { campaignId: string; reason: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reason: payload.reason }),
@@ -136,7 +145,7 @@ async function deleteDispatchCampaign(payload: { campaignId: string; reason: str
 }
 
 async function trophyDispatchCampaign(payload: { campaignId: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/trophy`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/trophy`, {
     method: 'POST',
   });
   const body = await res.json().catch(() => ({}));
@@ -154,10 +163,28 @@ async function createDispatchCampaign(payload: {
   revenueStream?: string;
   linkedTaskRef?: string;
 }) {
-  const res = await fetch('/api/dispatch/campaigns', {
+  const objectiveParts = [
+    payload.description?.trim(),
+    payload.projectId ? `Project ID: ${payload.projectId}` : null,
+    payload.visionItemId ? `Vision item ID: ${payload.visionItemId}` : null,
+    payload.outputFolder ? `Output folder: ${payload.outputFolder}` : null,
+    payload.assignedBotId ? `Assigned bot: ${payload.assignedBotId}` : null,
+    payload.revenueStream ? `Revenue stream: ${payload.revenueStream}` : null,
+    payload.linkedTaskRef ? `Linked task: ${payload.linkedTaskRef}` : null,
+  ].filter((part): part is string => Boolean(part));
+  const res = await dispatchActionFetch('/api/dispatch/campaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      title: payload.title,
+      description: objectiveParts.join('\n\n') || payload.title,
+      projectId: payload.projectId || undefined,
+      visionItemId: payload.visionItemId || undefined,
+      outputFolder: payload.outputFolder || undefined,
+      assignedBotId: payload.assignedBotId || undefined,
+      revenueStream: payload.revenueStream || undefined,
+      linkedTaskRef: payload.linkedTaskRef || undefined,
+    }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body?.message ?? 'Failed to create campaign');
@@ -165,7 +192,7 @@ async function createDispatchCampaign(payload: {
 }
 
 async function sendCampaignToBot(payload: { campaignId: string; botId: string; note?: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/send-to-bot`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/send-to-bot`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ botId: payload.botId, note: payload.note }),
@@ -204,7 +231,7 @@ async function createDispatchTask(payload: {
   dueDate?: string;
   assignee?: string;
 }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -215,7 +242,7 @@ async function createDispatchTask(payload: {
 }
 
 async function generateDispatchPlan(campaignId: string) {
-  const res = await fetch(`/api/dispatch/campaigns/${campaignId}/plan`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${campaignId}/plan`, {
     method: 'POST',
   });
   const body = await res.json();
@@ -224,7 +251,7 @@ async function generateDispatchPlan(campaignId: string) {
 }
 
 async function convertDispatchPlanJson(payload: { campaignId: string; rawJson: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/plan/convert`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/plan/convert`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rawJson: payload.rawJson }),
@@ -235,7 +262,7 @@ async function convertDispatchPlanJson(payload: { campaignId: string; rawJson: s
 }
 
 async function approveDispatchPlan(payload: { campaignId: string; planName: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/plan/approve`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/plan/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ planName: payload.planName }),
@@ -246,7 +273,7 @@ async function approveDispatchPlan(payload: { campaignId: string; planName: stri
 }
 
 async function updateDispatchCampaignState(payload: { campaignId: string; action: 'pause' | 'resume' }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/${payload.action}`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/${payload.action}`, {
     method: 'POST',
   });
   const body = await res.json();
@@ -266,7 +293,7 @@ async function runDispatchCampaign(payload: {
   mode: 'now' | 'queue' | 'schedule';
   scheduledAt?: string;
 }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/run`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode: payload.mode, scheduledAt: payload.scheduledAt }),
@@ -284,7 +311,7 @@ async function fetchBotRecommendation(campaignId: string) {
 }
 
 async function retryDispatchTask(payload: { campaignId: string; taskId: string; agentId?: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/retry`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/retry`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: payload.agentId }),
@@ -295,7 +322,7 @@ async function retryDispatchTask(payload: { campaignId: string; taskId: string; 
 }
 
 async function requestTaskReview(payload: { campaignId: string; taskId: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/review`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/review`, {
     method: 'POST',
   });
   const body = await res.json();
@@ -304,7 +331,7 @@ async function requestTaskReview(payload: { campaignId: string; taskId: string }
 }
 
 async function replanDispatchTask(payload: { campaignId: string; taskId: string }) {
-  const res = await fetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/replan`, {
+  const res = await dispatchActionFetch(`/api/dispatch/campaigns/${payload.campaignId}/tasks/${payload.taskId}/replan`, {
     method: 'POST',
   });
   const body = await res.json();
