@@ -7,6 +7,7 @@ import opsRouter from "./ops";
 import tellerRouter from "./teller";
 import v2Router from "./v2";
 import { checkGateway } from "@/lib/services/openclaw";
+import { requireOwnerAuth } from "../lib/owner-auth";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,31 @@ function sendApiRouteNotImplemented(
     },
   });
 }
+
+function isProtectedAgentRoute(path: string) {
+  return (
+    path === "/agent" ||
+    path.startsWith("/chat") ||
+    /^\/v2\/(ruby|adrian|emerald|adobe|anchor)(?:\/|$)/.test(path)
+  );
+}
+
+router.use((req: Request, res: Response, next) => {
+  void (async () => {
+    if (!isProtectedAgentRoute(req.path)) {
+      next();
+      return;
+    }
+
+    if (!(await requireOwnerAuth(req, res))) {
+      return;
+    }
+
+    next();
+  })().catch((err: unknown) => {
+    next(err);
+  });
+});
 
 router.use(healthRouter);
 router.use(dispatchRouter);
