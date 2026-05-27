@@ -1,4 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
 import dispatchRouter from "./dispatch";
 import agentRouter from "./agent";
 import chatRouter from "./chat";
@@ -73,6 +75,16 @@ router.use(tellerRouter);
 router.use(chatRouter);
 router.use(agentRouter);
 router.use(v2Router);
+
+router.get("/watchdog/latest", async (_req: Request, res: Response) => {
+  try {
+    const watchdogPath = path.resolve(process.cwd(), "artifacts/mothership/runtime/ui-watchdog/latest.json");
+    const raw = await fs.readFile(watchdogPath, "utf8");
+    res.json(JSON.parse(raw));
+  } catch {
+    res.status(404).json({ message: "No watchdog run found" });
+  }
+});
 
 router.get("/openclaw/health", async (req: Request, res: Response) => {
   const gateway = await checkGateway();
