@@ -71,7 +71,6 @@ router.get(
 router.get(
   "/ops/agents",
   wrap(async (_req, res) => {
-    await ensureDemoAgents();
     const agents = await projection.projectAllAgents();
     res.json({ agents });
   }),
