@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from 'react';
 import { Droplets, Footprints, Dumbbell, Heart, BookOpen, Pill } from 'lucide-react';
+import { DEFAULT_APP_TIMEZONE } from '@/lib/constants/time';
 
 type AnchorDef = {
   key: string;
@@ -28,7 +29,7 @@ const WELLNESS_DEFAULT: WellnessState = { water: 0, steps: 0, workout: false, pr
 function easternDateString(offsetDays = 0): string {
   const d = new Date();
   if (offsetDays !== 0) d.setDate(d.getDate() + offsetDays);
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  return d.toLocaleDateString('en-CA', { timeZone: DEFAULT_APP_TIMEZONE });
 }
 
 function todayDate() {

@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { Trophy, ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Award, Undo2, HeartPulse } from 'lucide-react';
+import { DEFAULT_APP_TIMEZONE } from '@/lib/constants/time';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -63,7 +64,11 @@ function fmtWeekLabel(startIso: string, endIso: string, weekOffset: number): str
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: DEFAULT_APP_TIMEZONE,
+  });
 }
 
 function fmtDayHeader(dateStr: string): string {

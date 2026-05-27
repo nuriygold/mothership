@@ -76,6 +76,7 @@ router.use("/v2/wellness", wellnessRouter);
 router.post("/v2/auth/login", wrap(async (req, res) => {
   const configuredPassphrase = getOwnerPassphrase();
   if (!configuredPassphrase) {
+    logger.warn({ path: apiPath(req) }, "owner login requested but OWNER_PASSPHRASE is not configured");
     res.status(501).json({
       error: {
         code: "OWNER_LOGIN_NOT_CONFIGURED",
