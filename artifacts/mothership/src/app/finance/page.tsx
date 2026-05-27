@@ -69,7 +69,8 @@ const STREAM_STATUS_COLORS: Record<string, string> = {
 
 export default function FinancePage() {
   useEffect(() => {
-    if (typeof document === 'undefined') return;
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (window.TellerConnect) return;
     if (document.querySelector('script[data-teller-connect="true"]')) return;
     const script = document.createElement('script');
     script.src = 'https://cdn.teller.io/connect/connect.js';
@@ -612,9 +613,32 @@ function TellerBar({ onSyncDone }: { onSyncDone: () => void }) {
   const items = data?.items ?? [];
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.TellerConnect) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (window.TellerConnect) {
       setConnectScriptReady(true);
+      setConnectError(null);
+      return;
     }
+
+    const script = document.querySelector<HTMLScriptElement>('script[data-teller-connect="true"]');
+    if (!script) return;
+
+    const handleLoad = () => {
+      setConnectScriptReady(true);
+      setConnectError(null);
+    };
+    const handleError = () => {
+      setConnectScriptReady(false);
+      setConnectError('Teller Connect failed to load. Confirm the Teller CDN is reachable and allowed for this app.');
+    };
+
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', handleError);
+
+    return () => {
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
+    };
   }, []);
 
   const handleSync = useCallback(async () => {
