@@ -149,7 +149,9 @@ for (const route of uiWatchdogRoutes) {
   const severity = classification === 'pass' ? 'pass' : classification === 'warning_only' ? 'warn' : 'fail';
   const status = severity === 'pass' ? 'pass' : 'fail';
 
-  const screenshotPath = path.join(runDir, `${route.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`);
+  const screenshotFileName = `${route.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+  const screenshotPath = path.join(runDir, screenshotFileName);
+  const screenshotRelativePath = path.join(runId, screenshotFileName);
   await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
   if (status === 'fail') overall = 'fail';
   results.push({
@@ -187,7 +189,7 @@ for (const route of uiWatchdogRoutes) {
     matchingConsoleFailureCount: matchingConsoleFailures.length,
     matchingConsoleFailures,
     missingExpected,
-    screenshotPath,
+    screenshotPath: screenshotRelativePath,
   });
   await page.close();
 }
