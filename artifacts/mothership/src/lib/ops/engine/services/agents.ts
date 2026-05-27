@@ -18,8 +18,13 @@ export async function getAgentByCodename(codename: string): Promise<McAgent | un
 
 export async function upsertAgent(input: McAgentInsert): Promise<McAgent> {
   if (input.codename) {
-    const existing = await getAgentByCodename(input.codename);
-    if (existing) {
+    const existingRows = await db
+      .select()
+      .from(mcAgents)
+      .where(eq(mcAgents.codename, input.codename));
+
+    if (existingRows.length > 0) {
+      const existing = existingRows[0];
       const [updated] = await db
         .update(mcAgents)
         .set({
@@ -31,7 +36,7 @@ export async function upsertAgent(input: McAgentInsert): Promise<McAgent> {
           updatedAt: new Date(),
           metadata: input.metadata ?? existing.metadata,
         })
-        .where(eq(mcAgents.id, existing.id))
+        .where(eq(mcAgents.codename, input.codename))
         .returning();
       return updated;
     }

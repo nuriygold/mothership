@@ -8,6 +8,10 @@ import { checkGateway } from "@/lib/services/openclaw";
 
 const router: IRouter = Router();
 
+function apiPath(req: Request) {
+  return req.originalUrl.split("?")[0];
+}
+
 function sendApiRouteNotFound(res: Response, path: string) {
   res.status(404).json({
     error: {
@@ -42,7 +46,7 @@ router.use(v2Router);
 router.get("/openclaw/health", async (req: Request, res: Response) => {
   const gateway = await checkGateway();
   if (gateway.ok) {
-    res.json({ ok: true, status: "ok", path: req.path, reason: gateway.reason });
+    res.json({ ok: true, status: "ok", path: apiPath(req), reason: gateway.reason });
     return;
   }
 
@@ -50,7 +54,7 @@ router.get("/openclaw/health", async (req: Request, res: Response) => {
     error: {
       code: "OPENCLAW_HEALTH_NOT_CONFIGURED",
       message: gateway.reason,
-      path: req.path,
+      path: apiPath(req),
     },
   });
 });
@@ -58,7 +62,7 @@ router.get("/openclaw/health", async (req: Request, res: Response) => {
 router.all("/agent", (req: Request, res: Response) => {
   sendApiRouteNotImplemented(
     res,
-    req.path,
+    apiPath(req),
     "AGENT_ROUTE_NOT_IMPLEMENTED",
     "No generic agent dispatch route is mounted. Use a supported dispatch endpoint instead.",
   );
@@ -67,14 +71,14 @@ router.all("/agent", (req: Request, res: Response) => {
 router.all("/v2/:agent/dispatch", (req: Request, res: Response) => {
   sendApiRouteNotImplemented(
     res,
-    req.path,
+    apiPath(req),
     "AGENT_DISPATCH_ROUTE_NOT_IMPLEMENTED",
     `No /api/v2/${String(req.params.agent)}/dispatch route is mounted for this agent.`,
   );
 });
 
 router.use((req: Request, res: Response) => {
-  sendApiRouteNotFound(res, req.path);
+  sendApiRouteNotFound(res, apiPath(req));
 });
 
 export default router;

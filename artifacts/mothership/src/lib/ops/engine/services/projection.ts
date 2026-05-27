@@ -162,8 +162,21 @@ export async function projectAllCampaigns(): Promise<UiCampaign[]> {
 
 export async function projectAllAgents(): Promise<UiAgent[]> {
   const [agents, campaigns] = await Promise.all([listAgents(), listCampaigns()]);
+  const dedupedAgents = new Map<string, McAgent>();
+  for (const agent of agents) {
+    const key = agent.codename?.trim() || agent.id;
+    const existing = dedupedAgents.get(key);
+    if (!existing) {
+      dedupedAgents.set(key, agent);
+      continue;
+    }
+
+    if (new Date(agent.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
+      dedupedAgents.set(key, agent);
+    }
+  }
   return Promise.all(
-    agents.map(async (a) => {
+    [...dedupedAgents.values()].map(async (a) => {
       const campaignsForAgent: McCampaign[] = [];
       for (const c of campaigns) {
         const lead = await getPrimaryAgentId(c.id);
