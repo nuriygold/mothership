@@ -1,6 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "pnpm --filter @workspace/mothership run build",
   "outputDirectory": "artifacts/mothership/dist/public",
-  "installCommand": "pnpm install"
+  "installCommand": "pnpm install",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://express.nuriy.com/api/:path*"
+    }
+  ]
 }
