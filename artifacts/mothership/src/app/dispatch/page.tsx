@@ -1567,6 +1567,74 @@ function DispatchPageInner() {
             )}
           </Card>
 
+          <Card>
+            <CardTitle>OpenClaw dispatch</CardTitle>
+            <div className="mt-3 space-y-3">
+              {gatewayHelp && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-100">
+                  <p className="font-semibold">{gatewayHelp.title}</p>
+                  <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                    {gatewayHelp.steps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <textarea
+                className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
+                rows={3}
+                placeholder="Send instruction to OpenClaw agents"
+                value={ocText}
+                onChange={(e) => setOcText(e.target.value)}
+              />
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <select
+                  className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
+                  value={ocAgent}
+                  onChange={(e) => setOcAgent(e.target.value)}
+                >
+                  <option value="main">Adrian · main</option>
+                  <option value="iceman">Iceman · iceman</option>
+                  <option value="ruby">Ruby · ruby</option>
+                  <option value="emerald">Emerald · emerald</option>
+                  <option value="adobe">Adobe Pettaway · adobe</option>
+                  <option value="anchor">Anchor · anchor</option>
+                </select>
+                <input
+                  className="w-48 rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
+                  placeholder="Session key (optional)"
+                  value={ocSession}
+                  onChange={(e) => setOcSession(e.target.value)}
+                />
+                <Button
+                  onClick={() =>
+                    openClawMutation.mutate({ text: ocText, agentId: ocAgent, sessionKey: ocSession || undefined })
+                  }
+                  disabled={!ocText || openClawMutation.isPending || gateway.isError}
+                >
+                  Dispatch
+                </Button>
+                {openClawMutation.isError && (
+                  <p className="text-xs text-rose-400">Failed: {(openClawMutation.error as Error).message}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-300">
+                <Button variant="outline" size="sm" onClick={() => gatewayMutation.mutate()} disabled={gatewayMutation.isPending}>
+                  Check gateway
+                </Button>
+                {gatewayMutation.isSuccess && <span className="text-emerald-300">Gateway OK</span>}
+                {gatewayMutation.isError && (
+                  <span className="text-rose-300">Gateway error: {(gatewayMutation.error as Error).message}</span>
+                )}
+              </div>
+              {ocResult && (
+                <pre className="whitespace-pre-wrap rounded-md border border-border bg-panel p-3 text-xs text-slate-200">
+                  {ocResult}
+                </pre>
+              )}
+            </div>
+          </Card>
+
           {/* Phase 5: Task list — FAILED first */}
           <Card>
             <div className="flex items-center justify-between gap-2">
@@ -1910,74 +1978,6 @@ function DispatchPageInner() {
                   <p className="text-xs text-rose-400">Failed: {(telegramMutation.error as Error).message}</p>
                 )}
               </div>
-            </div>
-          </Card>
-
-          <Card>
-            <CardTitle>OpenClaw dispatch</CardTitle>
-            <div className="mt-3 space-y-3">
-              {gatewayHelp && (
-                <div className="rounded-md border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-100">
-                  <p className="font-semibold">{gatewayHelp.title}</p>
-                  <ul className="mt-1 list-disc pl-4 space-y-0.5">
-                    {gatewayHelp.steps.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <textarea
-                className="w-full rounded-md border border-border bg-[var(--input-background)] px-3 py-2 text-sm text-slate-900"
-                rows={3}
-                placeholder="Send instruction to OpenClaw agents"
-                value={ocText}
-                onChange={(e) => setOcText(e.target.value)}
-              />
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <select
-                  className="rounded-md border border-border bg-[var(--input-background)] px-2 py-1"
-                  value={ocAgent}
-                  onChange={(e) => setOcAgent(e.target.value)}
-                >
-                  <option value="main">Adrian · main</option>
-                  <option value="iceman">Iceman · iceman</option>
-                  <option value="ruby">Ruby · ruby</option>
-                  <option value="emerald">Emerald · emerald</option>
-                  <option value="adobe">Adobe Pettaway · adobe</option>
-                  <option value="anchor">Anchor · anchor</option>
-                </select>
-                <input
-                  className="w-48 rounded-md border border-border bg-[var(--input-background)] px-2 py-1 text-xs text-slate-900"
-                  placeholder="Session key (optional)"
-                  value={ocSession}
-                  onChange={(e) => setOcSession(e.target.value)}
-                />
-                <Button
-                  onClick={() =>
-                    openClawMutation.mutate({ text: ocText, agentId: ocAgent, sessionKey: ocSession || undefined })
-                  }
-                  disabled={!ocText || openClawMutation.isPending || gateway.isError}
-                >
-                  Dispatch
-                </Button>
-                {openClawMutation.isError && (
-                  <p className="text-xs text-rose-400">Failed: {(openClawMutation.error as Error).message}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-3 text-xs text-slate-300">
-                <Button variant="outline" size="sm" onClick={() => gatewayMutation.mutate()} disabled={gatewayMutation.isPending}>
-                  Check gateway
-                </Button>
-                {gatewayMutation.isSuccess && <span className="text-emerald-300">Gateway OK</span>}
-                {gatewayMutation.isError && (
-                  <span className="text-rose-300">Gateway error: {(gatewayMutation.error as Error).message}</span>
-                )}
-              </div>
-              {ocResult && (
-                <pre className="whitespace-pre-wrap rounded-md border border-border bg-panel p-3 text-xs text-slate-200">
-                  {ocResult}
-                </pre>
-              )}
             </div>
           </Card>
 
