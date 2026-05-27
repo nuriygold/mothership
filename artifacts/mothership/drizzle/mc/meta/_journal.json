@@ -8,6 +8,13 @@
       "when": 1748260800000,
       "tag": "20260526120000_ruby_draft_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1748269800000,
+      "tag": "20260526143000_dispatch_runtime_hardening",
+      "breakpoints": true
     }
   ]
 }
