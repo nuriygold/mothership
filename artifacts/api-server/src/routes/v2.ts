@@ -6,6 +6,8 @@ import {
   patchV2Task,
   type PatchTaskInput,
 } from "@/server/v2";
+import { fetchGmailFullBody, fetchZohoFullBody } from "@/lib/services/email";
+import { getV2EmailDrafts, getV2EmailFeed } from "@/lib/v2/orchestrator";
 import wellnessRouter from "./wellness";
 import {
   deleteChatSession,
@@ -153,6 +155,53 @@ router.get("/v2/auth/me", wrap(async (req, res) => {
 
 router.get("/v2/tasks", wrap(async (_req, res) => {
   res.json(await getV2TasksFeed());
+}));
+
+router.get("/v2/email", wrap(async (_req, res) => {
+  res.json(await getV2EmailFeed());
+}));
+
+router.get("/v2/email/:emailId", wrap(async (req, res) => {
+  const emailId = String(req.params.emailId);
+  const feed = await getV2EmailFeed();
+  const email = feed.inbox.find((item) => item.id === emailId);
+  if (!email) {
+    res.status(404).json({ ok: false, error: "Email not found" });
+    return;
+  }
+
+  const body =
+    email.sourceIntegration === "Zoho"
+      ? await fetchZohoFullBody(emailId)
+      : await fetchGmailFullBody(emailId);
+
+  res.json({ ok: true, ...body });
+}));
+
+router.get("/v2/email/:emailId/drafts", wrap(async (req, res) => {
+  res.json(await getV2EmailDrafts(String(req.params.emailId)));
+}));
+
+router.post("/v2/email/recommend", wrap(async (req, res) => {
+  const email = req.body?.email;
+  if (!email || typeof email.id !== "string") {
+    res.status(400).json({ ok: false, error: "email is required" });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    recommendation: {
+      emailId: email.id,
+      bucket: "BUSINESS",
+      confidence: "MEDIUM",
+      reasoning: "Temporary server-backed recommendation while the dedicated triage route is not mounted.",
+      details: {
+        summary: typeof email.preview === "string" ? email.preview : typeof email.snippet === "string" ? email.snippet : "",
+        draftReply: "",
+      },
+    },
+  });
 }));
 
 router.post("/v2/tasks", wrap(async (req, res) => {
