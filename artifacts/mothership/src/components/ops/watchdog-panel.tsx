@@ -106,6 +106,38 @@ export function WatchdogPanel({
         })}
       </div>
 
+      {state?.uiWatchdog && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: `1px solid ${opsTheme.border}`,
+            background: 'rgba(255,255,255,0.02)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <OpsLabel>UI Watchdog</OpsLabel>
+            <span style={{ color: state.uiWatchdog.overall === 'fail' ? opsTheme.red : state.uiWatchdog.overall === 'pass' ? opsTheme.green : opsTheme.textDim, fontFamily: opsTheme.mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              {state.uiWatchdog.overall}
+            </span>
+          </div>
+          <div style={{ marginTop: 6, fontFamily: opsTheme.mono, fontSize: 10, color: opsTheme.textDim, letterSpacing: '0.06em' }}>
+            {state.uiWatchdog.routeCount} routes · {state.uiWatchdog.failureCount} failing
+            {state.uiWatchdog.latestRunAt ? ` · ${formatRelative(state.uiWatchdog.latestRunAt)}` : ''}
+          </div>
+          {state.uiWatchdog.failingRoutes.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {state.uiWatchdog.failingRoutes.slice(0, 5).map((route) => (
+                <div key={`${route.path}:${route.reason}`} style={{ fontFamily: opsTheme.mono, fontSize: 10, color: opsTheme.red }}>
+                  {route.path} · {route.reason}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
         <WatchdogButton
           onClick={() => run('force_resume_all')}

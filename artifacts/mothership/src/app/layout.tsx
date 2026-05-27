@@ -25,6 +25,7 @@ const navItems = [
   { label: 'Trophies', href: '/trophy' },
   { label: 'Today', href: '/today' },
   { label: 'Ops', href: '/ops' },
+  { label: 'Watchdog', href: '/watchdog' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Bots', href: '/bots' },
   { label: 'Email', href: '/email' },

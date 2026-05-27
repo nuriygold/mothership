@@ -35,7 +35,8 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:push": "drizzle-kit push --config ./drizzle.config.ts",
-    "build:server": "tsup"
+    "build:server": "tsup",
+    "ui-watchdog": "node ./scripts/ui-watchdog.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

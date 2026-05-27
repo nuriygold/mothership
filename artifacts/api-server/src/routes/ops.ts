@@ -19,6 +19,7 @@ import {
   ensureDemoAgents,
 } from "@/lib/ops/engine";
 import { logger } from "../lib/logger";
+import { readLatestUiWatchdogRun } from "@/lib/watchdog/store";
 
 const router: IRouter = Router();
 
@@ -305,7 +306,40 @@ router.get(
         };
       });
 
-    res.json({ inProgress, staleThresholdMinutes });
+    const uiRun = await readLatestUiWatchdogRun();
+    const uiWatchdog = uiRun
+      ? {
+          latestRunId: uiRun.runId,
+          latestRunAt: uiRun.startedAt,
+          overall: uiRun.overall,
+          routeCount: uiRun.routeCount,
+          failureCount: uiRun.failureCount,
+          failingRoutes: uiRun.results
+            .filter((result) => result.status === "fail")
+            .slice(0, 10)
+            .map((result) => ({
+              name: result.name,
+              path: result.path,
+              reason:
+                result.fatal ??
+                (result.missingExpected[0]
+                  ? `missing expected text: ${result.missingExpected[0]}`
+                  : result.requestFailures[0]?.failure ??
+                    result.consoleErrors[0] ??
+                    result.pageErrors[0] ??
+                    "unknown failure"),
+            })),
+        }
+      : {
+          latestRunId: null,
+          latestRunAt: null,
+          overall: "unknown" as const,
+          routeCount: 0,
+          failureCount: 0,
+          failingRoutes: [],
+        };
+
+    res.json({ inProgress, staleThresholdMinutes, uiWatchdog });
   }),
 );
 

@@ -94,6 +94,14 @@ export interface WatchdogState {
     hasInvalidBlocker: boolean;
   }>;
   staleThresholdMinutes: number;
+  uiWatchdog?: {
+    latestRunId: string | null;
+    latestRunAt: string | null;
+    overall: 'pass' | 'fail' | 'unknown';
+    routeCount: number;
+    failureCount: number;
+    failingRoutes: Array<{ name: string; path: string; reason: string }>;
+  };
 }
 
 export interface OpsTickerEntry {

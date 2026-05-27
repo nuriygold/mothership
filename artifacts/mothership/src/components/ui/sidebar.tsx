@@ -13,6 +13,7 @@ import {
   FolderKanban,
   Trophy,
   TrendingUp,
+  Dog,
 } from 'lucide-react';
 import { MothershipLogo } from '@/components/ui/mothership-logo';
 
@@ -34,6 +35,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   '/dispatch':         Send,
   '/projects':         FolderKanban,
   '/scorpion':         Bot, // Placeholder icon
+  '/watchdog':         Dog,
 };
 
 // Routes that live in the top header instead of the desktop sidebar.

@@ -26,6 +26,7 @@ const NAV_ITEMS: CommandItem[] = [
   { id: 'nav-dispatch', label: 'Dispatch', href: '/dispatch', section: 'Navigation' },
   { id: 'nav-projects', label: 'Projects', href: '/projects', section: 'Navigation' },
   { id: 'nav-bots',     label: 'Bots',     href: '/bots',     section: 'Navigation' },
+  { id: 'nav-watchdog', label: 'Watchdog', href: '/watchdog', section: 'Navigation' },
   { id: 'nav-activity', label: 'Activity', href: '/activity', section: 'Navigation' },
 ];
 
