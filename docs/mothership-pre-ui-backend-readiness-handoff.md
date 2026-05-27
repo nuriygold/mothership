@@ -22,19 +22,22 @@ Architecture decision:
 Durable Ops is the authoritative control plane.
 Legacy Dispatch is the MVP execution worker.
 Frontend campaign ingress should go through `/api/ops/*`.
+The supported execution path is dispatch-backed ops campaigns, with a source registry at `artifacts/mothership/src/lib/ops/engine/workflow-registry.ts`.
 Legacy `/api/dispatch/*` ingress is disabled by default unless explicitly enabled for controlled debugging.
+The pure Durable Ops runtime remains a compatibility fallback and is not the intended UI path.
 
 Implemented and verified:
 1. Local Vite `/api` fallback points to Mothership API on `4100`, not LiteLLM.
 2. Unsafe ops error serialization was patched so failed `/api/ops/campaigns` responses remain valid JSON.
 3. Durable Ops to Dispatch bridge is source-implemented.
 4. Dispatch to Durable Ops active mirroring is source-implemented.
-5. Dispatch claim, lease, heartbeat, and attempt count fields exist in live DB.
-6. API server runs under PM2 and survives long-running verification.
-7. Active Dispatch to Ops mirroring passed.
-8. Terminal-state propagation passed.
-9. Duplicate-run claim guard passed.
-10. Crash recovery passed.
+5. Workflow registry is source-defined and exposed through `GET /api/ops/workflows`.
+6. Dispatch claim, lease, heartbeat, and attempt count fields exist in live DB.
+7. API server runs under PM2 and survives long-running verification.
+8. Active Dispatch to Ops mirroring passed.
+9. Terminal-state propagation passed.
+10. Duplicate-run claim guard passed.
+11. Crash recovery passed.
 
 Validation results:
 - Active mirror smoke test:
@@ -75,9 +78,10 @@ Remaining known gaps:
 1. The specific dispatch task failure after crash recovery has been triaged as a session write-lock timeout, not a repo-size problem. The worker hit `SessionWriteLockTimeoutError` while persisting the task session, and dispatch task execution now uses a per-attempt session key to avoid reusing the same OpenClaw session across retries.
 2. Stale-lease recovery was not isolated as a standalone forced expired-lease test, although crash recovery exercised the broader recovery path.
 3. Production `/api` routing exists in source but still needs deployed `API_BASE_URL` verification.
-4. UI testing has not started and should wait until production `/api` routing is verified.
-5. Working tree still has pre-existing dirty and untracked files outside the committed slice.
-6. Branch has not been pushed and no PR has been created.
+4. The legacy pure Durable Ops runtime still exists as a fallback and should stay out of the UI path.
+5. UI testing has not started and should wait until production `/api` routing is verified.
+6. Working tree still has pre-existing dirty and untracked files outside the committed slice.
+7. Branch has not been pushed and no PR has been created.
 
 Triage note:
 The failed dispatch task on the crash-recovery campaign was task 1,

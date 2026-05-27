@@ -442,10 +442,7 @@ router.post(
       rejectLegacyDispatchIngress(res);
       return;
     }
-    const campaign = await setDispatchCampaignStatus(
-      String(req.params.id),
-      DispatchCampaignStatus.EXECUTING,
-    );
+    const campaign = await enqueueDispatchCampaign(String(req.params.id));
     res.json({ campaign });
   }),
 );

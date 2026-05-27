@@ -47,6 +47,7 @@ export type RawPlanEnvelope = {
 
 const DISPATCH_LEASE_MS = 10 * 60 * 1000;
 const DISPATCH_HEARTBEAT_MS = 30 * 1000;
+const DISPATCH_WORKER_RUN_LEASE_MS = 25 * 1000;
 
 function dispatchWorkerId() {
   return process.env.MOTHERSHIP_DISPATCH_WORKER_ID?.trim() || `api-server:${process.pid}`;
@@ -54,6 +55,49 @@ function dispatchWorkerId() {
 
 function nextLeaseDeadline() {
   return new Date(Date.now() + DISPATCH_LEASE_MS);
+}
+
+function nextWorkerRunLeaseDeadline() {
+  return new Date(Date.now() + DISPATCH_WORKER_RUN_LEASE_MS);
+}
+
+let activeWorkerRunLeaseUntil = 0;
+
+function claimDispatchWorkerRun(workerId: string) {
+  const now = Date.now();
+  if (activeWorkerRunLeaseUntil > now) {
+    return null;
+  }
+
+  activeWorkerRunLeaseUntil = now + DISPATCH_WORKER_RUN_LEASE_MS;
+  return `${workerId}:${now}`;
+}
+
+function releaseDispatchWorkerRun(lockId: string) {
+  if (lockId) {
+    activeWorkerRunLeaseUntil = 0;
+  }
+}
+
+async function markCampaignArtifactsWritten(campaignId: string) {
+  await db
+    .update(dispatchCampaigns)
+    .set({ artifactsWrittenAt: new Date(), updatedAt: new Date() })
+    .where(eq(dispatchCampaigns.id, campaignId));
+}
+
+async function markCampaignCompletionNotified(campaignId: string) {
+  await db
+    .update(dispatchCampaigns)
+    .set({ completionNotifiedAt: new Date(), updatedAt: new Date() })
+    .where(eq(dispatchCampaigns.id, campaignId));
+}
+
+async function markCampaignCallbackDelivered(campaignId: string) {
+  await db
+    .update(dispatchCampaigns)
+    .set({ callbackDeliveredAt: new Date(), updatedAt: new Date() })
+    .where(eq(dispatchCampaigns.id, campaignId));
 }
 
 async function claimDispatchCampaign(campaignId: string, workerId: string) {
@@ -1202,17 +1246,34 @@ export async function runDispatchCampaign(
 
   // Write output files and Telegram ping on completion (non-fatal)
   if (finalStatus === DispatchCampaignStatus.COMPLETED) {
-    writeCampaignOutput(campaignId).catch(() => { /* non-fatal */ });
-    pingTelegramCampaignComplete({
-      id: campaignId,
-      title: campaignWithTasks.title,
-      status: finalStatus,
-      tasks: results.map((r) => ({ status: r.status })),
-    }).catch(() => { /* non-fatal */ });
+    if (!campaignWithTasks.artifactsWrittenAt) {
+      try {
+        const outputDir = await writeCampaignOutput(campaignId);
+        if (outputDir) {
+          await markCampaignArtifactsWritten(campaignId);
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    if (!campaignWithTasks.completionNotifiedAt) {
+      try {
+        await pingTelegramCampaignComplete({
+          id: campaignId,
+          title: campaignWithTasks.title,
+          status: finalStatus,
+          tasks: results.map((r) => ({ status: r.status })),
+        });
+        await markCampaignCompletionNotified(campaignId);
+      } catch {
+        // Non-fatal
+      }
+    }
   }
 
   // Fire campaign-completion webhook (non-fatal)
-  if (campaignWithTasks.callbackUrl) {
+  if (campaignWithTasks.callbackUrl && !campaignWithTasks.callbackDeliveredAt) {
     try {
       const payload = JSON.stringify({
         campaignId,
@@ -1228,6 +1289,7 @@ export async function runDispatchCampaign(
         headers['x-dispatch-signature'] = `sha256=${sig}`;
       }
       await fetch(campaignWithTasks.callbackUrl, { method: 'POST', headers, body: payload });
+      await markCampaignCallbackDelivered(campaignId);
     } catch {
       // Non-fatal — webhook failure never blocks campaign
     }
@@ -1291,9 +1353,16 @@ export async function scheduleDispatchCampaign(campaignId: string, scheduledAt: 
 
 export async function processDispatchQueue(): Promise<{ processed: number; skipped: number }> {
   const now = new Date();
-  await recoverStaleExecutingCampaigns();
+  const workerId = dispatchWorkerId();
+  const workerRunLockId = claimDispatchWorkerRun(workerId);
+  if (!workerRunLockId) {
+    return { processed: 0, skipped: 0 };
+  }
 
-  const [queued, scheduled] = await Promise.all([
+  try {
+    await recoverStaleExecutingCampaigns();
+
+    const [queued, scheduled] = await Promise.all([
     db
       .select()
       .from(dispatchCampaigns)
@@ -1310,17 +1379,20 @@ export async function processDispatchQueue(): Promise<{ processed: number; skipp
   let processed = 0;
   let skipped = 0;
 
-  for (const campaign of candidates) {
-    try {
-      await runDispatchCampaign(campaign.id);
-      processed++;
-    } catch (err) {
-      console.error(`[dispatch:worker] Campaign ${campaign.id} failed:`, err);
-      skipped++;
+    for (const campaign of candidates) {
+      try {
+        await runDispatchCampaign(campaign.id);
+        processed++;
+      } catch (err) {
+        console.error(`[dispatch:worker] Campaign ${campaign.id} failed:`, err);
+        skipped++;
+      }
     }
-  }
 
-  return { processed, skipped };
+    return { processed, skipped };
+  } finally {
+    releaseDispatchWorkerRun(workerRunLockId);
+  }
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────
