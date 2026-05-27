@@ -32,7 +32,7 @@ export function WatchdogPanel({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Eye size={14} style={{ color: opsTheme.green }} />
-          <OpsHeading level={3}>Watchdog</OpsHeading>
+          <OpsHeading level={3}>Ops Campaign Watchdog</OpsHeading>
         </div>
         <OpsLabel>
           {items.length} in-progress · {flagged.length} flagged
@@ -117,7 +117,7 @@ export function WatchdogPanel({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <OpsLabel>UI Watchdog</OpsLabel>
+            <OpsLabel>Mothership UI Route Watchdog</OpsLabel>
             <span style={{ color: state.uiWatchdog.overall === 'fail' ? opsTheme.red : state.uiWatchdog.overall === 'pass' ? opsTheme.green : opsTheme.textDim, fontFamily: opsTheme.mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
               {state.uiWatchdog.overall}
             </span>

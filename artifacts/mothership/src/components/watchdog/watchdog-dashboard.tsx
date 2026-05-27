@@ -56,10 +56,10 @@ export function WatchdogDashboard() {
     <OpsShell>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
-          <OpsLabel>Good Dog · UI Patrol</OpsLabel>
+          <OpsLabel>Mothership UI Route Watchdog</OpsLabel>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
             <Dog size={20} style={{ color: opsTheme.amber }} />
-            <OpsHeading level={1}>Watchdog</OpsHeading>
+            <OpsHeading level={1}>Mothership Watchdog</OpsHeading>
           </div>
         </div>
         <div style={{ fontFamily: opsTheme.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: report?.overall === 'fail' ? opsTheme.red : opsTheme.green }}>
@@ -69,7 +69,7 @@ export function WatchdogDashboard() {
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', marginBottom: 16 }}>
         <OpsCard>
-          <OpsLabel>Latest Run</OpsLabel>
+          <OpsLabel>Latest UI Route Run</OpsLabel>
           <div style={{ marginTop: 8, fontFamily: opsTheme.body, color: opsTheme.text, fontSize: 14 }}>
             {report ? formatRelative(report.startedAt) : 'No report found'}
           </div>
@@ -81,7 +81,7 @@ export function WatchdogDashboard() {
         </OpsCard>
 
         <OpsCard>
-          <OpsLabel>Ops Watchdog</OpsLabel>
+          <OpsLabel>Ops Campaign Watchdog</OpsLabel>
           <div style={{ marginTop: 8, fontFamily: opsTheme.body, color: opsTheme.text, fontSize: 14 }}>
             {state?.inProgress.length ?? 0} in-progress campaigns
           </div>
@@ -93,13 +93,13 @@ export function WatchdogDashboard() {
 
       <OpsCard>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-          <OpsHeading level={3}>Route Findings</OpsHeading>
+          <OpsHeading level={3}>Mothership UI Route Findings</OpsHeading>
           <OpsLabel>{failures.length} failing</OpsLabel>
         </div>
 
         {!report && (
           <div style={{ fontFamily: opsTheme.mono, fontSize: 11, color: opsTheme.textDim }}>
-            No watchdog report available yet. Run <code>npm run ui-watchdog</code> in the Mothership repo.
+            No Mothership UI route watchdog report is available yet. Run <code>npm run ui-watchdog</code> in the Mothership repo.
           </div>
         )}
 

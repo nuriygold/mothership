@@ -8,6 +8,18 @@ import {
 } from "@/server/v2";
 import { fetchGmailFullBody, fetchZohoFullBody } from "@/lib/services/email";
 import { getV2EmailDrafts, getV2EmailFeed } from "@/lib/v2/orchestrator";
+import { publishV2Event, subscribeV2Event } from "@/lib/v2/event-bus";
+import {
+  assignRevenueStreamTask,
+  getRevenueStreamActivity,
+  getRevenueStreamSop,
+  listNotifications,
+  listRevenueStreamStatuses,
+  markNotificationsRead,
+  patchRevenueStreamStatus,
+  requireRevenueStream,
+  runRevenueStreamAction,
+} from "@/lib/v2/finance-runtime";
 import wellnessRouter from "./wellness";
 import {
   deleteChatSession,
@@ -69,6 +81,10 @@ function safeEqualString(left: string, right: string) {
 function shouldUseSecureCookies(req: Request) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "").toLowerCase();
   return req.secure || forwardedProto.includes("https");
+}
+
+function writeNamedSseJson(res: Response, event: string, payload: unknown) {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
 router.use("/v2/wellness", wellnessRouter);
@@ -156,6 +172,136 @@ router.get("/v2/auth/me", wrap(async (req, res) => {
 
 router.get("/v2/tasks", wrap(async (_req, res) => {
   res.json(await getV2TasksFeed());
+}));
+
+router.get("/v2/notifications", wrap(async (_req, res) => {
+  res.json(await listNotifications());
+}));
+
+router.patch("/v2/notifications/read", wrap(async (req, res) => {
+  const id = typeof req.body?.id === "string" ? req.body.id.trim() : undefined;
+  const result = await markNotificationsRead(id || undefined);
+  publishV2Event("notifications", "read", result);
+  res.json({ ok: true, ...result });
+}));
+
+router.get("/v2/stream/notifications", (req, res) => {
+  startSseResponse(res);
+  writeNamedSseJson(res, "connected", { stream: "notifications" });
+
+  const unsubscribe = subscribeV2Event("notifications", (event) => {
+    writeNamedSseJson(res, event.type, {
+      ...(event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : { value: event.payload }),
+      createdAt: event.createdAt,
+    });
+  });
+
+  const keepAlive = setInterval(() => {
+    writeNamedSseJson(res, "heartbeat", {});
+  }, 15000);
+
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    unsubscribe();
+    res.end();
+  });
+});
+
+router.get("/v2/revenue-streams/status", wrap(async (_req, res) => {
+  res.json(await listRevenueStreamStatuses());
+}));
+
+router.patch("/v2/revenue-streams/status", wrap(async (req, res) => {
+  const stream = typeof req.body?.stream === "string" ? req.body.stream.trim() : "";
+  if (!stream) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "stream is required" } });
+    return;
+  }
+  await requireRevenueStream(stream);
+  const result = await patchRevenueStreamStatus({
+    stream,
+    requestedAt: new Date(),
+    action: "ping",
+  });
+  publishV2Event("revenue-streams", "status", result);
+  res.json({ ok: true, ...result });
+}));
+
+router.get("/v2/stream/revenue-streams", (req, res) => {
+  startSseResponse(res);
+  writeNamedSseJson(res, "connected", { stream: "revenue-streams" });
+
+  const unsubscribe = subscribeV2Event("revenue-streams", (event) => {
+    writeNamedSseJson(res, event.type, {
+      ...(event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : { value: event.payload }),
+      createdAt: event.createdAt,
+    });
+  });
+
+  const keepAlive = setInterval(() => {
+    writeNamedSseJson(res, "heartbeat", {});
+  }, 15000);
+
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    unsubscribe();
+    res.end();
+  });
+});
+
+router.post("/v2/revenue-streams/action", wrap(async (req, res) => {
+  const stream = typeof req.body?.stream === "string" ? req.body.stream.trim() : "";
+  const action = typeof req.body?.action === "string" ? req.body.action.trim() : "";
+  if (!stream) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "stream is required" } });
+    return;
+  }
+  if (action !== "run-report" && action !== "check-status" && action !== "ping") {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "action must be run-report, check-status, or ping" } });
+    return;
+  }
+  await requireRevenueStream(stream);
+  const result = await runRevenueStreamAction(stream, action);
+  publishV2Event("revenue-streams", "action", { action, ...result });
+  res.json({ ok: true, ...result });
+}));
+
+router.post("/v2/revenue-streams/assign", wrap(async (req, res) => {
+  const stream = typeof req.body?.stream === "string" ? req.body.stream.trim() : "";
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+  const description = typeof req.body?.description === "string" ? req.body.description.trim() : undefined;
+  if (!stream || !title) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "stream and title are required" } });
+    return;
+  }
+  await requireRevenueStream(stream);
+  const task = await assignRevenueStreamTask({ stream, title, description });
+  publishV2Event("revenue-streams", "action", { stream, action: "assign", taskId: task.taskId });
+  res.status(201).json({ ok: true, task });
+}));
+
+router.get("/v2/revenue-streams/activity", wrap(async (req, res) => {
+  const stream = typeof req.query?.stream === "string" ? req.query.stream.trim() : "";
+  if (!stream) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "stream is required" } });
+    return;
+  }
+  await requireRevenueStream(stream);
+  res.json(await getRevenueStreamActivity(stream));
+}));
+
+router.get("/v2/revenue-streams/sop", wrap(async (req, res) => {
+  const stream = typeof req.query?.stream === "string" ? req.query.stream.trim() : "";
+  if (!stream) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "stream is required" } });
+    return;
+  }
+  const sop = await getRevenueStreamSop(stream);
+  if (!sop) {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "SOP not found" } });
+    return;
+  }
+  res.json(sop);
 }));
 
 router.get("/v2/email", wrap(async (_req, res) => {

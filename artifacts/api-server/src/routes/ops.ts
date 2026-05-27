@@ -307,7 +307,7 @@ router.get(
       });
 
     const uiRun = await readLatestUiWatchdogRun();
-    const uiWatchdog = uiRun
+    const mothershipUiWatchdog = uiRun
       ? {
           latestRunId: uiRun.runId,
           latestRunAt: uiRun.startedAt,
@@ -322,12 +322,15 @@ router.get(
               path: result.path,
               reason:
                 result.fatal ??
+                result.pageErrors[0] ??
                 (result.missingExpected[0]
                   ? `missing expected text: ${result.missingExpected[0]}`
-                  : result.requestFailures[0]?.failure ??
-                    result.consoleErrors[0] ??
-                    result.pageErrors[0] ??
-                    "unknown failure"),
+                  : result.httpFailures[0]
+                    ? `${result.httpFailures[0].status} ${result.httpFailures[0].method} ${result.httpFailures[0].url}`
+                    : result.requestFailures[0]?.failure ??
+                      result.matchingConsoleFailures[0] ??
+                      result.consoleErrors[0] ??
+                      "unknown failure"),
             })),
         }
       : {
@@ -339,7 +342,7 @@ router.get(
           failingRoutes: [],
         };
 
-    res.json({ inProgress, staleThresholdMinutes, uiWatchdog });
+    res.json({ inProgress, staleThresholdMinutes, uiWatchdog: mothershipUiWatchdog });
   }),
 );
 
