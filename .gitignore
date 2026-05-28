@@ -60,3 +60,6 @@ Thumbs.db
 **/.junie/
 supabase/.branches/
 supabase/.temp/
+
+.claude/
+artifacts/mothership/runtime/

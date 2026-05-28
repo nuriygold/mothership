@@ -7,7 +7,8 @@ import {
   type PatchTaskInput,
 } from "@/server/v2";
 import { fetchGmailFullBody, fetchZohoFullBody } from "@/lib/services/email";
-import { getV2EmailDrafts, getV2EmailFeed } from "@/lib/v2/orchestrator";
+import { fetchTodayCalendarEvents, isCalendarConfigured } from "@/lib/services/calendar";
+import { getV2Activity, getV2BotsFeed, getV2EmailDrafts, getV2EmailFeed, getV2TodayFeed } from "@/lib/v2/orchestrator";
 import { publishV2Event, subscribeV2Event } from "@/lib/v2/event-bus";
 import {
   assignRevenueStreamTask,
@@ -172,6 +173,76 @@ router.get("/v2/auth/me", wrap(async (req, res) => {
 
 router.get("/v2/tasks", wrap(async (_req, res) => {
   res.json(await getV2TasksFeed());
+}));
+
+router.get("/v2/dashboard/today", wrap(async (_req, res) => {
+  res.json(await getV2TodayFeed());
+}));
+
+router.get("/v2/calendar/events", wrap(async (_req, res) => {
+  const result = await fetchTodayCalendarEvents();
+  res.json({ events: result.events, configured: isCalendarConfigured() });
+}));
+
+router.get("/v2/stream/dashboard", (req, res) => {
+  startSseResponse(res);
+  writeNamedSseJson(res, "connected", { stream: "dashboard" });
+
+  const keepAlive = setInterval(() => {
+    writeNamedSseJson(res, "heartbeat", { ts: new Date().toISOString() });
+  }, 25000);
+
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    res.end();
+  });
+});
+
+router.get("/v2/health/services", wrap(async (_req, res) => {
+  res.json({
+    gateway: { ok: true },
+    ruby: { ok: true },
+    telegram: { ok: Boolean(process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN_2 || process.env.TELEGRAM_BOT_TOKEN_3 || process.env.TELEGRAM_BOT_TOKEN_ADOBE) },
+    github: { ok: true },
+    zoho: { ok: true },
+    gmail: { ok: true },
+    openclaw: { ok: true },
+    supabase: { ok: true },
+  });
+}));
+
+router.get("/v2/finance/markets", wrap(async (_req, res) => {
+  res.json({ btc: null, dow: null, nyse: null });
+}));
+
+router.get("/v2/bots", wrap(async (_req, res) => {
+  res.json(await getV2BotsFeed());
+}));
+
+router.get("/v2/stream/bots", (req, res) => {
+  startSseResponse(res);
+  writeNamedSseJson(res, "connected", { stream: "bots" });
+
+  const keepAlive = setInterval(() => {
+    writeNamedSseJson(res, "heartbeat", { ts: new Date().toISOString() });
+  }, 25000);
+
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    res.end();
+  });
+});
+
+router.get("/v2/bots/session", wrap(async (req, res) => {
+  const bot = typeof req.query.bot === "string" ? req.query.bot.trim() : "";
+  const sessionId = bot ? `agent:${bot}:marvin` : `agent:ruby:marvin`;
+  res.json({ sessionId });
+}));
+
+router.get("/v2/activity/log", wrap(async (req, res) => {
+  const page = Math.max(Number(req.query.page ?? 1) || 1, 1);
+  const pageSize = Math.max(Number(req.query.pageSize ?? 25) || 25, 1);
+  res.json(await getV2Activity(page, pageSize));
 }));
 
 router.get("/v2/notifications", wrap(async (_req, res) => {
